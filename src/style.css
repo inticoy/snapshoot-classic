@@ -546,7 +546,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .touch-contain { right: calc(166px + env(safe-area-inset-right)); bottom: calc(22px + env(safe-area-inset-bottom)); }
 .touch-pause { top: calc(12px + env(safe-area-inset-top)); bottom: auto; width: 86px; height: 44px; border-radius: 6px; }
 #rotate-guide { display: none; }
-.touch-device #hints, .touch-device .menu-foot > span { display: none; }
+.touch-device #hints, .touch-device .menu-foot > span { display: none !important; }
 .touch-device #scene { touch-action: none; }
 .touch-device .overlay { padding: max(16px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left)); }
 .touch-device .menu-left { width: min(420px, 100%); }
