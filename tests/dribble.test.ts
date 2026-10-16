@@ -147,9 +147,11 @@ it.each([1, 7, 42])('↑ 1초 뒤 ↓ 180° 전환: 2초 안에 소유를 유지
   expect(time).toBeLessThanOrEqual(2);
 });
 
-it.each([1, 7, 42])('높은 드리블·민첩성은 낮은 능력치보다 90° 전환을 빨리 마친다 (seed=%i)', (seed) => {
-  const low = turnTime(seed, right, 2, 40, Math.PI / 12);
-  const high = turnTime(seed, right, 2, 99, Math.PI / 12);
+// 135° 전환: 낮은 능력치(한 터치 한도 turnMin)는 두 번에 나눠 접고, 높은 능력치(turnMax)는 한 번에 접는다
+const backRight = new THREE.Vector3(1, 0, 1).normalize();
+it.each([1, 7, 42])('높은 드리블·민첩성은 낮은 능력치보다 135° 전환을 빨리 마친다 (seed=%i)', (seed) => {
+  const low = turnTime(seed, backRight, 2, 40, Math.PI / 12);
+  const high = turnTime(seed, backRight, 2, 99, Math.PI / 12);
   console.info(`능력치 seed=${seed}: 낮음 ${low.toFixed(3)}초, 높음 ${high.toFixed(3)}초`);
   expect(Number.isFinite(low)).toBe(true);
   expect(high).toBeLessThan(low);
@@ -168,7 +170,7 @@ it('굴러가는 공을 멈춰 세우는 터치는 한 번만 발생한다', () 
   expect(match.ball.speed()).toBeLessThan(0.3);
 });
 
-it.each([40, 99])('한 터치의 회전 한도는 능력치 %i에서 60°~120°이고 180°는 나눠 접는다', (skill) => {
+it.each([40, 99])('한 터치의 회전 한도는 능력치 %i에서 DRIBBLE.turnMin~turnMax이고 180°는 나눠 접는다', (skill) => {
   const { match, p, run } = scene(11);
   const original = p.profile.stats;
   p.profile.stats = { ...original, dribbling: skill, agility: skill };
@@ -178,7 +180,8 @@ it.each([40, 99])('한 터치의 회전 한도는 능력치 %i에서 60°~120°�
     match.events.length = 0;
     run(PHYSICS.step, new THREE.Vector3(-1, 0, 0));
     const angle = Math.abs(Math.atan2(match.ball.velocity.z, match.ball.velocity.x));
-    expect(angle).toBeCloseTo(skill === 40 ? Math.PI / 3 : Math.PI * 2 / 3, 5);
+    expect(angle).toBeCloseTo(skill === 40 ? DRIBBLE.turnMin : DRIBBLE.turnMax, 5);
+    expect(angle).toBeLessThan(Math.PI); // 180°는 한 번에 못 접는다
     expect(match.events.filter((e) => e.type === 'touch')).toHaveLength(1);
     expect(match.ball.owner).toBe(p);
   } finally {

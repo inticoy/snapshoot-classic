@@ -907,6 +907,23 @@ export class Match {
 
   // ---------------------------------------------------------------- 공 & 몸싸움
 
+  /**
+   * 받는 첫 터치: 공을 선수 진행 방향(또는 바라보는 방향)으로, 선수 속도보다 조금 빠르게 놓는다.
+   * 볼 컨트롤이 낮을수록 공이 조금 더 튄다 (튀어 나가는 '헤비 터치'는 checkPossession이 따로 판정).
+   */
+  private firstTouch(p: Player): void {
+    const speed = Math.hypot(p.vel.x, p.vel.z);
+    const dir = speed > 0.6 ? tmp.set(p.vel.x / speed, 0, p.vel.z / speed) : tmp.copy(p.facing);
+    const ctrl = n(p.profile.stats.ballControl);
+    const T = DRIBBLE.touchPeriod;
+    const u = speed > 0.6 ? speed + DRIBBLE.leadWalk * (1.3 - 0.6 * ctrl) / T + 0.5 * (DRIBBLE.rollDecel + DRIBBLE.rollDamping * speed) * T : 0;
+    const b = this.ball.body;
+    b.velocity.set(dir.x * u, Math.min(0, b.velocity.y), dir.z * u);
+    b.angularVelocity.set(b.velocity.z / BALL.radius, 0, -b.velocity.x / BALL.radius);
+    this.touchGap = DRIBBLE.touchGap;
+    this.events.push({ type: 'touch', speed: u });
+  }
+
   /** 소유 중인 공 다루기. touches면 터치 드리블, 아니면 발 앞에 붙여 다닌다 (킥오프 대기 등) */
   private touchGap = 0;
   private readonly dribbleIntent = new THREE.Vector3();
@@ -928,8 +945,10 @@ export class Match {
     if (d <= DRIBBLE.reach) return;
     const pull = THREE.MathUtils.lerp(DRIBBLE.pullMin, 1,
       Math.min(1, (d - DRIBBLE.reach) / (DRIBBLE.pullFullDistance - DRIBBLE.reach)));
-    const len = move.length();
-    move.normalize().lerp(tmp.normalize(), pull).normalize().multiplyScalar(len);
+    // 입력이 없거나(목표 도착) 작아도 굴러가는 공은 쫓는다
+    const len = Math.max(move.length(), Math.min(1, d / 1.5));
+    if (move.lengthSq() < 1e-6) move.copy(tmp.normalize()).multiplyScalar(len);
+    else move.normalize().lerp(tmp.normalize(), pull).normalize().multiplyScalar(len);
   }
 
   private carryBall(dt: number, touches = false): void {
@@ -1004,7 +1023,13 @@ export class Match {
     // 방향을 꺾는 터치는 공이 발 바로 앞에 있을 때만
     const turning = Math.abs(angle) > DRIBBLE.turnAngle && footDist < DRIBBLE.turnReach;
     if (moving && inReach && this.touchGap <= 0 && (close || turning)) {
-      const knock = (o.sprinting ? DRIBBLE.knockSprint : DRIBBLE.knockWalk) * (1.25 - 0.6 * ctrl) * (0.85 + 0.3 * this.random.next());
+      // 상대가 가까우면 공을 짧게 붙여 지킨다 (압박 속 질주 터치로 공을 흘리지 않게)
+      const opp = this.nearestOpponentDist(o);
+      const guard = opp < DRIBBLE.pressureRange ? THREE.MathUtils.lerp(DRIBBLE.pressureKnock, 1, opp / DRIBBLE.pressureRange) : 1;
+      // 다음 터치까지(touchPeriod) 공이 몸 앞 lead만큼 앞서 있도록, 그동안의 구름 감속까지 넣어 속도를 정한다
+      const lead = (o.sprinting ? DRIBBLE.leadSprint : DRIBBLE.leadWalk) * guard * (1.25 - 0.6 * ctrl) * (0.85 + 0.3 * this.random.next());
+      const T = DRIBBLE.touchPeriod;
+      const knock = lead / T + 0.5 * (DRIBBLE.rollDecel + DRIBBLE.rollDamping * speed) * T;
       const skill = (n(st.dribbling) + n(st.agility)) / 2;
       const limit = THREE.MathUtils.lerp(DRIBBLE.turnMin, DRIBBLE.turnMax, skill);
       const turn = THREE.MathUtils.clamp(angle, -limit, limit);
@@ -1056,7 +1081,8 @@ export class Match {
         const foul = this.rules.judgeTackle(p, o, success, o.facing.dot(p.tackleDir));
         if (foul) {
           o.stunned = 0.55;
-          o.fall();
+          // 어드밴티지(공을 지킨 채 계속)면 넘어지지 않는다. 휘슬이 불리면 경기가 멈추므로 넘어져도 된다
+          if (success) o.fall();
           o.basePose = null;
           if (o.team === 0) this.charge = null;
           this.rules.call(foul, !success);
@@ -1066,7 +1092,8 @@ export class Match {
         if (success) {
           this.stats.tackles[p.team]++;
           o.stunned = 0.55;
-          if (p.tackleKind === 'slide') o.fall();
+          // 슬라이딩에 걸려 넘어지면 넘어지는 동작 길이만큼 못 움직인다 (누운 채 미끄러져 보이지 않게)
+          if (p.tackleKind === 'slide') o.stunned = Math.max(o.stunned, o.fall());
           o.basePose = null;
           if (o.team === 0) this.charge = null;
           if (p.tackleKind === 'stand') {
@@ -1164,6 +1191,8 @@ export class Match {
     if (best.team === 0 && !best.isKeeper) this.controlled = best;
     // 방향 첫 터치: 받는 순간 누르고 있던 방향으로 공을 잡아 놓는다
     if (best === this.controlled && this.lastMove.lengthSq() > 0.01) best.facing.copy(this.lastMove).setY(0).normalize();
+    // 터치 드리블에서는 받은 공의 속도를 죽여 발 앞에 놓아야 한다 (안 그러면 패스 속도 그대로 굴러가 버린다)
+    if (this.options.dribbleTouches !== false && !best.isKeeper) this.firstTouch(best);
     if (best.isKeeper) {
       this.keepers.onCatch(best);
       if (hands && this.inOwnBox(best, bp.x, bp.z)) {

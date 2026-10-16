@@ -204,9 +204,11 @@ export class Player {
     return true;
   }
 
-  /** 태클에 걸려 넘어짐 */
-  fall(): void {
-    this.playMotion(pickMotion('fall', speedClass(this), null, visualRandom.next()));
+  /** 태클에 걸려 넘어짐. 넘어졌다 일어나기까지 걸리는 시간(초)을 돌려준다 (동작이 없으면 0) */
+  fall(): number {
+    const entry = pickMotion('fall', speedClass(this), null, visualRandom.next());
+    if (!this.playMotion(entry)) return 0;
+    return Math.min(1.4, this.animTimer);
   }
 
   startTackle(dir: THREE.Vector3, kind: 'slide' | 'stand' = 'slide'): void {

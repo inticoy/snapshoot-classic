@@ -114,34 +114,39 @@ export const MATCH = {
  * 방향은 터치할 때만 바뀌므로 급하게 꺾으면 공이 한 박자 늦게 따라온다.
  */
 export const DRIBBLE = {
+  // 값은 tests/dribble-play.test.ts 의 실제 경기 입력 측정으로 맞췄다 (붙여 다니던 예전 드리블 대비:
+  // 전진 거리 90% 이상, 공 잃는 횟수 이하, 뒤로 전환 0.45초 이내, 90° 전환 0.45초 이내)
   /** 공이 몸 앞 이 거리(+속도 비례)보다 가까워지면 다시 건드린다 (m) */
-  touchLead: 0.5,
+  touchLead: 0.4,
   /** 발이 공에 닿을 수 있는 거리 (m) */
-  reach: 0.65,
-  /** 걷기·조깅 터치에서 선수 속도보다 더 주는 공 속도 (m/s) */
-  knockWalk: 1.1,
-  /** 질주 터치 (치고 나가기) */
-  knockSprint: 2.4,
+  reach: 0.75,
+  /** 터치 후 다음 터치(touchPeriod초 뒤)까지 공이 몸보다 앞서 있을 거리 (m): 걷기·조깅 / 질주 치고 나가기 */
+  leadWalk: 0.45,
+  leadSprint: 1.3,
+  touchPeriod: 0.35,
   /** 공 진행 방향과 의도 방향이 이만큼(라디안) 어긋나면 방향을 꺾는 터치 */
-  turnAngle: 0.55,
+  turnAngle: 0.35,
   /** 낮은 능력치는 나누어 접고, 높은 드리블·민첩성은 한 번에 더 크게 접는다 */
-  turnMin: Math.PI / 3,
-  turnMax: Math.PI * 2 / 3,
+  turnMin: Math.PI / 2,
+  turnMax: 2.8,
   /** 90°로 접으면 터치 속도의 60%: 급회전 때 공이 멀리 빠져나가지 않게 한다 */
   turnSlowdown: 0.4,
   turnMinSpeedFactor: 0.3,
   /** 터치 순간 몸도 일부 틀어 다음 발이 새 진행 방향을 따라가게 한다 */
   turnFacing: 0.5,
   /** 방향을 꺾는 터치는 발끝에서 이 거리 안의 공만 (m) */
-  turnReach: 0.55,
+  turnReach: 0.7,
   /** 터치 사이 최소 간격 (초) */
-  touchGap: 0.16,
+  touchGap: 0.12,
   /** 공이 이보다 멀어지면 소유를 잃는다 (헤비 터치, m) */
   leash: 3.2,
   /** 발이 닿지 않는 공만 쫓되, reach에서 1m까지 점차 추격 비중을 높인다 */
   pullFullDistance: 1,
   /** 반대 입력과 추격이 상쇄되어 reach 바깥에서 공을 나란히 따라가는 교착을 막는다 */
   pullMin: 0.65,
+  /** 상대가 이 거리(m) 안이면 터치를 짧게: 바로 붙었을 때 pressureKnock배 */
+  pressureRange: 4,
+  pressureKnock: 0.35,
   /** 잔디 구름 감속: a = rollDecel + rollDamping·v */
   rollDecel: 1.6,
   rollDamping: 0.3,
