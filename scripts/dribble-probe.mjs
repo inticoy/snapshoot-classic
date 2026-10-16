@@ -7,10 +7,20 @@ const browser = await chromium.launch({ executablePath: await chromePath() });
 const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
 const errors = [];
 page.on('pageerror', (e) => errors.push(e.message));
-await page.goto(baseURL);
-await page.waitForFunction(() => window.__game && document.querySelector('#overlay')?.textContent.includes('경기 시작'));
-await page.keyboard.press('Enter');
-await page.waitForFunction(() => window.__game.match.phase === 'playing');
+// SCENARIO=free|duel|pressure 이면 플레이그라운드에서, 없으면 실제 경기 킥오프에서
+const scenario = process.env.SCENARIO;
+if (scenario) {
+  await page.goto(`${baseURL}index.html?playground`);
+  await page.waitForFunction(() => window.__game?.game.playground?.records.length > 10);
+  await page.locator(`[data-scenario="${scenario}"]`).click();
+  await page.waitForFunction((id) => window.__game.game.playground.scenarios.current === id, scenario);
+  await page.waitForTimeout(300);
+} else {
+  await page.goto(baseURL);
+  await page.waitForFunction(() => window.__game && document.querySelector('#overlay')?.textContent.includes('경기 시작'));
+  await page.keyboard.press('Enter');
+  await page.waitForFunction(() => window.__game.match.phase === 'playing');
+}
 await page.evaluate(() => {
   const m = window.__game.match;
   window.__log = [];
@@ -41,6 +51,7 @@ for (const [name, keys, ms] of segs) {
 const log = await page.evaluate(() => window.__log);
 await browser.close();
 
+// 구간마다: 입력 방향으로 실제 이동한 거리, 입력 방향과 몸 이동 방향이 처음 맞기까지(±30°) 시간
 const deg = (x, z) => (Math.atan2(z, x) * 180) / Math.PI;
 for (const [name] of segs) {
   const s = log.filter((r) => r.seg === name);
@@ -49,6 +60,16 @@ for (const [name] of segs) {
   const moved = [z.p[0] - a.p[0], z.p[1] - a.p[1]];
   const avgV = s.reduce((acc, r) => [acc[0] + r.v[0], acc[1] + r.v[1]], [0, 0]).map((x) => x / s.length);
   const owned = s.filter((r) => r.owner && r.owner.endsWith(r.me)).length / s.length;
+  const want = s.find((r) => Math.hypot(...r.input) > 0.5)?.input;
+  let align = null;
+  if (want) {
+    const t0 = s[0].t;
+    const hit = s.find((r) => Math.hypot(...r.v) > 1 && (r.v[0] * want[0] + r.v[1] * want[1]) / Math.hypot(...r.v) / Math.hypot(...want) > Math.cos(Math.PI / 6));
+    align = hit ? +(hit.t - t0).toFixed(2) : 'never';
+  }
+  const along = want ? (moved[0] * want[0] + moved[1] * want[1]) / Math.hypot(...want) : 0;
+  console.log(`${name.padEnd(13)} 입력방향 이동 ${along.toFixed(2)}m, 방향 맞기까지 ${align}s, 소유 ${(owned * 100).toFixed(0)}%, 터치 ${s.reduce((n, r) => n + r.touch, 0)}`);
+  continue;
   console.log(`${name.padEnd(13)} input ${JSON.stringify(a.input.map((x) => +x.toFixed(2)))} moved (${moved.map((x) => x.toFixed(2)).join(', ')}) avgSpeed ${Math.hypot(...avgV).toFixed(2)} dir ${deg(...avgV).toFixed(0)}° owned ${(owned * 100).toFixed(0)}% touches ${s.reduce((n, r) => n + r.touch, 0)} me ${a.me}→${z.me} owner ${z.owner} phase ${z.phase} locks ${JSON.stringify(z.lock.map((x) => (typeof x === 'number' ? +x.toFixed(2) : x)))}`);
 }
 // 'right' 구간 처음 40스텝 자세히
