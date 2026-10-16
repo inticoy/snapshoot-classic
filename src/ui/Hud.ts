@@ -27,6 +27,13 @@ const DEFENCE_HINTS: [string, string][] = [
   ['S', '선수 변경'],
 ];
 
+const SETPIECE_HINTS: Record<string, [string, string][]> = {
+  throwin: [['←→', '조준'], ['S', '짧은 스로인'], ['A', '롱 스로인']],
+  corner: [['←→', '조준'], ['A', '크로스'], ['S', '짧은 패스']],
+  goalkick: [['←→', '조준'], ['A', '롱킥'], ['S', '짧은 패스']],
+};
+const SETPIECE_TITLE: Record<string, string> = { throwin: 'THROW-IN', corner: 'CORNER', goalkick: 'GOAL KICK' };
+
 const KIND_LABEL = { shoot: 'SHOT', pass: 'PASS', through: 'THROUGH', lob: 'LOB' } as const;
 
 /**
@@ -58,7 +65,7 @@ export class Hud {
   private tickerTimer = 0;
   private goalWordTimer = 0;
   private lowerThirdTimer = 0;
-  private hintMode: 'attack' | 'defence' | null = null;
+  private hintMode: string | null = null;
   private nbLeftPlayer: Player | null = null;
   private nbRightPlayer: Player | null = null;
   private lastScore = '';
@@ -115,7 +122,7 @@ export class Hud {
 
     this.timers(dt);
 
-    const live = match.phase === 'playing' || match.phase === 'kickoff';
+    const live = match.phase !== 'goal' && match.phase !== 'fulltime';
     this.updateIndicator(match, camera, live);
     this.updateNameBars(match, live);
     this.updateHints(match, live);
@@ -216,12 +223,17 @@ export class Hud {
   private updateHints(match: Match, live: boolean): void {
     this.hints.style.display = live ? 'flex' : 'none';
     const owner = match.ball.owner;
-    const mode = owner && owner.team === 0 ? 'attack' : owner ? 'defence' : this.hintMode ?? 'attack';
+    const sp = match.setPieces.current;
+    const userSetPiece = match.phase === 'setpiece' && sp && sp.taker === match.controlled;
+    const mode = userSetPiece
+      ? sp!.kind
+      : owner && owner.team === 0 ? 'attack' : owner ? 'defence' : this.hintMode ?? 'attack';
     if (mode === this.hintMode) return;
     this.hintMode = mode;
-    const list = mode === 'attack' ? ATTACK_HINTS : DEFENCE_HINTS;
+    const list = SETPIECE_HINTS[mode] ?? (mode === 'attack' ? ATTACK_HINTS : DEFENCE_HINTS);
+    const title = SETPIECE_TITLE[mode] ?? (mode === 'attack' ? 'ATTACK' : 'DEFENCE');
     this.hints.innerHTML =
-      `<div class="hint-mode">${mode === 'attack' ? 'ATTACK' : 'DEFENCE'}</div>` +
+      `<div class="hint-mode">${title}</div>` +
       list.map(([k, label]) => `<div class="hint">${label} ${k.split('+').map((x) => `<kbd>${x}</kbd>`).join('+')}</div>`).join('');
   }
 

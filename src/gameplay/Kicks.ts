@@ -236,6 +236,40 @@ export class Kicks {
     return { vel, spin: new CANNON.Vec3(), receiver: recv, weakFoot: foot.weak };
   }
 
+  /** 스로인: 머리 위에서 양손으로 던진다. long = 롱 스로인 (A/W) */
+  throwIn(p: Player, input: THREE.Vector3, long: boolean, charge: number, assist: AssistLevel): KickResult {
+    const bp = this.m.ball.position;
+    const d = input.clone().setY(0).normalize();
+    const cone = assist === 'assisted' ? 1.3 : assist === 'semi' ? 0.7 : 0;
+    let receiver = cone > 0 ? this.pickReceiver(p, d, long ? 'lob' : 'short', cone) : null;
+    const maxD = long ? 26 : 15;
+    if (receiver && receiver.pos.distanceTo(new THREE.Vector3(bp.x, 0, bp.z)) > maxD + 3) receiver = null;
+    let tx: number, tz: number;
+    if (receiver) {
+      tx = receiver.pos.x + receiver.vel.x * 0.5;
+      tz = receiver.pos.z + receiver.vel.z * 0.5;
+    } else {
+      const dist = long ? 10 + 16 * charge : 5 + 10 * charge;
+      tx = bp.x + d.x * dist;
+      tz = bp.z + d.z * dist;
+    }
+    tz = THREE.MathUtils.clamp(tz, -PITCH.halfW + 0.5, PITCH.halfW - 0.5);
+    const D = Math.min(maxD, Math.hypot(tx - bp.x, tz - bp.z));
+    const acc = n(p.profile.stats.shortPassing) * 0.5 + n(p.profile.stats.strength) * 0.5;
+    const dir2 = new THREE.Vector3(tx - bp.x, 0, tz - bp.z)
+      .normalize()
+      .applyAxisAngle(new THREE.Vector3(0, 1, 0), gauss() * (0.02 + 0.05 * (1 - acc)));
+    const T = (long ? 0.55 : 0.45) + D * 0.03;
+    const vh = (D / T) * (1 + D * 0.006);
+    const vy = (0.4 - bp.y + 0.5 * G * T * T) / T;
+    return {
+      vel: new CANNON.Vec3(dir2.x * vh, vy, dir2.z * vh),
+      spin: new CANNON.Vec3(),
+      receiver: receiver ?? this.nearestMateTo(p, tx, tz, 6),
+      weakFoot: false,
+    };
+  }
+
   private pickReceiver(p: Player, d: THREE.Vector3, kind: PassKind, cone: number): Player | null {
     const m = this.m;
     const aerial = kind === 'lob' || kind === 'lobThrough';

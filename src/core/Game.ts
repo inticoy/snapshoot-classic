@@ -10,6 +10,7 @@ import { Menu, assistPanel, controlsPanel, matchupPanel, playerDetailPanel, squa
 import { ASSIST_LABEL, cycleAssist, settings } from './Settings';
 import { Sound } from '../audio/Sound';
 import { TEAMS } from '../data/Teams';
+import { RESTART_LABEL } from '../gameplay/SetPieces';
 
 type AppState = 'menu' | 'playing' | 'paused' | 'result';
 
@@ -328,6 +329,12 @@ export class Game {
           this.hud.goal(e.team, e.ownGoal ? 'OWN GOAL' : 'GOAL', sub, [...this.match.score] as [number, number]);
           break;
         }
+        case 'out':
+          this.sound.whistle([0.18]);
+          this.hud.tick(`${RESTART_LABEL[e.kind]} · ${TEAMS[e.team].abbr}`, 2.2);
+          break;
+        case 'restart':
+          break;
         case 'whistle':
           if (e.kind === 'kickoff') this.sound.whistle([0.45]);
           else {

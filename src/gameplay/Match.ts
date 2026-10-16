@@ -11,8 +11,9 @@ import { settings, type AssistLevel } from '../core/Settings';
 import { n } from '../data/Stats';
 import type { ButtonState } from '../core/Input';
 import { TEAMS } from '../data/Teams';
+import { SetPieces, type RestartKind } from './SetPieces';
 
-export type Phase = 'kickoff' | 'playing' | 'goal' | 'fulltime';
+export type Phase = 'kickoff' | 'playing' | 'out' | 'setpiece' | 'goal' | 'fulltime';
 
 export type MatchEvent =
   | { type: 'kick'; speed: number }
@@ -22,7 +23,9 @@ export type MatchEvent =
   | { type: 'save'; caught: boolean }
   | { type: 'goal'; team: 0 | 1; scorer: Player | null; ownGoal: boolean }
   | { type: 'whistle'; kind: 'kickoff' | 'fulltime' }
-  | { type: 'tackle'; success: boolean };
+  | { type: 'tackle'; success: boolean }
+  | { type: 'out'; kind: RestartKind; team: 0 | 1 }
+  | { type: 'restart'; kind: RestartKind; team: 0 | 1 };
 
 export type KickKind = 'shoot' | 'pass' | 'through' | 'lob';
 const KICK_KINDS: KickKind[] = ['shoot', 'pass', 'through', 'lob'];
@@ -74,6 +77,7 @@ export class Match {
   readonly events: MatchEvent[] = [];
   readonly ai: TeamAI;
   readonly kicks: Kicks;
+  readonly setPieces: SetPieces;
 
   phase: Phase = 'kickoff';
   phaseTimer = 0;
@@ -108,6 +112,7 @@ export class Match {
     this.controlled = this.teams[0][2];
     this.ai = new TeamAI(this);
     this.kicks = new Kicks(this);
+    this.setPieces = new SetPieces(this);
     this.setupBallCollisions();
     this.startKickoff(0);
   }
@@ -146,6 +151,7 @@ export class Match {
     this.charge = null;
     this.queued = null;
     this.passTarget = null;
+    this.setPieces.current = null;
     for (const p of this.players) {
       const a = p.attackDir;
       p.vel.set(0, 0, 0);
@@ -178,9 +184,13 @@ export class Match {
         }
         break;
       case 'playing':
+      case 'out':
+      case 'setpiece':
+        // 경기 시간은 공이 나가 있을 때도 흐른다
         this.clock += dt;
-        this.updatePlaying(dt, cmd);
-        if (this.clock >= this.duration) {
+        if (this.phase === 'playing') this.updatePlaying(dt, cmd);
+        else this.setPieces.update(dt, cmd);
+        if (this.clock >= this.duration && this.phase === 'playing') {
           this.phase = 'fulltime';
           this.phaseTimer = 999;
           this.events.push({ type: 'whistle', kind: 'fulltime' });
@@ -223,7 +233,7 @@ export class Match {
   private updatePlaying(dt: number, cmd: UserCommand): void {
     const holder = this.ball.owner ?? this.ball.lastTouch;
     if (holder) this.stats.possession[holder.team] += dt;
-    this.handleUser(dt, cmd);
+    if (this.isUserControlled(this.controlled)) this.handleUser(dt, cmd);
     this.ai.update(dt);
     this.updateKeepers(dt);
 
@@ -235,6 +245,24 @@ export class Match {
     this.deflectOffBodies();
     this.checkPossession();
     this.checkGoal();
+    if (this.phase === 'playing') this.setPieces.checkOut();
+  }
+
+  /** 물리 월드 진행 (세트피스 모듈용) */
+  stepWorld(dt: number): void {
+    this.physics.step(dt);
+  }
+
+  /** 스로인 적용 */
+  applyThrow(p: Player, vel: CANNON.Vec3, receiver: Player | null): void {
+    p.playAction('hold', 0.35);
+    this.ball.kick(vel, cspin.set(0, 0, 0), p);
+    this.events.push({ type: 'kick', speed: vel.length() * 0.5 });
+    this.ball.shot = null;
+    this.passTarget = receiver;
+    this.stats.passes[p.team]++;
+    this.pendingPass = p.team;
+    if (receiver && p.team === 0 && !receiver.isKeeper) this.controlled = receiver;
   }
 
   // ---------------------------------------------------------------- 사용자 조작

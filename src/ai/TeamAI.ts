@@ -258,7 +258,7 @@ export class TeamAI {
     // 사용자 팀: 사람이 조종하는 선수가 더 가깝거나 비슷하면 AI 동료는 쫓지 않는다
     if (team === 0 && userD < bestD + 4 && !m.teammatePress) return null;
     // 상대 공일 때 사용자 팀 AI 동료는 동료 압박(S) 중일 때만 압박한다
-    if (team === 0 && m.ball.owner && m.ball.owner.team !== 0) return m.teammatePress ? best : null;
+    if (team === 0 && userD < Infinity && m.ball.owner && m.ball.owner.team !== 0) return m.teammatePress ? best : null;
     return best;
   }
 }
