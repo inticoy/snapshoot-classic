@@ -34,7 +34,7 @@ describe('개인기 커맨드 인식', () => {
   });
 
   it('Shift + → 꾹은 짧게(tap) 커맨드가 아니다', () => {
-    expect(run([{ shift: true, move: v(0, 1), secs: 0.5 }, { shift: true, move: null, secs: 0.3 }])).toEqual([]);
+    expect(run([{ shift: true, move: v(0, 1), secs: 0.5 }, { shift: true, move: null, secs: 0.3 }], SKILLS.filter((s) => !s.sustained))).toEqual([]);
   });
 
   it('Z + ↓ = 드래그백 (누르고 있는 중에 바로 나간다)', () => {

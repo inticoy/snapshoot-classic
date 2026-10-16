@@ -99,6 +99,11 @@ export const PASS = {
   minSpeed: 8,
   maxSpeed: 22,
   chargeTime: 0.7,
+  // Z 패스: 낮은 궤적으로 빠르게 보내는 대신 방향 오차를 조금 늘린다.
+  drivenSpeed: 1.25,
+  drivenError: 1.15,
+  drivenLift: 0.12,
+  lowLobTime: 0.72,
 };
 
 export const MATCH = {
@@ -262,3 +267,12 @@ export const AUDIO_MIX = {
   quietTouchSpeed: 1.2,
   touchMaxDistance: 25,
 } as const;
+
+/** 개인기 입력 간격은 초 단위다. 긴 커맨드의 중간 방향을 단일 탭으로 확정하지 않는다. */
+export const SKILL_INPUT = {
+  hold: 0.3, // 이 시간 이상 누르면 꾹
+  settle: 0.12, // 마지막 방향 변화 뒤 확정 대기
+  gap: 0.45, // 이보다 오래 끊기면 새 커맨드
+  dead: 0.5,
+};
+export const SKILL_AI = { range: 2, front: 0.65, chance: 0.035, cooldown: 5 };

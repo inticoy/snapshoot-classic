@@ -683,12 +683,13 @@ export class Match {
     if (cmd.pass.pressed && !attacking && !teamHasBall) this.switchToNearest();
 
     const move = cmd.move.clone();
-    // 개인기: Shift(또는 Z) + 방향 커맨드. Shift를 누른 동안 방향키는 커맨드라서 이동은 직전 방향을 유지한다
+    // 개인기: 보조키를 누른 순간 몸 방향을 유지한다. Z 패스 게이지는 이동·조준 입력을 그대로 받는다
     if (cmd.skill && hasBall && attacking && !this.charge) {
-      const def = this.skillInput.update(dt, cmd.skill.held, cmd.finesse.held, cmd.move, p.facing, SKILLS);
-      if (cmd.skill.held) move.copy(this.skillHeldMove);
+      const def = this.skillInput.update(dt, cmd.skill.held, cmd.finesse.held, cmd.move, p.facing, SKILLS.filter((s) => s.stars <= p.profile.skill));
+      if (cmd.skill.held || (cmd.finesse.held && !KICK_KINDS.some((kind) => cmd[kind].held))) move.copy(this.skillHeldMove);
       else this.skillHeldMove.copy(move);
       if (def) this.skills.start(p, def);
+      this.skills.hold(p, cmd.skill.held, cmd.move);
     } else {
       this.skillInput.reset();
       this.skillHeldMove.copy(move);
@@ -861,7 +862,7 @@ export class Match {
     const dir = move.lengthSq() > 0.01 ? move : p.facing;
     // Q+W = 로빙 스루 패스
     if (kind === 'through' && chip) this.pass(p, dir, 'lobThrough', value);
-    else this.pass(p, dir, kind === 'pass' ? 'short' : kind, value);
+    else this.pass(p, dir, finesse ? (kind === 'pass' ? 'driven' : kind === 'through' ? 'drivenThrough' : 'lowLob') : kind === 'pass' ? 'short' : kind, value);
   }
 
   /** 사용자 팀은 설정한 보정, AI는 항상 보조 (오차는 능력치로) */
@@ -910,7 +911,7 @@ export class Match {
   pass(p: Player, dir: THREE.Vector3, kind: PassKind = 'short', charge = 0.5): void {
     if (this.windups.has(p)) return;
     const r = this.kicks.pass(p, dir, kind, charge, this.assistFor(p, 'pass'));
-    this.withKickMotion(p, kind === 'lob' || kind === 'lobThrough' ? 'lob' : 'pass', r.vel, () => {
+    this.withKickMotion(p, kind === 'lob' || kind === 'lobThrough' || kind === 'lowLob' ? 'lob' : 'pass', r.vel, () => {
       this.kickBall(p, r.vel, r.spin);
       this.rules.recordPass(p);
       this.ball.shot = null;

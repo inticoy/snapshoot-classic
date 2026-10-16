@@ -1,7 +1,8 @@
 import * as THREE from 'three';
-import { AI, DRIBBLE, GOAL, PITCH } from '../config';
+import { AI, SKILL_AI, DRIBBLE, GOAL, PITCH } from '../config';
 import type { Player } from '../entities/Player';
 import type { Match } from '../gameplay/Match';
+import { SKILLS } from '../gameplay/Skills';
 import { n } from '../data/Stats';
 
 interface Intent {
@@ -26,6 +27,7 @@ const tmp2 = new THREE.Vector3();
  */
 export class TeamAI {
   private readonly intents = new Map<Player, Intent>();
+  private readonly skillCooldown = new Map<Player, number>();
   private readonly timers = new Map<Player, number>();
 
   constructor(private readonly match: Match, private readonly smoothDribble = true) {
@@ -37,6 +39,7 @@ export class TeamAI {
 
   /** 시나리오 재시작 때 이전 목표·회피 방향·반응 시간을 이어받지 않는다. */
   reset(): void {
+    this.skillCooldown.clear();
     for (const [p, intent] of this.intents) {
       intent.target.copy(p.pos);
       intent.sprint = false;
@@ -48,6 +51,7 @@ export class TeamAI {
   update(dt: number): void {
     const m = this.match;
     for (const p of m.players) {
+      this.skillCooldown.set(p, Math.max(0, (this.skillCooldown.get(p) ?? 0) - dt));
       if (p.isKeeper || m.isUserControlled(p)) continue;
       if (m.practice && p.team === 1 && m.practiceOpponent) {
         this.practiceDefender(p, dt);
@@ -118,6 +122,7 @@ export class TeamAI {
 
   private decide(p: Player): void {
     const m = this.match;
+    if (m.skills.isActive(p)) return;
     const ball = m.ball;
     const intent = this.intents.get(p)!;
     const bp = ball.position;
@@ -284,6 +289,20 @@ export class TeamAI {
         tmp.copy(target.pos).sub(p.pos).setY(0).normalize();
         m.pass(p, tmp, 'lob', 0.55);
         return;
+      }
+    }
+
+    // 정면 1:1에서만 가끔 쓴다. 연속 개인기로 패스 판단을 멈추지 않도록 쿨다운을 둔다.
+    const close = m.teams[1 - p.team].filter((o) => !o.isKeeper && o.pos.distanceTo(p.pos) < SKILL_AI.range);
+    if (close.length === 1 && !this.skillCooldown.get(p)) {
+      tmp.copy(close[0].pos).sub(p.pos).normalize();
+      if (tmp.dot(p.facing) >= SKILL_AI.front && m.random.next() < SKILL_AI.chance) {
+        const choices = SKILLS.filter((s) => s.stars <= p.profile.skill && s.stars >= 2 && !s.sustained && s.trigger.kind === 'shift');
+        const def = choices[Math.floor(m.random.next() * choices.length)];
+        if (def && m.skills.start(p, def)) {
+          this.skillCooldown.set(p, SKILL_AI.cooldown);
+          return;
+        }
       }
     }
 

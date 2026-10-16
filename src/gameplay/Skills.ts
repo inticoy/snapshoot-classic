@@ -1,9 +1,12 @@
 import * as THREE from 'three';
-import { BALL } from '../config';
+import { BALL, SKILL_INPUT } from '../config';
+import { makeSkillDefs } from '../data/Skills';
 import { MOTION_CATALOG } from '../data/MotionCatalog';
-import { selectMotion, type MotionKind } from '../anim/MotionLibrary';
+import type { MotionKind } from '../anim/MotionLibrary';
 import type { Player } from '../entities/Player';
 import type { Match } from './Match';
+
+export { SKILL_INPUT } from '../config';
 
 /**
  * 개인기 (FC 온라인 키보드 커맨드)
@@ -39,12 +42,14 @@ export interface SkillDef {
   duration: number;
   /** 들어올 때 앞으로 가던 속도를 이만큼 유지하며 동작한다 (body·ball z에 더해짐) */
   carry: number;
+  /** 옆 끌기는 보조키·방향을 누르는 동안 한 주기씩 이어 간다. */
+  sustained?: boolean;
   body: Key[];
   ball: Key[];
   /** 발이 공을 건드리는 순간 (터치 소리, 동작-공 일치 검증) */
   contacts: { t: number; foot: 'L' | 'R' }[];
-  /** 몸 동작: 종류·공 방향(시작 기준 rad)으로 고른 클립의 [from, to) 구간 (to는 터치 순간 기준 비율) */
-  motion?: { kind: MotionKind; angle: number; from?: number; toKey?: number; speed?: number };
+  /** 접촉을 구운 클립을 고정한다. [from, key × toKey) 구간을 duration에 맞춰 재생한다. */
+  motion?: { id: string; kind: MotionKind; angle: number; from?: number; toKey?: number; speed?: number };
   /** 끝날 때 공 방향(시작 기준 rad, + = 오른쪽)·속도와 몸 속도. input = 그때 누른 방향이 있으면 그쪽 */
   exit: { dir: number; speed: number; body: number; input?: boolean };
   /** AI 수비를 속이는 순간과 방향 (rad). 가까운 수비가 잠깐 그쪽으로 몸을 싣는다 */
@@ -62,76 +67,15 @@ export function mirror(d: SkillDef, id: string, name: string): SkillDef {
     body: d.body.map(flip),
     ball: d.ball.map(flip),
     contacts: d.contacts.map((c) => ({ t: c.t, foot: c.foot === 'L' ? 'R' : 'L' })),
-    motion: d.motion && { ...d.motion, angle: -d.motion.angle },
+    motion: d.motion && { ...d.motion, id: d.motion.id.endsWith('~m') ? d.motion.id.slice(0, -2) : `${d.motion.id}~m`, angle: -d.motion.angle },
     exit: { ...d.exit, dir: -d.exit.dir },
     bait: d.bait && { ...d.bait, dir: -d.bait.dir },
   };
 }
 
-// ---------------------------------------------------------------- 기준 개인기 3종
-
-/** 페이크 슛 (D 게이지 중 S): 슛 동작을 공 직전에 멈추고 발바닥으로 공을 세운다. 누른 방향이 있으면 그쪽으로 접는다 */
-const FAKE_SHOT: SkillDef = {
-  id: 'fake_shot', name: '페이크 슛', stars: 1,
-  trigger: { kind: 'fake', from: 'shoot' },
-  duration: 0.62, carry: 0.25,
-  body: [{ t: 0, x: 0, z: 0 }, { t: 0.3, x: 0, z: 0.12 }, { t: 0.62, x: 0, z: 0.2 }],
-  ball: [{ t: 0, x: 0.12, z: 0.5 }, { t: 0.3, x: 0.1, z: 0.55 }, { t: 0.62, x: 0.08, z: 0.58 }],
-  contacts: [{ t: 0.5, foot: 'R' }],
-  motion: { kind: 'shot', angle: 0, toKey: 0.85 },
-  exit: { dir: 0, speed: 1.2, body: 1, input: true },
-  bait: { t: 0.25, dir: 0, strength: 1 },
-  shield: 0.85,
-};
-
-/** 드래그백 (Z + ↓): 발바닥으로 공을 뒤로 끌며 몸을 돌린다 */
-const DRAG_BACK: SkillDef = {
-  id: 'drag_back', name: '드래그백', stars: 2,
-  trigger: { kind: 'z', seq: [{ dir: 'B' }] },
-  duration: 0.6, carry: 0,
-  body: [{ t: 0, x: 0, z: 0, yaw: 0 }, { t: 0.2, x: 0, z: -0.08, yaw: 0.2 }, { t: 0.6, x: -0.05, z: -0.3, yaw: Math.PI }],
-  ball: [{ t: 0, x: 0.1, z: 0.45 }, { t: 0.12, x: 0.1, z: 0.4 }, { t: 0.38, x: 0.04, z: -0.15 }, { t: 0.6, x: 0, z: -0.75 }],
-  contacts: [{ t: 0.12, foot: 'R' }],
-  motion: { kind: 'control', angle: Math.PI },
-  exit: { dir: Math.PI, speed: 2.4, body: 1.6, input: true },
-  bait: { t: 0.1, dir: 0, strength: 0.6 },
-  shield: 0.7,
-};
-
-/** 속임 동작 (Shift + → 짧게): 몸을 오른쪽으로 실었다가 그대로 앞으로 */
-const FEINT_RIGHT: SkillDef = {
-  id: 'feint_r', name: '오른쪽 속임 동작', stars: 2,
-  trigger: { kind: 'shift', seq: [{ dir: 'R', tap: true }] },
-  duration: 0.45, carry: 0.7,
-  body: [{ t: 0, x: 0, z: 0, yaw: 0 }, { t: 0.17, x: 0.12, z: 0, yaw: 0.45 }, { t: 0.45, x: 0.02, z: 0, yaw: 0 }],
-  ball: [{ t: 0, x: 0, z: 0.5 }, { t: 0.45, x: 0, z: 0.55 }],
-  contacts: [],
-  motion: { kind: 'control', angle: Math.PI / 4, toKey: 0.7 },
-  exit: { dir: 0, speed: 2.2, body: 2.5 },
-  bait: { t: 0.12, dir: Math.PI / 2, strength: 1 },
-  shield: 0.8,
-};
-
-export const SKILLS: SkillDef[] = [
-  FAKE_SHOT,
-  { ...FAKE_SHOT, id: 'fake_pass', name: '페이크 크로스', trigger: { kind: 'fake', from: 'lob' } },
-  DRAG_BACK,
-  FEINT_RIGHT,
-  mirror(FEINT_RIGHT, 'feint_l', '왼쪽 속임 동작'),
-];
+export const SKILLS: SkillDef[] = makeSkillDefs();
 
 // ---------------------------------------------------------------- 커맨드 인식
-
-export const SKILL_INPUT = {
-  /** 이 시간 이상 누르면 hold */
-  hold: 0.3,
-  /** 방향을 놓고 이 시간이 지나면 커맨드를 확정 */
-  settle: 0.12,
-  /** 칸 사이 최대 간격 (넘으면 처음부터) */
-  gap: 0.45,
-  /** 방향 입력으로 보는 최소 크기 */
-  dead: 0.5,
-};
 
 interface Step { dir: Dir; t0: number; t1: number | null }
 
@@ -201,7 +145,7 @@ export class SkillInput {
       const prev = this.steps.at(-1);
       if (prev && prev.t1 === null) prev.t1 = this.time;
       if (dir) {
-        if (prev && this.time - (prev.t1 ?? this.time) > SKILL_INPUT.gap) this.steps = [];
+        if (prev && this.time - this.changed > SKILL_INPUT.gap && prev.t1 !== null) this.steps = [];
         this.steps.push({ dir, t0: this.time, t1: null });
       }
       this.last = dir;
@@ -221,8 +165,8 @@ export class SkillInput {
     const longer = list.some((s) => s.trigger.kind === this.mode && s.trigger.seq.length > this.steps.length &&
       s.trigger.seq.slice(0, this.steps.length).every((tok, i) => tok.dir === this.steps[i].dir));
     const holding = this.last !== null;
-    if ((longer || holding) && !settled) return null;
-    if (holding && longer) return null;
+    if (!settled) return null;
+    if (holding && longer && !release && !exact.some((s) => s.sustained)) return null;
     // 별이 높은 개인기 우선 (같은 커맨드면 상위 개인기)
     return exact.sort((a, b) => b.stars - a.stars)[0];
   }
@@ -263,6 +207,7 @@ interface Active {
   v0: number;
   contact: number;
   baited: boolean;
+  holding: boolean;
 }
 
 const pose = { x: 0, z: 0, y: 0, yaw: 0 };
@@ -279,12 +224,20 @@ export class SkillRunner {
   shield(p: Player): number { return this.active.get(p)?.def.shield ?? 1; }
 
   clear(): void {
-    for (const p of this.active.keys()) p.actionLock = p.facingLock = 0;
+    for (const p of this.active.keys()) {
+      p.actionLock = p.facingLock = 0;
+      p.model.stopMotion?.();
+    }
     this.active.clear();
   }
 
   /** 개인기 시작. 별이 모자라거나 공이 발 근처에 없으면 false */
-  start(p: Player, def: SkillDef): boolean {
+  start(p: Player, requested: SkillDef): boolean {
+    // 같은 커맨드의 상위 기술을 요청해도 선수 별에 맞는 하위 후보로 내려간다.
+    const def = requested.stars <= p.profile.skill ? requested : SKILLS
+      .filter((s) => JSON.stringify(s.trigger) === JSON.stringify(requested.trigger) && s.stars <= p.profile.skill)
+      .sort((a, b) => b.stars - a.stars)[0];
+    if (!def) return false;
     const m = this.m;
     if (m.ball.owner !== p || p.busy || this.active.has(p) || p.profile.skill < def.stars) return false;
     const bp = m.ball.position;
@@ -292,23 +245,33 @@ export class SkillRunner {
     const fwd = p.facing.clone().setY(0).normalize();
     const v0 = Math.max(0, p.vel.x * fwd.x + p.vel.z * fwd.z);
     const a: Active = {
-      def, p, t: 0, origin: p.pos.clone().setY(0), fwd, right: new THREE.Vector3(-fwd.z, 0, fwd.x), v0, contact: 0, baited: false,
+      def, p, t: 0, origin: p.pos.clone().setY(0), fwd, right: new THREE.Vector3(-fwd.z, 0, fwd.x), v0, contact: 0, baited: false, holding: false,
     };
     this.active.set(p, a);
     p.actionLock = def.duration;
     p.facingLock = def.duration;
-    if (def.motion) {
-      const pick = selectMotion(MOTION_CATALOG, { kind: def.motion.kind, speed: v0 < 0.8 ? 'idle' : v0 < 5.2 ? 'walk' : 'sprint', angle: def.motion.angle, foot: 'R', random: m.random.next() });
-      if (pick) {
-        const e = pick.entry;
-        // 구간 재생: toKey가 있으면 터치 순간 앞에서 끊는다 (페이크), 길이는 개인기 길이에 맞춘다
-        const end = def.motion.toKey !== undefined ? e.key * def.motion.toKey : e.duration;
-        const from = def.motion.from ?? 0;
-        p.playMotion(e, from, def.motion.speed ?? Math.max(0.6, (end - from) / def.duration));
-      }
-    }
+    this.playMotion(a);
     m.events.push({ type: 'skill', id: def.id, player: p });
     return true;
+  }
+
+  /** 시작 때 잡은 기준 방향을 써야 몸이 돌아도 hold가 끊기지 않는다. */
+  hold(p: Player, shift: boolean, move: THREE.Vector3): void {
+    const a = this.active.get(p);
+    if (!a?.def.sustained) return;
+    const trigger = a.def.trigger;
+    a.holding = shift && trigger.kind !== 'fake' && dirOf(move, a.fwd) === trigger.seq[0].dir;
+    if (!a.holding) this.finish(a, true);
+  }
+
+  private playMotion(a: Active): void {
+    const motion = a.def.motion;
+    if (!motion) return;
+    const entry = MOTION_CATALOG.find((e) => e.id === motion.id);
+    if (!entry) return;
+    const end = motion.toKey === undefined ? entry.duration : entry.key * motion.toKey;
+    const from = motion.from ?? 0;
+    a.p.playMotion(entry, from, motion.speed ?? (end - from) / a.def.duration);
   }
 
   private toWorld(a: Active, x: number, z: number, out: THREE.Vector3): THREE.Vector3 {
@@ -325,6 +288,14 @@ export class SkillRunner {
         continue;
       }
       a.t += dt;
+      if (def.sustained && a.holding && a.t >= def.duration) {
+        const end = def.body.at(-1)!;
+        a.origin.addScaledVector(a.right, end.x).addScaledVector(a.fwd, end.z);
+        a.t -= def.duration;
+        a.contact = 0;
+        this.playMotion(a);
+      }
+      p.actionLock = p.facingLock = Math.max(dt * 2, def.duration - a.t);
       const t = Math.min(a.t, def.duration);
       sample(def.body, t, pose);
       this.toWorld(a, pose.x, pose.z + a.v0 * def.carry * t, w);
@@ -354,8 +325,8 @@ export class SkillRunner {
       this.finish(a, true, move);
       return true;
     }
-    sample(def.ball, a.t + dt, pose);
-    this.toWorld(a, pose.x, pose.z + a.v0 * def.carry * (a.t + dt), w);
+    sample(def.ball, a.t, pose);
+    this.toWorld(a, pose.x, pose.z + a.v0 * def.carry * a.t, w);
     const body = this.m.ball.body, bp = body.position;
     body.velocity.set((w.x - bp.x) / dt, (pose.y - bp.y) / dt, (w.z - bp.z) / dt);
     const v = body.velocity;
@@ -368,6 +339,7 @@ export class SkillRunner {
     this.active.delete(p);
     p.actionLock = 0;
     p.facingLock = 0;
+    p.model.stopMotion?.();
     if (!normal) return;
     // 끝 방향: 정해진 방향, 또는 그때 누른 방향
     let dir: THREE.Vector3;
@@ -375,6 +347,7 @@ export class SkillRunner {
     else dir = a.fwd.clone().multiplyScalar(Math.cos(def.exit.dir)).addScaledVector(a.right, Math.sin(def.exit.dir));
     const speed = def.exit.speed + a.v0 * def.carry;
     this.m.ball.body.velocity.set(dir.x * speed, 0, dir.z * speed);
+    this.m.ball.body.angularVelocity.set(dir.z * speed / BALL.radius, 0, -dir.x * speed / BALL.radius);
     p.vel.copy(dir).multiplyScalar(def.exit.body + a.v0 * def.carry);
     p.facing.copy(dir);
     if (def.exit.speed > 1.5) this.m.events.push({ type: 'touch', speed, player: p });

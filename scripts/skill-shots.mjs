@@ -4,10 +4,29 @@ import { mkdirSync } from 'node:fs';
 import { chromium } from 'playwright';
 import { chromePath } from './chrome-path.mjs';
 
+const keys = { F: ['ArrowUp'], FR: ['ArrowUp', 'ArrowRight'], R: ['ArrowRight'], BR: ['ArrowDown', 'ArrowRight'], B: ['ArrowDown'], BL: ['ArrowDown', 'ArrowLeft'], L: ['ArrowLeft'], FL: ['ArrowUp', 'ArrowLeft'] };
+function sequence(dirs, hold = false, modifier = 'ShiftLeft') {
+  const inputs = [{ t: 0, keys: [] }, { t: 0.5, keys: [modifier] }];
+  let t = 0.55;
+  for (const [i, dir] of dirs.entries()) {
+    if (i && dirs[i - 1] === dir) { inputs.push({ t, keys: [modifier] }); t += 0.05; }
+    inputs.push({ t, keys: [modifier, ...keys[dir]] }); t += hold ? 1.8 : 0.06;
+  }
+  inputs.push({ t, keys: [] });
+  const start = hold ? 0.85 : modifier === 'KeyZ' ? 0.67 : t;
+  return { inputs, at: [start + 0.05, start + 0.2, start + 0.35, start + 0.5, start + 0.65] };
+}
 const SCRIPTS = {
-  drag_back: { inputs: [{ t: 0, keys: ['ArrowUp'] }, { t: 1, keys: ['KeyZ', 'ArrowDown'] }, { t: 1.25, keys: [] }], at: [1.0, 1.15, 1.3, 1.45, 1.6] },
-  feint_r: { inputs: [{ t: 0, keys: ['ArrowUp'] }, { t: 1, keys: ['ArrowUp', 'ShiftLeft'] }, { t: 1.05, keys: ['ArrowRight', 'ShiftLeft'] }, { t: 1.15, keys: ['ShiftLeft'] }, { t: 1.35, keys: ['ArrowUp'] }], at: [1.2, 1.3, 1.4, 1.5, 1.6] },
-  fake_shot: { inputs: [{ t: 0, keys: ['ArrowUp'] }, { t: 1, keys: ['ArrowUp', 'KeyD'] }, { t: 1.12, keys: ['ArrowUp', 'KeyD', 'KeyS'] }, { t: 1.18, keys: ['ArrowUp'] }], at: [1.15, 1.3, 1.45, 1.6, 1.75] },
+  fake_shot: { inputs: [{ t: 0, keys: [] }, { t: 0.55, keys: ['KeyD'] }, { t: 0.65, keys: ['KeyD', 'KeyS'] }, { t: 0.7, keys: [] }], at: [0.7, 0.85, 1, 1.15, 1.3] },
+  fake_pass: { inputs: [{ t: 0, keys: [] }, { t: 0.55, keys: ['KeyA'] }, { t: 0.65, keys: ['KeyA', 'KeyS'] }, { t: 0.7, keys: [] }], at: [0.7, 0.85, 1, 1.15, 1.3] },
+  drag_back: sequence(['B'], false, 'KeyZ'),
+  feint_r: sequence(['R']), feint_l: sequence(['L']),
+  step_over_r: sequence(['F', 'FR', 'R']), step_over_l: sequence(['F', 'FL', 'L']),
+  reverse_step_over_r: sequence(['R', 'FR', 'F']), reverse_step_over_l: sequence(['L', 'FL', 'F']),
+  side_step_r: sequence(['R'], true), side_step_l: sequence(['L'], true),
+  heel_flick: sequence(['F', 'B']), ball_lift: sequence(['F', 'F', 'F']),
+  roulette_r: sequence(['B', 'BL', 'L', 'FL', 'F', 'FR', 'R']), roulette_l: sequence(['B', 'BR', 'R', 'FR', 'F', 'FL', 'L']),
+  feint_exit_r: sequence(['L', 'BL', 'B', 'BR', 'R']), feint_exit_l: sequence(['R', 'BR', 'B', 'BL', 'L']),
 };
 const base = new URL(process.env.SNAPSHOOT_URL ?? 'http://127.0.0.1:5180/');
 const url = new URL('index.html?playground', base);
@@ -33,7 +52,7 @@ for (const id of ids) {
       cam.lookAt(u.x + 0.5, 0.8, u.z);
     };
     document.querySelector('#playground').style.display = 'none';
-    window.__playground.run({ scenario: 'free', seed: 5, duration: 2.5, inputs });
+    window.__playground.run({ scenario: 'free', seed: 5, duration: 3.3, inputs });
   }, s);
   for (const [i, t] of s.at.entries()) {
     await page.waitForFunction((t) => window.__game.match.elapsed >= t, t, { timeout: 15000 });
@@ -41,4 +60,5 @@ for (const id of ids) {
   }
 }
 console.log(JSON.stringify({ ids, errors, out }));
+if (errors.length) process.exitCode = 1;
 await browser.close();

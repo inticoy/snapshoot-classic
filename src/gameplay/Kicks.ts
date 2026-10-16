@@ -7,7 +7,7 @@ import { n } from '../data/Stats';
 import { activePhysics, magnusAccel } from '../physics/presets';
 import type { Match } from './Match';
 
-export type PassKind = 'short' | 'through' | 'lob' | 'lobThrough';
+export type PassKind = 'short' | 'through' | 'lob' | 'lobThrough' | 'driven' | 'drivenThrough' | 'lowLob';
 
 export interface KickResult {
   vel: CANNON.Vec3;
@@ -165,16 +165,18 @@ export class Kicks {
   // ---------------------------------------------------------------- 패스
 
   pass(p: Player, input: THREE.Vector3, kind: PassKind, charge: number, assist: AssistLevel): KickResult {
+    const driven = kind === 'driven' || kind === 'drivenThrough' || kind === 'lowLob';
+    const baseKind = kind === 'driven' ? 'short' : kind === 'drivenThrough' ? 'through' : kind === 'lowLob' ? 'lob' : kind;
     const s = p.profile.stats;
     const bp = this.m.ball.position;
     const d = input.clone().setY(0).normalize();
-    const aerial = kind === 'lob' || kind === 'lobThrough';
-    const throughBall = kind === 'through' || kind === 'lobThrough';
+    const aerial = kind === 'lob' || kind === 'lobThrough' || kind === 'lowLob';
+    const throughBall = kind === 'through' || kind === 'lobThrough' || kind === 'drivenThrough';
 
     // 1) 받을 동료 찾기 (보조: 넓게, 세미: 좁게, 수동: 안 찾음). 시야가 좋으면 범위가 넓어진다
     const vision = n(s.vision);
     const cone = assist === 'assisted' ? 1.15 + 0.2 * vision : assist === 'semi' ? 0.55 + 0.15 * vision : 0;
-    const receiver = cone > 0 ? this.pickReceiver(p, d, kind, cone) : null;
+    const receiver = cone > 0 ? this.pickReceiver(p, d, baseKind, cone) : null;
 
     // 2) 목표 지점과 이상적인 세기
     let tx: number, tz: number;
@@ -206,7 +208,7 @@ export class Kicks {
     const acc = long ? n(s.longPassing) * 0.8 + n(s.vision) * 0.2 : n(s.shortPassing) * 0.85 + n(s.vision) * 0.15;
     const foot = this.footFactor(p);
     const err = (0.012 + 0.05 * (1 - acc)) * (1 + D / 35) * this.pressureFactor(p) * foot.factor;
-    const angle = this.m.random.gauss() * err;
+    const angle = this.m.random.gauss() * err * (driven ? PASS.drivenError : 1);
     const dir2 = new THREE.Vector3(tx - bp.x, 0, tz - bp.z).normalize().applyAxisAngle(new THREE.Vector3(0, 1, 0), angle);
     const speedErr = 1 + this.m.random.gauss() * (0.03 + 0.08 * (1 - acc)) * foot.factor;
 
@@ -216,14 +218,15 @@ export class Kicks {
 
     const vel = new CANNON.Vec3();
     if (aerial) {
-      const T = kind === 'lob' ? 0.75 + D * 0.035 : 0.6 + D * 0.026;
+      const T = (baseKind === 'lob' ? 0.75 + D * 0.035 : 0.6 + D * 0.026) * (kind === 'lowLob' ? PASS.lowLobTime : 1);
       const vh = (D / T) * (1 + D * 0.0095) * powerScale * speedErr;
       vel.set(dir2.x * vh, 0.5 * g() * T, dir2.z * vh);
     } else {
       // 받는 위치에서 6~9 m/s 정도로 도착하는 세기
-      const base = kind === 'through' ? 5.5 + D * 0.48 : 4.8 + D * 0.5;
+      const base = baseKind === 'through' ? 5.5 + D * 0.48 : 4.8 + D * 0.5;
       const speed = THREE.MathUtils.clamp(base * powerScale * speedErr, PASS.minSpeed * 0.8, PASS.maxSpeed + 3);
-      vel.set(dir2.x * speed, D > 22 ? 2.2 : 0.4, dir2.z * speed);
+      const vh = speed * (driven ? PASS.drivenSpeed : 1);
+      vel.set(dir2.x * vh, driven ? PASS.drivenLift : D > 22 ? 2.2 : 0.4, dir2.z * vh);
     }
 
     // 수동 패스는 공이 떨어질 곳에 가장 가까운 동료를 받는 선수로 본다
@@ -337,8 +340,8 @@ export class Kicks {
 
   private pickReceiver(p: Player, d: THREE.Vector3, kind: PassKind, cone: number): Player | null {
     const m = this.m;
-    const aerial = kind === 'lob' || kind === 'lobThrough';
-    const throughBall = kind === 'through' || kind === 'lobThrough';
+    const aerial = kind === 'lob' || kind === 'lobThrough' || kind === 'lowLob';
+    const throughBall = kind === 'through' || kind === 'lobThrough' || kind === 'drivenThrough';
     let best: Player | null = null;
     let bestScore = Infinity;
     const to = new THREE.Vector3();
