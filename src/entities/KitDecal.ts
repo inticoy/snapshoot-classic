@@ -41,9 +41,10 @@ export function makeDecalTexture(spec: DecalSpec): THREE.CanvasTexture {
 function draw(canvas: HTMLCanvasElement, spec: DecalSpec): void {
   const g = canvas.getContext('2d')!;
   g.clearRect(0, 0, W, H);
-  drawBack(g, spec);
+  // 심판은 번호 없이 얼굴만
+  if (spec.number > 0) drawBack(g, spec);
   drawFace(g, spec.look);
-  drawChest(g, spec);
+  if (spec.number > 0) drawChest(g, spec);
 }
 
 function outlined(g: CanvasRenderingContext2D, text: string, x: number, y: number, ink: string, edge: string, line: number): void {

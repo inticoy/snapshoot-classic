@@ -36,7 +36,13 @@ export interface CharacterModel {
   play(state: AnimState, opts?: { side?: 1 | -1 }): void;
   setLocomotion(speed: number, sprint: boolean): void;
   update(dt: number): void;
+  /** 심판 동작: 오른팔 들기(카드·깃발) / 앞으로 가리키기(프리킥 방향). 스킨드 캐릭터만 지원 */
+  setGesture?(gesture: Gesture): void;
+  /** 오른손 월드 위치 (카드·깃발을 쥐여 줄 때) */
+  handPosition?(out: THREE.Vector3): THREE.Vector3 | null;
 }
+
+export type Gesture = 'none' | 'raise' | 'point';
 
 export interface ModelColors {
   shirt: number;

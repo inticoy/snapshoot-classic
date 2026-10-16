@@ -71,6 +71,7 @@ export class Game {
     this.match = new Match(this.physics);
     for (const g of this.match.goals) this.scene.add(g.group);
     for (const p of this.match.players) this.scene.add(p.model.root);
+    for (const o of this.match.officials.all) this.scene.add(o.model.root, o.item);
     this.scene.add(this.match.ball.object, this.match.ball.shadow);
     void this.match.ball.load('assets/ball/basic.glb');
 
@@ -382,6 +383,7 @@ export class Game {
       const distance = Math.hypot(p.pos.x - this.match.ball.position.x, p.pos.z - this.match.ball.position.z);
       p.syncVisual(live ? dt : 0, live ? distance : 0);
     }
+    this.match.officials.syncVisual(live ? dt : 0);
     this.match.ball.syncVisual();
     this.stadium.update(dt);
     this.updateMarker(dt);

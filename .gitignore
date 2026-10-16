@@ -3,3 +3,6 @@ dist
 .DS_Store
 *.local
 .artifacts/
+
+# 외부 모션 원본 (재배포 금지 라이선스) — 변환 결과만 커밋한다
+mocap-local/

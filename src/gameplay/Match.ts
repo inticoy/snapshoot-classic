@@ -18,6 +18,7 @@ import { SetPieces, type RestartKind } from './SetPieces';
 import { Keepers } from './Keepers';
 import { Rules, type Card } from './Rules';
 import { Shootout } from './Shootout';
+import { Officials } from './Officials';
 
 export type Phase = 'kickoff' | 'playing' | 'out' | 'setpiece' | 'goal' | 'halftime' | 'shootout' | 'fulltime';
 
@@ -109,6 +110,7 @@ export class Match {
   readonly keepers: Keepers;
   readonly rules: Rules;
   readonly shootout: Shootout;
+  readonly officials: Officials;
   keeperRush = false;
   /** 전반 1, 후반 2 */
   half: 1 | 2 = 1;
@@ -158,6 +160,7 @@ export class Match {
     this.keepers = new Keepers(this, physics);
     this.rules = new Rules(this);
     this.shootout = new Shootout(this);
+    this.officials = new Officials(this, options.createPlayerModel);
     this.roster.push(...this.players);
     this.setupBallCollisions();
     this.startKickoff(0);
@@ -221,6 +224,7 @@ export class Match {
     this.passTarget = null;
     this.setPieces.current = null;
     this.rules.clearPlay();
+    this.officials?.reset();
     for (const p of this.players) {
       const a = p.attackDir;
       p.vel.set(0, 0, 0);
@@ -313,6 +317,7 @@ export class Match {
     }
 
     for (const g of this.goals) g.update(dt);
+    this.officials.update(dt);
   }
 
   private endHalf(): void {

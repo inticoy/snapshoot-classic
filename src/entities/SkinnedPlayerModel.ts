@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { GLTFLoader, type GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
-import type { AnimState, CharacterModel, ModelColors } from './PlayerModel';
+import type { AnimState, CharacterModel, Gesture, ModelColors } from './PlayerModel';
 import { visualRandom } from '../core/Random';
 import { makeDecalTexture } from './KitDecal';
 
@@ -47,6 +47,21 @@ export function hasCharacterAsset(): boolean {
   return asset !== null;
 }
 
+/** 모션 테스트 페이지용: 유니폼 머티리얼을 입힌 캐릭터 복제본과 원래 클립들 */
+export function createCharacterMesh(colors: ModelColors): { root: THREE.Object3D; clips: THREE.AnimationClip[] } {
+  if (!asset) throw new Error('character asset not loaded');
+  const root = SkeletonUtils.clone(asset.scene);
+  const material = makeKitMaterial(colors);
+  root.traverse((o) => {
+    const m = o as THREE.SkinnedMesh;
+    if (!m.isSkinnedMesh) return;
+    m.material = material;
+    m.castShadow = true;
+    m.frustumCulled = false;
+  });
+  return { root, clips: asset.animations };
+}
+
 type Clip = 'idle' | 'walk' | 'jog' | 'sprint' | 'dance' | 'crouch';
 const CLIP_NAMES: Record<Clip, string> = {
   idle: 'Idle_Loop',
@@ -66,6 +81,7 @@ const SKIN_TONES = [0xf1c7a5, 0xd9a47e, 0xb07a52, 0x7d5236, 0xe8b894];
 
 const X_AXIS = new THREE.Vector3(1, 0, 0);
 const Z_AXIS = new THREE.Vector3(0, 0, 1);
+const Y_AXIS = new THREE.Vector3(0, 1, 0);
 const qA = new THREE.Quaternion();
 const qB = new THREE.Quaternion();
 const qC = new THREE.Quaternion();
@@ -84,6 +100,8 @@ export class SkinnedPlayerModel implements CharacterModel {
   private diveSide: 1 | -1 = 1;
   private readonly overlay: Record<Overlay, number> = { kick: 0, tackle: 0, dive: 0, hold: 0, header: 0, advance: 0, smother: 0 };
   private danceW = 0;
+  private gesture: Gesture = 'none';
+  private readonly gestureW = { raise: 0, point: 0 };
 
   constructor(colors: ModelColors, private readonly keeper: boolean) {
     if (!asset) throw new Error('character asset not loaded');
@@ -113,6 +131,15 @@ export class SkinnedPlayerModel implements CharacterModel {
       action.time = visualRandom.next() * clip.duration;
       this.actions[key] = action;
     }
+  }
+
+  setGesture(gesture: Gesture): void {
+    this.gesture = gesture;
+  }
+
+  handPosition(out: THREE.Vector3): THREE.Vector3 | null {
+    const hand = this.bones.get('DEF-handR');
+    return hand ? hand.getWorldPosition(out) : null;
   }
 
   get current(): AnimState {
@@ -146,6 +173,15 @@ export class SkinnedPlayerModel implements CharacterModel {
       this.overlay[k] += (target - this.overlay[k]) * (target ? fadeIn : fadeOut);
     }
     this.applyOverlays();
+    // 심판 동작: GLB에서 '.'이 빠진 실제 뼈 이름을 쓴다
+    const k = 1 - Math.exp(-10 * dt);
+    this.gestureW.raise += ((this.gesture === 'raise' ? 1 : 0) - this.gestureW.raise) * k;
+    this.gestureW.point += ((this.gesture === 'point' ? 1 : 0) - this.gestureW.point) * k;
+    if (this.gestureW.raise > 0.002) this.rotateBone('DEF-upper_armR', Z_AXIS, -2.75 * this.gestureW.raise);
+    if (this.gestureW.point > 0.002) {
+      this.rotateBone('DEF-upper_armR', Z_AXIS, -1.45 * this.gestureW.point);
+      this.rotateBone('DEF-upper_armR', Y_AXIS, -1.1 * this.gestureW.point);
+    }
   }
 
   private updateClipWeights(dt: number): void {
@@ -194,6 +230,9 @@ export class SkinnedPlayerModel implements CharacterModel {
 
   /** 모델 좌표계 기준 축으로 뼈를 회전 (애니메이션 위에 덧입힘) */
   private rotateBone(name: string, axis: THREE.Vector3, angle: number): void {
+    // 주의: GLB를 읽을 때 뼈 이름의 '.'이 빠진다('DEF-thigh.L' → 'DEF-thighL'). 그래서 지금은 목·척추 외
+    // 팔다리 오버레이가 적용되지 않는다. 이름만 고치면 슬라이딩 자세가 뒤틀리므로, 모션캡처 클립으로
+    // 바꿀 때 함께 정리한다 (모션 랩: motions.html).
     const bone = this.bones.get(name);
     if (!bone || !bone.parent || Math.abs(angle) < 1e-4) return;
     // local' = parentWorld⁻¹ · R_world · parentWorld · local, R_world = rootWorld · R_model · rootWorld⁻¹

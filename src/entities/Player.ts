@@ -13,7 +13,7 @@ import { appearance, backName } from '../data/Appearance';
 
 export type PlayerModelFactory = (colors: ModelColors, number: number, keeper: boolean) => CharacterModel;
 
-const createPlayerModel: PlayerModelFactory = (colors, number, keeper) =>
+export const createPlayerModel: PlayerModelFactory = (colors, number, keeper) =>
   hasCharacterAsset() ? new SkinnedPlayerModel(colors, keeper) : new PlayerModel(colors, number);
 
 export class Player {
