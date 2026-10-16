@@ -26,6 +26,15 @@ const FADE_SPEED: Record<AnimState, number> = {
   idle: 8, run: 10, kick: 22, tackle: 18, dive: 16, celebrate: 6, hold: 10,
 };
 
+/** 선수 모델 공통 인터페이스 (절차적 모델 / 스킨드 캐릭터) */
+export interface CharacterModel {
+  readonly root: THREE.Group;
+  readonly current: AnimState;
+  play(state: AnimState, opts?: { side?: 1 | -1 }): void;
+  setLocomotion(speed: number, sprint: boolean): void;
+  update(dt: number): void;
+}
+
 export interface ModelColors {
   shirt: number;
   shorts: number;
@@ -37,7 +46,7 @@ export interface ModelColors {
 const SKIN_TONES = [0xf1c7a5, 0xd9a47e, 0xb07a52, 0x7d5236, 0xe8b894];
 const HAIR_TONES = [0x1d1510, 0x3a2516, 0x6b4a2a, 0xc9a25a, 0x111111];
 
-export class PlayerModel {
+export class PlayerModel implements CharacterModel {
   readonly root = new THREE.Group();
   private readonly body = new THREE.Group(); // 기울기/하강용
   private readonly torso = new THREE.Group();

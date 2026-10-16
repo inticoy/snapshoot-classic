@@ -458,3 +458,9 @@ kbd {
   .hints { display: none; }
   .lower-third { min-width: 0; left: 16px; right: 16px; }
 }
+
+/* ---------- 로딩 ---------- */
+.loading { margin: auto; display: flex; flex-direction: column; align-items: center; gap: 12px; font-weight: 800; font-style: italic; letter-spacing: 0.3em; color: var(--muted); }
+.loading-bar { width: 220px; height: 3px; background: rgba(255, 255, 255, 0.1); overflow: hidden; border-radius: 2px; }
+.loading-bar i { display: block; width: 40%; height: 100%; background: var(--accent); animation: loading 1s ease-in-out infinite; }
+@keyframes loading { from { transform: translateX(-100%); } to { transform: translateX(250%); } }

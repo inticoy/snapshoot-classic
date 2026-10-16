@@ -10,20 +10,21 @@ pnpm dev        # http://localhost:5180
 pnpm build      # dist/ 에 정적 파일 생성 (GitHub Pages 등에 그대로 배포 가능)
 ```
 
-## 조작
+## 조작 (FC 온라인 키보드 기본 배치 기준)
 
-| 키 | 동작 |
-|---|---|
-| WASD / 방향키 | 이동 (카메라 기준) |
-| Shift | 스프린트 (스태미나 소모) |
-| J / Space 꾹 → 떼기 | 슛. 오래 누를수록 강하고, 80% 넘기면 뜬다 |
-| L 꾹 → 떼기 | 감아차기 (마그누스 효과로 먼 쪽 포스트로 휘어 들어감) |
-| K | 방향키 쪽 동료에게 패스 (받는 선수로 자동 전환) |
-| J (공 없을 때) | 슬라이딩 태클 |
-| Q / K (수비 시) | 공에 가장 가까운 선수로 전환 |
-| C | 중계 카메라 ↔ 선수 뒤 카메라 |
-| P / Esc | 일시정지 |
-| M | 소리 끄기 |
+| 공격 | | 수비 | |
+|---|---|---|---|
+| 방향키 | 이동 | D (꾹) | 압박 |
+| E | 질주 | Q (꾹) | 동료 압박 |
+| D (꾹 → 떼기) | 슛 (80% 넘기면 뜸) | C (꾹) | 견제 |
+| Z + D | 감아차기 | Space | 스탠딩 태클 |
+| Q + D | 칩슛 | A | 슬라이딩 태클 |
+| S | 짧은 패스 | S | 선수 변경 |
+| W | 스루 패스 | | |
+| Q + W | 로빙 스루 패스 | | |
+| A | 로빙 패스 | | |
+
+Esc 일시정지 · V 카메라 · M 사운드. 공이 오는 중에 슛/패스를 미리 누르면 원터치로 처리된다.
 
 ## 구조
 
@@ -35,24 +36,31 @@ src/
   physics/PhysicsWorld.ts  cannon-es 월드, 재질별 반발/마찰
   entities/Ball.ts       공: 공기저항, 마그누스 효과, 구름 저항, 드리블 carry
   entities/Player.ts     선수: 관성 있는 이동, 스태미나, 태클/다이빙 상태
-  entities/PlayerModel.ts  절차적 휴머노이드 + 포즈 블렌딩(크로스페이드) 애니메이션
+  entities/SkinnedPlayerModel.ts  스킨드 캐릭터: 이동 클립 블렌딩 + 킥/태클/다이빙 뼈 오버레이 + 유니폼 셰이더
+  entities/PlayerModel.ts  절차적 휴머노이드 (캐릭터 로드 실패 시 대체)
+  data/Teams.ts          가상의 팀/선수 데이터 (이름, 등번호, OVR, 주발, 개인기)
   entities/Goal.ts       골대 충돌체 + 출렁이는 그물
   environment/Stadium.ts 잔디/라인(캔버스 텍스처), 광고판, 관중(InstancedMesh), 조명탑
   gameplay/Match.ts      경기 규칙, 소유권, 슛/패스/태클, 키퍼 선방, 골 판정
   ai/TeamAI.ts           필드 플레이어 AI (소유자/압박/서포트 역할)
   camera/CameraRig.ts    중계 / 선수 뒤 카메라
-  ui/Hud.ts              스코어보드, 파워 게이지, 미니맵
+  ui/Hud.ts              FC 스타일 HUD: 스코어보드, 인디케이터, 파워 게이지, 하단 선수 이름 바, 레이더, 골 자막
+  ui/Menu.ts             메인 메뉴 / 일시정지(경기 기록) / 경기 결과
   audio/Sound.ts         WebAudio 효과음 + 합성 휘슬
 ```
 
 선수는 물리 엔진이 아니라 코드로 직접 움직이고(키네마틱), 공만 물리 엔진에 맡긴다.
 조작감 튜닝이 쉬워지고, 대부분의 축구 게임이 쓰는 방식이다.
 
-에셋(공 모델, 효과음)은 [snapshoot](https://github.com/inticoy/snapshoot)에서 가져왔다.
+## 에셋
+
+- 공 모델, 효과음: [snapshoot](https://github.com/inticoy/snapshoot)
+- 선수 캐릭터와 애니메이션: [Quaternius Universal Animation Library](https://quaternius.com/packs/universalanimationlibrary.html) (CC0).
+  필요한 클립 7개만 남기고 meshopt로 압축 (4.9MB → 295KB). 킥/태클/다이빙은 라이브러리에 없어서 코드로 덧입힌다.
 
 ## 다음 단계 아이디어
 
-- Mixamo 캐릭터 + `AnimationMixer` 로 교체 (PlayerModel의 상태 머신 인터페이스 유지)
+- 킥/태클/헤더 전용 모션 캡처 클립 (Mixamo 등에서 받아 같은 리그로 리타겟)
 - 스로인/코너킥/골킥 (지금은 광고판에 튕기는 아레나 방식)
 - 5대5 → 11대11, 포메이션, 오프사이드
 - 로빙 패스, 스루 패스, 칩슛

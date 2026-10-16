@@ -1,13 +1,14 @@
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 import { PITCH, PLAYER, TEAM_COLORS } from '../config';
-import { PlayerModel, type AnimState } from './PlayerModel';
+import { PlayerModel, type AnimState, type CharacterModel } from './PlayerModel';
+import { SkinnedPlayerModel, hasCharacterAsset } from './SkinnedPlayerModel';
 import type { PlayerProfile } from '../data/Teams';
 
 export type Role = 'GK' | 'DEF' | 'FWD';
 
 export class Player {
-  readonly model: PlayerModel;
+  readonly model: CharacterModel;
   readonly pos = new THREE.Vector3();
   readonly vel = new THREE.Vector3();
   /** 바라보는 방향 (단위 벡터, XZ 평면) */
@@ -41,10 +42,9 @@ export class Player {
     readonly profile: PlayerProfile,
   ) {
     const c = TEAM_COLORS[team];
-    this.model = new PlayerModel(
-      { shirt: role === 'GK' ? c.keeper : c.shirt, shorts: c.shorts, socks: role === 'GK' ? c.keeper : c.socks },
-      number,
-    );
+    const colors = { shirt: role === 'GK' ? c.keeper : c.shirt, shorts: c.shorts, socks: role === 'GK' ? c.keeper : c.socks };
+    // 캐릭터 에셋이 로드됐으면 스킨드 캐릭터, 아니면 절차적 모델로 대체
+    this.model = hasCharacterAsset() ? new SkinnedPlayerModel(colors, role === 'GK') : new PlayerModel(colors, number);
   }
 
   /** 팀이 공격하는 방향 (+1 = +X) */
