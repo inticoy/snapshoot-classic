@@ -260,9 +260,15 @@ function makeAdTexture(): THREE.CanvasTexture {
     g.fillStyle = ad.bg;
     g.fillRect(i * w, 0, w, c.height);
     g.fillStyle = ad.fg;
-    g.font = 'bold 34px system-ui, sans-serif';
     g.textAlign = 'center';
     g.textBaseline = 'middle';
+    // 칸 너비에 맞게 글자 크기를 줄인다
+    let size = 34;
+    g.font = `bold ${size}px system-ui, sans-serif`;
+    while (g.measureText(ad.text).width > w - 24 && size > 14) {
+      size -= 2;
+      g.font = `bold ${size}px system-ui, sans-serif`;
+    }
     g.fillText(ad.text, i * w + w / 2, c.height / 2 + 2);
   });
   const tex = new THREE.CanvasTexture(c);
