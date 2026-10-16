@@ -204,3 +204,74 @@ it('90°로 접는 터치는 직진 터치보다 느리고 몸도 새 방향으�
   expect(turn.facing.z).toBeGreaterThan(0.5);
   expect(turn.facing.x).toBeGreaterThan(0.5);
 });
+
+it.each([[0.85, true], [1.15, false]] as const)('발끝에서 %fm 떨어진 공: 닿는 범위에서만 회전 터치한다', (distance, reachable) => {
+  const { match, p, run } = scene(13);
+  p.vel.set(5, 0, 0);
+  match.ball.body.position.set(p.pos.x + 0.35 + distance, match.ball.position.y, p.pos.z);
+  match.ball.body.velocity.set(5, 0, 0);
+  match.events.length = 0;
+  run(PHYSICS.step, down);
+  expect(match.events.some((e) => e.type === 'touch')).toBe(reachable);
+  expect(match.ball.owner).toBe(p);
+  if (reachable) expect(match.ball.velocity.z).toBeGreaterThan(Math.abs(match.ball.velocity.x));
+  else expect(Math.abs(match.ball.velocity.z)).toBeLessThan(0.01);
+});
+
+it.each([[0.65, false], [0.85, true], [1.05, true], [1.3, false]] as const)('추격 보정은 발끝 거리 %fm에서 몸만 공 쪽으로 돌린다', (distance, facesBall) => {
+  const { match, p } = scene(14);
+  match.ball.body.position.set(p.pos.x + 0.35, match.ball.position.y, p.pos.z + distance);
+  match.ball.body.velocity.set(3, 0, 0);
+  const position = match.ball.position.clone();
+  const velocity = match.ball.velocity.clone();
+  const move = right.clone();
+  match.events.length = 0;
+  match.guideDribble(p, move);
+  expect(p.facing.z > 0.8).toBe(facesBall);
+  expect(match.ball.position).toEqual(position);
+  expect(match.ball.velocity).toEqual(velocity);
+  expect(match.events.some((e) => e.type === 'touch')).toBe(false);
+  if (distance < DRIBBLE.reach) expect(move).toEqual(right);
+});
+
+it.each([-1, 1])('발 옆의 공을 평행하게 몰지 않고 실제 터치로 다음 발 쪽에 접는다 (측면=%i)', (side) => {
+  const { match, p, run } = scene(15);
+  p.vel.set(5, 0, 0);
+  match.ball.body.position.set(p.pos.x + 0.35, match.ball.position.y, p.pos.z + side * 0.8);
+  match.ball.body.velocity.set(5, 0, 0);
+  match.events.length = 0;
+  run(PHYSICS.step, right);
+  expect(match.events.some((e) => e.type === 'touch')).toBe(true);
+  expect(match.ball.velocity.z * side).toBeLessThan(-0.5);
+  run(1, right, false, () => expect(match.ball.owner).toBe(p));
+  expect(Math.abs(match.ball.position.z - p.pos.z)).toBeLessThan(0.4);
+});
+
+it('이미 앞으로 벌어진 간격은 다음 터치 속도에서 빼서 간격이 누적되지 않는다', () => {
+  const speed = (distance: number) => {
+    const { match, p, run } = scene(16);
+    p.vel.set(5, 0, 0);
+    match.ball.body.position.set(p.pos.x + 0.35 + distance, match.ball.position.y, p.pos.z);
+    match.ball.body.velocity.set(5, 0, 0);
+    match.events.length = 0;
+    run(PHYSICS.step, right);
+    expect(match.events.filter((e) => e.type === 'touch')).toHaveLength(1);
+    return match.ball.speed();
+  };
+  expect(speed(0.25)).toBeLessThan(speed(0.05) - 0.3);
+});
+
+it.each([-1, 1])('옆에서 받는 첫 터치도 공을 다음 발 앞으로 잡아 놓는다 (측면=%i)', (side) => {
+  const { match, p, run } = scene(17);
+  p.vel.set(5, 0, 0);
+  match.ball.body.position.set(p.pos.x + 0.35, match.ball.position.y, p.pos.z + side * 0.8);
+  const position = match.ball.position.clone();
+  match.ball.owner = null;
+  match.events.length = 0;
+  match.gainPossession(p);
+  expect(match.events.filter((e) => e.type === 'touch')).toHaveLength(1);
+  expect(match.ball.velocity.z * side).toBeLessThan(-0.5);
+  expect(match.ball.position).toEqual(position);
+  run(1, right, false, () => expect(match.ball.owner).toBe(p));
+  expect(Math.abs(match.ball.position.z - p.pos.z)).toBeLessThan(0.4);
+});

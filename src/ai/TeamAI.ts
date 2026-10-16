@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { AI, GOAL, PITCH } from '../config';
+import { AI, DRIBBLE, GOAL, PITCH } from '../config';
 import type { Player } from '../entities/Player';
 import type { Match } from '../gameplay/Match';
 import { n } from '../data/Stats';
@@ -9,6 +9,7 @@ interface Intent {
   sprint: boolean;
   /** 목표 지점에 도착하면 바라볼 곳 */
   look: THREE.Vector3 | null;
+  dribbleDir: THREE.Vector3 | null;
 }
 
 const tmp = new THREE.Vector3();
@@ -27,9 +28,9 @@ export class TeamAI {
   private readonly intents = new Map<Player, Intent>();
   private readonly timers = new Map<Player, number>();
 
-  constructor(private readonly match: Match) {
+  constructor(private readonly match: Match, private readonly smoothDribble = true) {
     for (const p of match.players) {
-      this.intents.set(p, { target: p.pos.clone(), sprint: false, look: null });
+      this.intents.set(p, { target: p.pos.clone(), sprint: false, look: null, dribbleDir: null });
       this.timers.set(p, this.match.random.next() * AI.reaction);
     }
   }
@@ -38,6 +39,8 @@ export class TeamAI {
     const m = this.match;
     for (const p of m.players) {
       if (p.isKeeper || m.isUserControlled(p)) continue;
+      // 소유가 바뀌면 이전 공격의 회피 방향을 새 드리블에 이어 쓰지 않는다.
+      if (m.ball.owner !== p) this.intents.get(p)!.dribbleDir = null;
       let t = this.timers.get(p)! - dt;
       if (t <= 0) {
         // 반응 속도가 좋을수록 상황 판단이 빠르다
@@ -270,6 +273,11 @@ export class TeamAI {
     // 측면 라인 밖으로 나가지 않게
     if (Math.abs(p.pos.z) > PITCH.halfW - 3) dir.z -= Math.sign(p.pos.z) * 0.8;
     dir.normalize();
+    if (this.smoothDribble) {
+      if (intent.dribbleDir) dir.lerp(intent.dribbleDir, DRIBBLE.aiDirectionMemory).normalize();
+      if (!intent.dribbleDir) intent.dribbleDir = dir.clone();
+      else intent.dribbleDir.copy(dir);
+    }
     intent.target.copy(p.pos).addScaledVector(dir, 4);
     intent.sprint = pressure > 3.5 && p.stamina > 0.3 && dir.x * a > 0.3;
   }

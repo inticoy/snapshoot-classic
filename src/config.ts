@@ -114,18 +114,20 @@ export const MATCH = {
  * 방향은 터치할 때만 바뀌므로 급하게 꺾으면 공이 한 박자 늦게 따라온다.
  */
 export const DRIBBLE = {
-  // 값은 tests/dribble-play.test.ts 의 실제 경기 입력 측정으로 맞췄다 (붙여 다니던 예전 드리블 대비:
-  // 전진 거리 90% 이상, 공 잃는 횟수 이하, 뒤로 전환 0.45초 이내, 90° 전환 0.45초 이내)
+  // dribble-play 30경기: 전진 913→1150m, 소유 상실 8→3회, 뒤로 전환 0.39초(변경 전 0.47초).
+  // reach/turnReach 0.95m·turnAngle 0.3rad로 늦은 회전을 줄이고, 0.7~1.2m에서는 몸도 공을 향한다.
+  // 짧은 lead와 발 디딤 기준 터치(첫 터치 포함), AI 방향 기억 0.5를 함께 써서 간격 누적을 막는다.
+  // dribble-ai 10×300초: 예전 대비 전진 97.3%(2.40m/s), 슛 112.5%(45회), 헤비 터치 0회, 추격 9.43%.
   /** 공이 몸 앞 이 거리(+속도 비례)보다 가까워지면 다시 건드린다 (m) */
   touchLead: 0.4,
   /** 발이 공에 닿을 수 있는 거리 (m) */
-  reach: 0.75,
-  /** 터치 후 다음 터치(touchPeriod초 뒤)까지 공이 몸보다 앞서 있을 거리 (m): 걷기·조깅 / 질주 치고 나가기 */
-  leadWalk: 0.45,
-  leadSprint: 1.3,
+  reach: 0.95,
+  /** 다음 발 디딤(touchPeriod초 뒤)보다 공이 앞서 있을 거리 (m): 걷기·조깅 / 질주 치고 나가기 */
+  leadWalk: 0.3,
+  leadSprint: 0.8,
   touchPeriod: 0.35,
   /** 공 진행 방향과 의도 방향이 이만큼(라디안) 어긋나면 방향을 꺾는 터치 */
-  turnAngle: 0.35,
+  turnAngle: 0.3,
   /** 낮은 능력치는 나누어 접고, 높은 드리블·민첩성은 한 번에 더 크게 접는다 */
   turnMin: Math.PI / 2,
   turnMax: 2.8,
@@ -135,7 +137,7 @@ export const DRIBBLE = {
   /** 터치 순간 몸도 일부 틀어 다음 발이 새 진행 방향을 따라가게 한다 */
   turnFacing: 0.5,
   /** 방향을 꺾는 터치는 발끝에서 이 거리 안의 공만 (m) */
-  turnReach: 0.7,
+  turnReach: 0.95,
   /** 터치 사이 최소 간격 (초) */
   touchGap: 0.12,
   /** 공이 이보다 멀어지면 소유를 잃는다 (헤비 터치, m) */
@@ -144,6 +146,16 @@ export const DRIBBLE = {
   pullFullDistance: 1,
   /** 반대 입력과 추격이 상쇄되어 reach 바깥에서 공을 나란히 따라가는 교착을 막는다 */
   pullMin: 0.65,
+  /** 공이 옆으로 벌어지면 닿는 범위 안에서도 몸을 틀어 발을 뻗는다. 이동 보정은 reach 밖에서만 한다 */
+  recoverStart: 0.7,
+  recoverDistance: 1.2,
+  recoverAngle: 0.6,
+  /** 판단마다 회피 방향이 뒤집혀 공을 두고 가지 않도록 이전 드리블 방향을 절반 남긴다 */
+  aiDirectionMemory: 0.5,
+  /** 발 옆으로 남은 공은 다음 발 디딤(touchPeriod) 쪽으로 접어 평행하게 쫓는 시간을 줄인다 (m) */
+  lateralTouch: 0.25,
+  /** 저속으로 접을 때도 다음 발의 목표를 너무 가깝게 잡아 공이 제자리에서 흔들리지 않게 한다 (m) */
+  recenterMinDistance: 0.5,
   /** 상대가 이 거리(m) 안이면 터치를 짧게: 바로 붙었을 때 pressureKnock배 */
   pressureRange: 4,
   pressureKnock: 0.35,

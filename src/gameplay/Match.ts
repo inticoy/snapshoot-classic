@@ -167,7 +167,7 @@ export class Match {
       });
     }
     this.controlled = this.forward(0);
-    this.ai = new TeamAI(this);
+    this.ai = new TeamAI(this, options.dribbleTouches !== false);
     this.kicks = new Kicks(this);
     this.setPieces = new SetPieces(this);
     this.keepers = new Keepers(this, physics);
@@ -916,8 +916,16 @@ export class Match {
     const dir = speed > 0.6 ? tmp.set(p.vel.x / speed, 0, p.vel.z / speed) : tmp.copy(p.facing);
     const ctrl = n(p.profile.stats.ballControl);
     const T = DRIBBLE.touchPeriod;
-    const u = speed > 0.6 ? speed + DRIBBLE.leadWalk * (1.3 - 0.6 * ctrl) / T + 0.5 * (DRIBBLE.rollDecel + DRIBBLE.rollDamping * speed) * T : 0;
     const b = this.ball.body;
+    let u = 0;
+    if (speed > 0.6) {
+      // 받는 순간도 이미 벌어진 거리를 빼고 다음 발 앞으로 잡는다. 옆에서 받은 공을 나란히 밀어내지 않는다.
+      const travel = speed * T + DRIBBLE.leadWalk * (1.3 - 0.6 * ctrl);
+      this.footPoint(p, tmp2).addScaledVector(dir, travel);
+      dir.set(tmp2.x - b.position.x, 0, tmp2.z - b.position.z);
+      u = dir.length() / T + 0.5 * (DRIBBLE.rollDecel + DRIBBLE.rollDamping * speed) * T;
+      dir.normalize();
+    }
     b.velocity.set(dir.x * u, Math.min(0, b.velocity.y), dir.z * u);
     b.angularVelocity.set(b.velocity.z / BALL.radius, 0, -b.velocity.x / BALL.radius);
     this.touchGap = DRIBBLE.touchGap;
@@ -942,6 +950,11 @@ export class Match {
     const bp = this.ball.position;
     tmp.set(bp.x - tmp2.x, 0, bp.z - tmp2.z);
     const d = tmp.length();
+    if (d > DRIBBLE.recoverStart && d <= DRIBBLE.recoverDistance && this.dribbleIntent.lengthSq() > 0.01 &&
+        this.dribbleIntent.dot(tmp) / d < Math.cos(DRIBBLE.recoverAngle)) {
+      // 공은 터치 전까지 그대로 굴리고, 몸만 공을 향해 발이 빨리 닿게 한다.
+      p.faceTowards(bp.x, bp.z);
+    }
     if (d <= DRIBBLE.reach) return;
     const pull = THREE.MathUtils.lerp(DRIBBLE.pullMin, 1,
       Math.min(1, (d - DRIBBLE.reach) / (DRIBBLE.pullFullDistance - DRIBBLE.reach)));
@@ -1010,31 +1023,42 @@ export class Match {
     const ctrl = n(st.dribbling) * 0.6 + n(st.ballControl) * 0.4;
     // 몸이 돌기 전의 사용자 입력·AI 목표 방향을 쓴다. 소유자가 바뀌면 이전 의도를 버린다.
     const intent = this.dribbleIntentOwner === o ? this.dribbleIntent : o.facing;
-    const intentAngle = intent.lengthSq() > 0.01 ? Math.atan2(intent.z, intent.x) : Math.atan2(fz, fx);
+    const hasIntent = intent.lengthSq() > 0.01;
+    const ix = hasIntent ? intent.x : fx, iz = hasIntent ? intent.z : fz;
+    this.footPoint(o, tmp2);
+    const footX = bp.x - tmp2.x, footZ = bp.z - tmp2.z;
+    const along = footX * ix + footZ * iz;
+    const sideX = footX - ix * along, sideZ = footZ - iz * along;
+    const intentAngle = Math.atan2(iz, ix);
     const ballAngle = v > 0.3 ? Math.atan2(vz, vx) : Math.atan2(fz, fx);
     const angle = Math.atan2(Math.sin(intentAngle - ballAngle), Math.cos(intentAngle - ballAngle));
     const moving = speed > 0.6 && !(this.trapping && this.isUserControlled(o));
     this.touchGap -= dt;
     // 발끝 기준 거리: 몸 옆이나 앞으로 굴러간 공은 따라가서 발이 닿아야 건드린다
-    this.footPoint(o, tmp2);
-    const footDist = Math.hypot(bp.x - tmp2.x, bp.z - tmp2.z);
+    const footDist = Math.hypot(footX, footZ);
     const inReach = footDist < DRIBBLE.reach;
     const close = ahead > -0.2 && ahead < DRIBBLE.touchLead + speed * 0.05;
     // 방향을 꺾는 터치는 공이 발 바로 앞에 있을 때만
-    const turning = Math.abs(angle) > DRIBBLE.turnAngle && footDist < DRIBBLE.turnReach;
+    const turning = (Math.abs(angle) > DRIBBLE.turnAngle || Math.hypot(sideX, sideZ) > DRIBBLE.lateralTouch) &&
+      footDist < DRIBBLE.turnReach;
     if (moving && inReach && this.touchGap <= 0 && (close || turning)) {
       // 상대가 가까우면 공을 짧게 붙여 지킨다 (압박 속 질주 터치로 공을 흘리지 않게)
       const opp = this.nearestOpponentDist(o);
       const guard = opp < DRIBBLE.pressureRange ? THREE.MathUtils.lerp(DRIBBLE.pressureKnock, 1, opp / DRIBBLE.pressureRange) : 1;
-      // 다음 터치까지(touchPeriod) 공이 몸 앞 lead만큼 앞서 있도록, 그동안의 구름 감속까지 넣어 속도를 정한다
+      // 이미 앞서 있거나 옆에 남은 거리까지 빼서 다음 발 디딤 앞으로 보낸다.
+      // 매번 현재 속도에 lead/T만 더하면 회전 터치 때 벌어진 간격이 그대로 누적된다.
       const lead = (o.sprinting ? DRIBBLE.leadSprint : DRIBBLE.leadWalk) * guard * (1.25 - 0.6 * ctrl) * (0.85 + 0.3 * this.random.next());
       const T = DRIBBLE.touchPeriod;
-      const knock = lead / T + 0.5 * (DRIBBLE.rollDecel + DRIBBLE.rollDamping * speed) * T;
+      const travel = Math.max(DRIBBLE.recenterMinDistance, speed * T + lead);
+      const targetX = ix * travel - footX, targetZ = iz * travel - footZ;
+      const targetAngle = Math.atan2(targetZ, targetX);
+      const targetTurn = Math.atan2(Math.sin(targetAngle - ballAngle), Math.cos(targetAngle - ballAngle));
+      const targetSpeed = Math.hypot(targetX, targetZ) / T + 0.5 * (DRIBBLE.rollDecel + DRIBBLE.rollDamping * speed) * T;
       const skill = (n(st.dribbling) + n(st.agility)) / 2;
       const limit = THREE.MathUtils.lerp(DRIBBLE.turnMin, DRIBBLE.turnMax, skill);
-      const turn = THREE.MathUtils.clamp(angle, -limit, limit);
+      const turn = THREE.MathUtils.clamp(targetTurn, -limit, limit);
       const direction = ballAngle + turn;
-      const u = (speed + knock) * Math.max(DRIBBLE.turnMinSpeedFactor, 1 - DRIBBLE.turnSlowdown * Math.abs(turn) / (Math.PI / 2));
+      const u = targetSpeed * Math.max(DRIBBLE.turnMinSpeedFactor, 1 - DRIBBLE.turnSlowdown * Math.abs(turn) / (Math.PI / 2));
       vx = Math.cos(direction) * u;
       vz = Math.sin(direction) * u;
       const facingAngle = Math.atan2(fz, fx);
