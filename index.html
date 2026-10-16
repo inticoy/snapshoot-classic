@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Football Game</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="scene"></canvas>
+
+      <div id="hud" class="hidden">
+        <div class="scoreboard">
+          <span class="team home"><i></i>HOME</span>
+          <span class="score" id="score">0 - 0</span>
+          <span class="team away">AWAY<i></i></span>
+          <span class="clock" id="clock">0'</span>
+        </div>
+        <div class="player-tag" id="player-tag">
+          <div class="name" id="player-name"></div>
+          <div class="bar stamina"><div id="stamina"></div></div>
+          <div class="bar power" id="power-wrap"><div id="power"></div></div>
+        </div>
+        <canvas id="minimap" width="200" height="128"></canvas>
+        <div class="banner" id="banner"></div>
+        <div class="hint">J 슛/태클 · K 패스/전환 · L 감아차기 · Shift 스프린트 · Q 전환 · C 카메라 · P 일시정지</div>
+      </div>
+
+      <div id="overlay" class="overlay">
+        <div class="panel">
+          <h1>FOOTBALL GAME</h1>
+          <p class="sub" id="overlay-sub">3 vs 3 · 가칭</p>
+          <table class="keys">
+            <tr><td><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> / 방향키</td><td>이동</td></tr>
+            <tr><td><kbd>Shift</kbd></td><td>스프린트</td></tr>
+            <tr><td><kbd>J</kbd> / <kbd>Space</kbd> 꾹 눌렀다 떼기</td><td>슛 (오래 누를수록 강하게, 너무 세면 뜸)</td></tr>
+            <tr><td><kbd>L</kbd> 꾹 눌렀다 떼기</td><td>감아차기 (먼 쪽 포스트)</td></tr>
+            <tr><td><kbd>K</kbd></td><td>패스 (방향키 쪽 동료에게)</td></tr>
+            <tr><td><kbd>J</kbd> (공 없을 때)</td><td>슬라이딩 태클</td></tr>
+            <tr><td><kbd>Q</kbd> / <kbd>K</kbd> (수비 시)</td><td>선수 전환</td></tr>
+            <tr><td><kbd>C</kbd></td><td>카메라 전환 (중계 / 선수 뒤)</td></tr>
+            <tr><td><kbd>M</kbd></td><td>소리 끄기/켜기</td></tr>
+          </table>
+          <button id="start-btn">Enter 또는 클릭해서 시작</button>
+        </div>
+      </div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
