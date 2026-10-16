@@ -11,7 +11,7 @@ All distributed recordings below are converted to mono MP3 with `scripts/normali
 | touch-3.mp3 | Soccer kicks.wav, soft touch at 14.7 s, low-passed | padpad | CC0 | https://freesound.org/people/padpad/sounds/515908/ |
 | touch-4.mp3 | Soccer kicks.wav, soft touch at 15.5 s, low-passed | padpad | CC0 | https://freesound.org/people/padpad/sounds/515908/ |
 | bounce.mp3 | impactGeneric_light_000.ogg | Kenney | CC0 | https://kenney.nl/assets/impact-sounds |
-| post.mp3 | impactMetal_medium_000.ogg | Kenney | CC0 | https://kenney.nl/assets/impact-sounds |
+| post.mp3 | Mix: Soccer kicks.wav kick at 11.0 s (padpad, CC0, https://freesound.org/people/padpad/sounds/515908/) + "hit - metallic - basketball hoop pipe 01.wav", 0–1.6 s, high-passed | Anthousai | CC0 | https://freesound.org/people/Anthousai/sounds/406490/ |
 | net.mp3 | impactSoft_medium_003.ogg | Kenney | CC0 | https://kenney.nl/assets/impact-sounds |
 | save.mp3 | impactPunch_medium_001.ogg | Kenney | CC0 | https://kenney.nl/assets/impact-sounds |
 | whistle-short.mp3 | Referee whistle sound.wav, time compressed | Rosa-Orenes256 | CC0 | https://freesound.org/people/Rosa-Orenes256/sounds/538422/ |
