@@ -1,4 +1,10 @@
 import * as THREE from 'three';
+import { selectMotion } from '../anim/MotionLibrary';
+import { MOTION_CATALOG } from '../data/MotionCatalog';
+import { visualRandom } from '../core/Random';
+
+/** 키퍼 선방 클립 (GRF deflect) */
+const KEEPER_CLIPS = MOTION_CATALOG.filter((e) => e.kind === 'keeper' && e.speed === 'idle');
 import * as CANNON from 'cannon-es';
 import { GOAL, KEEPER, PITCH } from '../config';
 import { n } from '../data/Stats';
@@ -72,7 +78,9 @@ export class Keepers {
         const target = m.teams[k.team].filter((p) => !p.isKeeper).sort((p, q) => m.openness(q) - m.openness(p))[0];
         // 키퍼만 남긴 연습에서는 받을 동료가 없으므로 공을 잡은 채 R 리셋을 기다린다.
         if (target) {
-          m.pass(k, target.pos.clone().sub(k.pos).setY(0).normalize());
+          // 가까운 동료는 던지고, 먼 동료는 드롭킥(로빙)
+          const far = target.pos.distanceTo(k.pos) > 28;
+          m.pass(k, target.pos.clone().sub(k.pos).setY(0).normalize(), far ? 'lob' : 'short', far ? 0.7 : 0.4);
           k.basePose = null;
         }
       }
@@ -166,7 +174,9 @@ export class Keepers {
     else move.set(0, 0, 0);
     const backpedal = move.x * a < 0 && !!ball.shot && bp.y > 2.2;
     k.sprinting = urgent;
-    k.steer(move, urgent, false, dt, KEEPER.speed / k.maxSpeed(false) * (0.88 + 0.22 * diving) * (backpedal ? 0.35 : 1));
+    // 뒷걸음질(칩슛)은 앞으로 뛰는 것보다 느리지만 골문까지는 돌아갈 수 있어야 한다: 포지셔닝·민첩이 좋을수록 빠르게
+    const back = 0.42 + 0.12 * position + 0.08 * n(k.profile.stats.agility ?? 60);
+    k.steer(move, urgent, false, dt, KEEPER.speed / k.maxSpeed(false) * (0.88 + 0.22 * diving) * (backpedal ? back : 1));
     k.faceTowards(bp.x, bp.z);
   }
 
@@ -185,7 +195,7 @@ export class Keepers {
     const caught = crowd < 2 && m.ball.speed() < 12 + 7 * handling && m.random.next() < 0.45 + 0.5 * handling;
     if (caught) m.gainPossession(k);
     else this.parry(k, true);
-    k.playAction(caught ? 'hold' : 'header', 0.4);
+    this.playSave(k, caught);
     m.events.push({ type: 'cross', keeper: k, caught }, { type: 'save', caught });
     return true;
   }
@@ -212,6 +222,41 @@ export class Keepers {
     k.kickCooldown = 0.5;
   }
 
+  /**
+   * 머리 위로 넘어가는 공(칩슛·로빙 슛): 뒤로 점프해 손끝으로 크로스바 위로 쳐낸다.
+   * 손이 닿는 높이(점프 포함 ~2.9m)·뒤로 넘어간 거리·반응·다이빙으로 성공률이 정해지고, 성공하면 골라인 밖(코너)으로 나간다.
+   */
+  /** 선방 동작 (화면용): 공 높이·방향과 잡기/쳐내기에 맞는 키퍼 클립. 다이빙 중이면 다이빙 동작을 그대로 둔다 */
+  private playSave(k: Player, caught: boolean): void {
+    if (k.diveTimer > 0) return;
+    const bp = this.m.ball.position;
+    const ballYaw = Math.atan2(bp.x - k.pos.x, bp.z - k.pos.z), bodyYaw = Math.atan2(k.facing.x, k.facing.z);
+    const angle = Math.atan2(Math.sin(ballYaw - bodyYaw), Math.cos(ballYaw - bodyYaw));
+    const pool = KEEPER_CLIPS.filter((e) => e.id.includes('holdball') === caught);
+    const pick = selectMotion(pool, { kind: 'keeper', speed: 'idle', angle, height: bp.y, random: visualRandom.next() });
+    if (pick) k.playMotion(pick.entry, Math.max(0, pick.entry.key - 0.12));
+  }
+
+  private tryTipOver(k: Player, shot: NonNullable<Match['ball']['shot']>, behind: number): void {
+    const m = this.m, bp = m.ball.position, bv = m.ball.velocity;
+    if (shot.tipRolled || k.busy || behind > 1.4 || bp.y < 1.6 || bp.y > KEEPER.jumpReach || bv.y > 2) return;
+    if (Math.abs(bp.z - k.pos.z) > 1.3) return;
+    shot.tipRolled = true;
+    const gs = k.profile.stats;
+    const chance = THREE.MathUtils.clamp(0.2 + 0.35 * n(gs.reflexes ?? 60) + 0.25 * n(gs.diving ?? 60) - behind * 0.3 - (bp.y - 2.2) * 0.4, 0.05, 0.75);
+    if (m.random.next() > chance) {
+      k.playAction('header', 0.5);
+      return;
+    }
+    this.playSave(k, false);
+    m.stats.onTarget[shot.by.team]++;
+    // 위로·뒤로 쳐서 크로스바를 넘긴다
+    m.ball.kick(new CANNON.Vec3(bv.x * 0.6, Math.abs(bv.y) * 0.3 + 4.5, bv.z * 0.4), new CANNON.Vec3(), k);
+    m.ball.shot = null;
+    k.kickCooldown = 0.6;
+    m.events.push({ type: 'save', caught: false });
+  }
+
   private trySave(k: Player): void {
     const shot = this.m.ball.shot;
     if (!shot || shot.saveRolled || shot.by.team === k.team || this.m.ball.owner) return;
@@ -222,7 +267,10 @@ export class Keepers {
     // 이미 키퍼 머리 위로 넘어간 공(칩슛)은 손이 닿지 않는다
     const gx = this.m.ownGoalX(k.team);
     const behind = Math.abs(gx - k.pos.x) - Math.abs(gx - bp.x);
-    if (behind > 0.35) return;
+    if (behind > 0.35) {
+      this.tryTipOver(k, shot, behind);
+      return;
+    }
     const gs = k.profile.stats;
     const reach = k.diveTimer > 0 ? KEEPER.diveReach * (0.85 + 0.25 * n(gs.diving ?? 60)) : KEEPER.reach;
     // 다이빙 중에는 몸이 옆으로 누워 있으므로 손 위치는 다이빙 방향
@@ -253,9 +301,11 @@ export class Keepers {
     // GK 핸들링이 좋을수록 빠른 슛도 잡아낸다 (아니면 쳐낸다)
     const handling = n(gs.handling ?? 60);
     if (speed < 13 + 7 * handling && this.m.random.next() < 0.45 + 0.45 * handling) {
+      this.playSave(k, true);
       this.m.gainPossession(k);
       this.m.events.push({ type: 'save', caught: true });
     } else {
+      this.playSave(k, false);
       this.parry(k);
       this.m.events.push({ type: 'save', caught: false });
     }

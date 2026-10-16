@@ -437,7 +437,11 @@ export class Match {
   private withKickMotion(p: Player, kind: MotionKind, vel: CANNON.Vec3, run: () => void, instant = false): void {
     if (this.windups.has(p)) return;
     const foot = this.kicks.footFactor(p).side === 1 ? 'R' : 'L';
-    const plan = this.options.kickMotion !== false ? planKick(p, kind, vel.x, vel.z, foot, this.random.next(), this.ball.position.y) : null;
+    // 키퍼가 손에 든 공: 짧은 패스는 던지기, 긴 공은 손에서 떨어뜨려 차기(드롭킥 = 로빙 동작, 땅 높이 기준)
+    const inHands = p.isKeeper && this.ball.owner === p && this.ball.position.y > 0.4;
+    if (inHands) kind = kind === 'pass' ? 'throw' : 'lob';
+    const plan = this.options.kickMotion !== false
+      ? planKick(p, kind, vel.x, vel.z, foot, this.random.next(), inHands && kind === 'throw' ? undefined : inHands ? 0.11 : this.ball.position.y) : null;
     if (!plan) {
       run();
       return;

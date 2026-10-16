@@ -4,7 +4,7 @@ import * as THREE from 'three';
  * 동작 라이브러리: 모션캡처(Rohr)와 GRF 키프레임을 같은 태그로 정리한 목록 + 상황별 선택기.
  * 데이터는 scripts/bake-motions.ts가 만든다 (태그: src/data/MotionCatalog.ts, 키프레임: public/assets/motions.json).
  */
-export type MotionKind = 'pass' | 'lob' | 'shot' | 'dive' | 'save' | 'slide' | 'fall' | 'getup' | 'throw' | 'celebrate' | 'card' | 'trap' | 'control' | 'turn';
+export type MotionKind = 'pass' | 'lob' | 'shot' | 'dive' | 'save' | 'slide' | 'fall' | 'getup' | 'throw' | 'celebrate' | 'card' | 'trap' | 'control' | 'turn' | 'keeper';
 export type MotionSpeed = 'idle' | 'walk' | 'sprint';
 
 export interface MotionEntry {

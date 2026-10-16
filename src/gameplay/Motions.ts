@@ -21,7 +21,7 @@ export interface KickPlan {
  * 모션캡처가 비슷하게 맞으면 우선, 각도·속도가 크게 다르면 그 상황에 맞는 GRF 동작.
  */
 /** height: 차는 순간 공 높이 (땅볼 킥에 헤딩·다이빙 헤딩 클립이 뽑히지 않게) */
-export function planKick(p: Player, kind: MotionKind, dirX: number, dirZ: number, foot: 'L' | 'R', random: number, height = 0.11): KickPlan | null {
+export function planKick(p: Player, kind: MotionKind, dirX: number, dirZ: number, foot: 'L' | 'R', random: number, height: number | undefined = 0.11): KickPlan | null {
   const body = Math.atan2(p.facing.x, p.facing.z);
   const want = Math.atan2(dirX, dirZ);
   const angle = Math.atan2(Math.sin(want - body), Math.cos(want - body));

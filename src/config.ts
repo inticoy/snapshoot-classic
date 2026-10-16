@@ -81,6 +81,8 @@ export const KEEPER = {
   smotherDuration: 0.65,
   diveDuration: 0.55,
   crossReach: 2.65,
+  /** 점프해 손끝이 닿는 높이 (m): 머리 위로 넘어가는 공을 크로스바 위로 쳐낼 수 있는 한계 */
+  jumpReach: 2.95,
   crossRange: 11,
   crossCrowdRadius: 2.5,
   recoveryTime: 0.45,

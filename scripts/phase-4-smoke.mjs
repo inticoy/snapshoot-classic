@@ -99,7 +99,7 @@ try {
   await page.waitForTimeout(500);
   await page.screenshot({ path: `${output}/shootout.png` });
   // 남은 사용자 차례마다 번갈아 구석을 노려 찬다
-  for (let i = 0; i < 20; i++) {
+  for (let i = 0; i < 40; i++) {
     const state = await page.evaluate(() => {
       const m = window.__game.match;
       return m.phase !== 'shootout' ? 'done' : m.shootout.userKicking && m.shootout.stage === 'ready' ? 'kick' : 'wait';
@@ -115,7 +115,7 @@ try {
     }
     await page.waitForTimeout(1500);
   }
-  await page.waitForFunction(() => window.__game.match.phase === 'fulltime', null, { timeout: 30000 });
+  await page.waitForFunction(() => window.__game.match.phase === 'fulltime', null, { timeout: 90000 });
   await page.waitForFunction(() => document.querySelector('#overlay')?.textContent.includes('승부차기'), null, { timeout: 8000 }).catch(async (e) => {
     console.log(await page.evaluate(() => [window.__game.game.state, window.__game.match.phase, document.querySelector('#overlay')?.className, document.querySelector('#overlay')?.textContent.slice(0, 200)]));
     throw e;

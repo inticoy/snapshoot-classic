@@ -193,8 +193,10 @@ for (const file of files(join(ROOT, 'grf'))) {
   const getup = top === 'movement_special' && rel.includes('stand_up_from') && !rel.includes('holdball');
   // 공을 가진 방향 전환(movement/dribble)은 개인기 몸 동작으로 쓴다
   const dribbleTurn = top === 'movement' && rel.startsWith('movement/dribble/');
-  const kind: MotionKind | undefined = getup ? 'getup' : dribbleTurn ? 'turn' : GRF_KIND[type];
-  if (!kind || !(getup || dribbleTurn || ['pass', 'highpass', 'shot', 'sliding', 'trip', 'trap', 'ballcontrol'].includes(top))) continue;
+  // 키퍼 선방(deflect): 잡기(holdball)·쳐내기 — 종류 메타가 없어 폴더로 정한다
+  const keeper = top === 'deflect';
+  const kind: MotionKind | undefined = getup ? 'getup' : dribbleTurn ? 'turn' : keeper ? 'keeper' : GRF_KIND[type];
+  if (!kind || !(getup || dribbleTurn || keeper || ['pass', 'highpass', 'shot', 'sliding', 'trip', 'trap', 'ballcontrol'].includes(top))) continue;
   const src = grfSource(rel, anim);
   const speedDir = rel.split('/')[top === 'trip' ? 2 : 1];
   const speed = SPEED[speedDir] ?? 'walk';
@@ -219,7 +221,15 @@ for (const file of files(join(ROOT, 'grf'))) {
   const bd = (anim.meta.get('balldirection') ?? '0,-1,0').split(',').map(Number);
   const dir = toThree(new THREE.Vector3(bd[0], bd[1], bd[2] ?? 0)).setY(0);
   // GRF balldirection은 애니메이션 시작 방향 기준이다
-  const ballAngle = dir.lengthSq() > 1e-6 ? relAngle(dir.normalize(), bodyYaw(src.sample(0))) : 0;
+  let ballAngle = dir.lengthSq() > 1e-6 ? relAngle(dir.normalize(), bodyYaw(src.sample(0))) : 0;
+  if (keeper && Number.isFinite(Number(anim.meta.get('touchframe')))) {
+    // 키퍼는 공이 오는 쪽(터치 순간 공 위치)이 기준: 시작 몸 방향에서 본 각도
+    const pose = src.sample(key);
+    const [bx, by, bz] = (anim.meta.get('touchpos') ?? '0,0,0').split(',').map(Number);
+    const ball = toThree(new THREE.Vector3(bx, by, bz)).setY(0);
+    if (ball.lengthSq() > 1e-4) ballAngle = relAngle(ball.normalize(), bodyYaw(src.sample(0)));
+    void pose;
+  }
   const power = Number(anim.meta.get('touch_maxpowerfactor') ?? 1) || 1;
   const name = `grf_${rel.replace('.anim', '').replace(/[^a-z0-9]+/gi, '_')}`;
   // 누운 자세로 끝나는 동작은 일어나기 동작으로 잇는다

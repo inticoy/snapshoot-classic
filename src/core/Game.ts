@@ -24,6 +24,8 @@ type AppState = 'menu' | 'playing' | 'paused' | 'result';
 const DURATIONS = [120, 240, 360, 480];
 const MENU_KEYS = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Enter', 'Escape', 'Backspace'];
 
+const handL = new THREE.Vector3(), handR = new THREE.Vector3();
+
 export class Game {
   private readonly renderer: THREE.WebGLRenderer;
   private readonly scene = new THREE.Scene();
@@ -411,6 +413,13 @@ export class Game {
     }
     if (!this.playground) this.match.officials.syncVisual(live ? dt : 0);
     this.match.ball.syncVisual();
+    // 손에 든 공(키퍼 캐치·스로인)은 화면에서 두 손 사이에 그린다 (판정 위치는 그대로)
+    const holder = this.match.ball.owner?.isKeeper && this.match.ball.position.y > 0.4 ? this.match.ball.owner
+      : this.match.setPieces.current?.kind === 'throwin' ? this.match.setPieces.current.taker : null;
+    const model = holder?.model;
+    if (model?.handPosition && model.handPosition(handL, 'L') && model.handPosition(handR, 'R')) {
+      this.match.ball.object.position.copy(handL).add(handR).multiplyScalar(0.5);
+    }
     this.stadium.update(dt);
     this.updateMarker(dt);
 

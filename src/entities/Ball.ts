@@ -17,7 +17,7 @@ export class Ball {
   owner: Player | null = null;
   lastTouch: Player | null = null;
   /** 현재 진행 중인 슛 (키퍼 선방 판정용) */
-  shot: { id: number; by: Player; saveRolled: boolean } | null = null;
+  shot: { id: number; by: Player; saveRolled: boolean; tipRolled?: boolean } | null = null;
   private shotCounter = 0;
 
   constructor(physics: PhysicsWorld) {
