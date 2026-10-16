@@ -205,10 +205,11 @@ export class Player {
   }
 
   /** 구운 동작 재생 (모션캡처·GRF). 데이터가 없으면 false → 기존 오버레이로 대체 */
-  playMotion(entry: MotionEntry | null, startAt = 0, speed = 1): boolean {
+  playMotion(entry: MotionEntry | null, startAt = 0, speed = 1, flat = false): boolean {
     // 누운 채 끝나는 동작은 일어나기를 빠르게 이어 붙인다 (경기 판정상 일어나는 시간에 맞춤)
     const then = entry?.next ? { id: entry.next, speed: 1.7 } : undefined;
-    if (!entry || !this.model.playMotion?.(entry.id, { startAt, speed, then })) return false;
+    // flat: 클립의 몸 회전을 빼고 팔다리만 (몸 방향은 호출한 쪽이 돌린다)
+    if (!entry || !this.model.playMotion?.(flat ? `${entry.id}#flat` : entry.id, { startAt, speed, then })) return false;
     this.animTimer = Math.max(this.animTimer, (entry.duration - startAt) / speed + (then ? 0.6 : 0));
     return true;
   }

@@ -28,6 +28,9 @@ const SCRIPTS = {
   heel_flick: sequence(['F', 'B']), ball_lift: sequence(['F', 'F', 'F']),
   roulette_r: sequence(['B', 'BL', 'L', 'FL', 'F', 'FR', 'R']), roulette_l: sequence(['B', 'BR', 'R', 'FR', 'F', 'FL', 'L']),
   feint_exit_r: sequence(['L', 'BL', 'B', 'BR', 'R']), feint_exit_l: sequence(['R', 'BR', 'B', 'BL', 'L']),
+  stop_turn_r: { inputs: [{ t: 0, keys: ['ArrowUp'] }, { t: 1, keys: ['ShiftLeft'] }, { t: 1.03, keys: ['ShiftLeft', 'ArrowUp'] }, { t: 1.09, keys: ['ShiftLeft'] }, { t: 1.12, keys: ['ShiftLeft', 'ArrowRight'] }, { t: 1.18, keys: [] }], at: [1.35, 1.45, 1.55, 1.65, 1.8] },
+  elastico: { inputs: [{ t: 0, keys: ['ArrowUp'] }, { t: 1, keys: ['ShiftLeft'] }, ...[['ArrowRight'], ['ArrowDown', 'ArrowRight'], ['ArrowDown'], ['ArrowDown', 'ArrowLeft'], ['ArrowLeft']].map((k, i) => ({ t: 1.03 + i * 0.06, keys: ['ShiftLeft', ...k] })), { t: 1.33, keys: [] }], at: [1.5, 1.6, 1.7, 1.8, 1.95] },
+  rainbow: { inputs: [{ t: 0, keys: ['ArrowUp'] }, { t: 1, keys: ['ShiftLeft'] }, { t: 1.03, keys: ['ShiftLeft', 'ArrowDown'] }, { t: 1.09, keys: ['ShiftLeft'] }, { t: 1.12, keys: ['ShiftLeft', 'ArrowUp'] }, { t: 1.18, keys: ['ShiftLeft'] }, { t: 1.21, keys: ['ShiftLeft', 'ArrowUp'] }, { t: 1.27, keys: [] }], at: [1.55, 1.7, 1.85, 2.0, 2.15] },
 };
 const base = new URL(process.env.SNAPSHOOT_URL ?? 'http://127.0.0.1:5180/');
 const url = new URL('index.html?playground', base);

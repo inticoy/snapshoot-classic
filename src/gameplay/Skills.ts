@@ -50,7 +50,8 @@ export interface SkillDef {
   contacts: { t: number; foot: 'L' | 'R' }[];
   /** 접촉을 구운 클립을 고정한다. [from, key × toKey) 구간을 duration에 맞춰 재생한다. */
   /** sprintId: 질주 중(5.2 m/s 이상)에 대신 쓸 클립. speed를 주면 그 배속으로 재생하고 toKey 지점에서 끊는다 */
-  motion?: { id: string; sprintId?: string; kind: MotionKind; angle: number; from?: number; toKey?: number; speed?: number };
+  /** flat: 클립의 몸 회전(요)을 빼고 body 키의 yaw로만 돈다 */
+  motion?: { id: string; sprintId?: string; flat?: boolean; kind: MotionKind; angle: number; from?: number; toKey?: number; speed?: number };
   /** 선수 별이 개인기 별보다 높을수록 더 빠르고 매끄럽게 (별 하나당 starScale만큼 빨라진다) */
   starScale?: number;
   /** 끝날 때 공 방향(시작 기준 rad, + = 오른쪽)·속도와 몸 속도. input = 그때 누른 방향이 있으면 그쪽 */
@@ -284,7 +285,7 @@ export class SkillRunner {
     // 배속을 정했으면 제 속도로 재생하다 end에서 끊고(달리기로 섞여 돌아감), 아니면 개인기 길이에 맞춰 늘인다
     const speed = (motion.speed ?? (end - from) / a.def.duration) * a.rate;
     a.cut = motion.speed !== undefined ? (end - from) / speed : null;
-    a.p.playMotion(entry, from, speed);
+    a.p.playMotion(entry, from, speed, motion.flat);
   }
 
   private toWorld(a: Active, x: number, z: number, out: THREE.Vector3): THREE.Vector3 {

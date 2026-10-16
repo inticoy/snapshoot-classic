@@ -138,6 +138,8 @@ export class Playground {
     const result = runScript(script);
     this.reset(script.scenario, script.opponent ?? 'press');
     this.scenarios.reset(script.scenario, script.seed, script.opponent ?? 'press', script.control ?? 'user');
+    const user = this.match.controlled;
+    if (script.skill !== undefined) Object.defineProperty(user, 'profile', { value: { ...user.profile, skill: script.skill }, configurable: true });
     for (const [key, value] of Object.entries(script.params ?? {})) setParameter(key.split('.')[1] as typeof PLAYGROUND_PARAMETERS[number]['key'], value);
     this.syncParameters();
     this.script = script;

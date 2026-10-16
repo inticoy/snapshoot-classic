@@ -17,6 +17,8 @@ export interface PlaygroundScript {
   params?: Record<string, number>;
   opponent?: PracticeOpponent;
   control?: 'user' | 'opponent';
+  /** 조작 선수의 개인기 별 (1~5). 없으면 원래 선수 값 */
+  skill?: number;
   inputs: { t: number; keys?: string[]; tap?: string[] }[];
   sampleHz?: number;
 }
@@ -41,6 +43,7 @@ export function validateScript(value: unknown): PlaygroundScript {
   if (s.sampleHz !== undefined && (typeof s.sampleHz !== 'number' || !Number.isFinite(s.sampleHz) || s.sampleHz <= 0 || s.sampleHz > 120)) throw new Error('sampleHz는 0~120Hz 범위여야 합니다');
   if (s.opponent !== undefined && !opponentModes.includes(s.opponent as string)) throw new Error('알 수 없는 opponent');
   if (s.control !== undefined && s.control !== 'user' && s.control !== 'opponent') throw new Error('알 수 없는 control');
+  if (s.skill !== undefined && (!Number.isInteger(s.skill) || (s.skill as number) < 1 || (s.skill as number) > 5)) throw new Error('skill은 1~5');
   if (!Array.isArray(s.inputs)) throw new Error('inputs 배열이 필요합니다');
   let previous = -1;
   for (const row of s.inputs) {
@@ -94,6 +97,7 @@ export function runScript(source: PlaygroundScript): ScriptResult {
     const input = new Input({ addEventListener() {} } as unknown as Window);
     const result: ScriptResult = { frames: [], events: [], summary: { possession: 0, progress: {}, alignment: {}, touches: 0, losses: 0, nearestOpponent: null, firstWithin2m: null, tackleAttempts: 0, userTackles: 0, opponentTackles: 0, tackleSuccesses: 0, skills: {} } };
     const user = match.controlled;
+    if (script.skill !== undefined) Object.defineProperty(user, 'profile', { value: { ...user.profile, skill: script.skill }, configurable: true });
     const foes = match.players.filter((p) => p.team !== user.team && !p.isKeeper);
     const summary = result.summary;
     let nearest = Infinity, held: string[] = [], rowIndex = 0, previousOwner = match.ball.owner;

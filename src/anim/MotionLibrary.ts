@@ -84,6 +84,9 @@ function hash(id: string, r: number): number {
 
 interface MotionData { fps: number; bones: string[]; clips: Record<string, { hips: number[]; q: string }> }
 
+/** 요를 뺀 클립 이름 접미사 */
+export const FLAT = '#flat';
+
 export class MotionClips {
   private constructor(private readonly data: MotionData, private readonly cache = new Map<string, THREE.AnimationClip>()) {}
 
@@ -98,12 +101,13 @@ export class MotionClips {
   }
 
   has(id: string): boolean {
-    return id in this.data.clips;
+    return id.replace(FLAT, '') in this.data.clips;
   }
 
   clip(id: string): THREE.AnimationClip | null {
     const cached = this.cache.get(id);
     if (cached) return cached;
+    if (id.endsWith(FLAT)) return this.flat(id);
     const c = this.data.clips[id];
     if (!c) return null;
     const { fps, bones } = this.data;
@@ -120,6 +124,32 @@ export class MotionClips {
     // 부모 로컬 축과 월드 축이 다르므로 bakeClip에서 만든 세 축을 그대로 복원한다.
     tracks.push(new THREE.VectorKeyframeTrack('DEF-hips.position', times, c.hips));
     const clip = new THREE.AnimationClip(id, (frames - 1) / fps, tracks);
+    this.cache.set(id, clip);
+    return clip;
+  }
+
+  /**
+   * 엉덩이의 수평 회전(요)을 시작 방향에 고정한 클립 ('<id>#flat').
+   * 개인기처럼 몸 방향을 게임이 직접 돌리는 동작에서 클립의 회전과 겹쳐 두 번 돌지 않게 한다.
+   * 엉덩이 부모(root)의 로컬 축은 Z가 위다 → Z축 둘레 비틀림만 뺀다 (기울기·숙임은 그대로)
+   */
+  private flat(id: string): THREE.AnimationClip | null {
+    const base = this.clip(id.slice(0, -FLAT.length));
+    if (!base) return null;
+    const clip = base.clone();
+    clip.name = id;
+    const track = clip.tracks.find((t) => t.name === 'DEF-hips.quaternion');
+    if (track) {
+      const v = track.values;
+      const yaw = (i: number) => 2 * Math.atan2(v[i * 4 + 2], v[i * 4 + 3]);
+      const y0 = yaw(0);
+      const q = new THREE.Quaternion(), r = new THREE.Quaternion(), z = new THREE.Vector3(0, 0, 1);
+      for (let i = 0; i < v.length / 4; i++) {
+        q.fromArray(v, i * 4);
+        r.setFromAxisAngle(z, -(yaw(i) - y0));
+        r.multiply(q).toArray(v, i * 4);
+      }
+    }
     this.cache.set(id, clip);
     return clip;
   }

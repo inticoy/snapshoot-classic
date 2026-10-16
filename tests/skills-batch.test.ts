@@ -29,7 +29,7 @@ describe('1차 커맨드 전수 교차 검사', () => {
         tick(dir, c.hold ? 1.8 : 0.06);
       }
       tick(null, 0.3, false);
-      expect(found, `${c.id} yaw=${yaw}`).toEqual([c.id]);
+      expect(found, `${c.id} yaw=${yaw}`).toEqual([c.upgrade ?? c.id]);
     }
   });
   it('힐 플릭의 탭을 길게 누르거나 끊어진 커맨드는 발동하지 않는다', () => {
@@ -48,17 +48,18 @@ describe('1차 커맨드 전수 교차 검사', () => {
 
 describe('실제 Input → Match → 물리 개인기 전수', () => {
   it.each(COMMANDS)('$id: 이벤트 1회·소유 유지·종료 방향', (c) => {
-    const def = SKILLS.find((s) => s.id === c.id)!;
+    const def = SKILLS.find((s) => s.id === (c.upgrade ?? c.id))!;
     const r = runScript(skillScript(c));
     const events = r.events.filter((e) => e.type === 'skill');
-    expect(events.map((e) => e.id)).toEqual([c.id]);
+    // ★5 선수라 같은 커맨드의 상위 개인기가 있으면 그쪽이 나간다
+    expect(events.map((e) => e.id)).toEqual([c.upgrade ?? c.id]);
     expect(r.summary.losses).toBe(0);
     expect(r.summary.possession).toBeGreaterThan(0.99);
     const endTime = events[0].t + def.duration - dt;
     const end = r.frames.find((f) => f.t + 1e-6 >= endTime)!;
     // 입력을 떼고 종료한 순간의 몸·공 벡터를 시작(+X) 기준 의도와 비교한다.
     const expected = new THREE.Vector3(Math.cos(def.exit.dir), 0, Math.sin(def.exit.dir));
-    if (!c.hold) {
+    if (!def.sustained) {
       expect(new THREE.Vector3(...end.user.facing).dot(expected)).toBeGreaterThan(0.95);
       if (def.exit.speed > 1) expect(new THREE.Vector3(...end.ball.vel).setY(0).normalize().dot(expected)).toBeGreaterThan(0.9);
     } else {
