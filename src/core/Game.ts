@@ -12,6 +12,7 @@ import { Menu, assistPanel, controlsPanel, matchupPanel, playerDetailPanel, squa
 import { ASSIST_LABEL, MOVE_ASSIST_LABEL, GRAPHICS_LABEL, cycleAssist, cycleMoveAssist, cycleGraphics, graphicsQuality, settings, togglePhysicsPreset, toggleShootout } from './Settings';
 import { PRESET_LABEL, activePhysics } from '../physics/presets';
 import { Sound } from '../audio/Sound';
+import { categoryVolume, decideTouchSound } from '../audio/Mix';
 import { TEAMS } from '../data/Teams';
 import { RESTART_LABEL } from '../gameplay/SetPieces';
 import { visualRandom } from './Random';
@@ -33,6 +34,7 @@ export class Game {
   private readonly hud = new Hud();
   private readonly menu = new Menu();
   private readonly sound = new Sound();
+  private readonly lastTouchSound = new WeakMap<object, number>();
   private readonly marker: THREE.Group;
   private readonly touch: TouchControls;
   private readonly playground: Playground | null;
@@ -449,36 +451,43 @@ export class Game {
         console.debug('[event]', e.type, JSON.stringify(e, (k, v) => (k && v && typeof v === 'object' && 'profile' in v ? v.profile.short : v)));
       }
       switch (e.type) {
-        case 'touch':
-          this.sound.play('kick', Math.min(0.25, 0.08 + e.speed / 60), 1.25);
+        case 'touch': {
+          const distance = Math.hypot(e.player.pos.x - this.rig.camera.position.x, e.player.pos.z - this.rig.camera.position.z);
+          const decision = decideTouchSound(e.speed, distance, performance.now() / 1000, this.lastTouchSound.get(e.player));
+          if (decision.volume > 0) {
+            this.lastTouchSound.set(e.player, decision.nextTime);
+            const variant = 1 + Math.floor(visualRandom.next() * 4);
+            this.sound.play(`touch-${variant}` as 'touch-1' | 'touch-2' | 'touch-3' | 'touch-4', decision.volume, 0.94 + visualRandom.next() * 0.12);
+          }
           break;
+        }
         case 'kick':
-          this.sound.play('kick', Math.min(1, 0.35 + e.speed / 30), 0.9 + visualRandom.next() * 0.2);
+          this.sound.play(e.speed < 12 ? 'kick-light' : 'kick', categoryVolume('ball', 0.55 + e.speed / 38), 0.94 + visualRandom.next() * 0.12);
           break;
         case 'bounce':
-          this.sound.play('bounce', Math.min(0.8, e.speed / 12));
+          this.sound.play('bounce', categoryVolume('ball', e.speed / 12));
           break;
         case 'post':
-          this.sound.play('post', Math.min(1, e.speed / 15));
+          this.sound.play('post', categoryVolume('ball', e.speed / 15));
           this.hud.tick('골대 강타!');
           this.rig.addShake(0.25);
           break;
         case 'net':
-          this.sound.play('net', Math.min(1, e.speed / 12));
+          this.sound.play('net', categoryVolume('ball', e.speed / 12));
           break;
         case 'save':
-          this.sound.play('save', 0.8);
+          this.sound.play('save', categoryVolume('body', 0.8));
           this.hud.tick(e.caught ? '골키퍼 선방 · 캐치' : '골키퍼 선방 · 펀칭');
           this.stadium.cheer(0.4);
           break;
         case 'tackle':
-          if (e.success) this.sound.play('bounce', 0.6, 0.7);
+          if (e.success) this.sound.play('bounce', categoryVolume('body', 0.6), 0.7);
           break;
         case 'goal': {
-          this.sound.play('goal', 1);
-          this.sound.play('cheer', 0.9);
-          this.sound.setAmbienceLevel(0.4);
-          setTimeout(() => this.sound.setAmbienceLevel(0.18), 4000);
+          this.sound.play('goal', categoryVolume('crowd', 1));
+          this.sound.play('cheer', categoryVolume('crowd', 0.9));
+          this.sound.setAmbienceLevel(0.25);
+          setTimeout(() => this.sound.setAmbienceLevel(0.12), 4000);
           this.stadium.cheer(1);
           this.rig.addShake(0.4);
           const sub = e.scorer
@@ -513,7 +522,7 @@ export class Game {
           this.hud.stoppage(e.minutes);
           break;
         case 'penaltyKick':
-          this.sound.play(e.scored ? 'net' : 'save', 0.8);
+          this.sound.play(e.scored ? 'net' : 'save', categoryVolume(e.scored ? 'ball' : 'body', 0.8));
           if (e.scored) this.stadium.cheer(0.7);
           this.hud.tick(`${e.kicker.profile.short} · ${e.scored ? '성공' : '실패'}`, 1.4);
           break;

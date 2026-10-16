@@ -1,4 +1,5 @@
-export type SoundKey = 'kick' | 'bounce' | 'goal' | 'net' | 'post' | 'cheer' | 'chant' | 'save';
+import { AUDIO_MIX } from '../config';
+export type SoundKey = 'kick' | 'bounce' | 'goal' | 'net' | 'post' | 'cheer' | 'chant' | 'save' | 'kick-light' | 'touch-1' | 'touch-2' | 'touch-3' | 'touch-4' | 'whistle-short' | 'whistle-long';
 
 const FILES: Record<SoundKey, string> = {
   kick: 'assets/audio/kick.mp3',
@@ -9,12 +10,20 @@ const FILES: Record<SoundKey, string> = {
   cheer: 'assets/audio/cheer.mp3',
   chant: 'assets/audio/chant.mp3',
   save: 'assets/audio/save.mp3',
+  'kick-light': 'assets/audio/kick-light.mp3',
+  'touch-1': 'assets/audio/touch-1.mp3',
+  'touch-2': 'assets/audio/touch-2.mp3',
+  'touch-3': 'assets/audio/touch-3.mp3',
+  'touch-4': 'assets/audio/touch-4.mp3',
+  'whistle-short': 'assets/audio/whistle-short.mp3',
+  'whistle-long': 'assets/audio/whistle-long.mp3',
 };
 
 /** WebAudio 기반 효과음. 사용자 입력 이후 unlock() 해야 소리가 난다 */
 export class Sound {
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
+  private compressor: DynamicsCompressorNode | null = null;
   private readonly buffers = new Map<SoundKey, AudioBuffer>();
   private ambience: AudioBufferSourceNode | null = null;
   private ambienceGain: GainNode | null = null;
@@ -28,8 +37,15 @@ export class Sound {
     }
     this.ctx = new AudioContext();
     this.master = this.ctx.createGain();
-    this.master.gain.value = 0.8;
-    this.master.connect(this.ctx.destination);
+    this.master.gain.value = AUDIO_MIX.master;
+    // 동시 발생한 충격음과 관중음의 합이 순간적으로 튀는 것을 완화한다.
+    this.compressor = this.ctx.createDynamicsCompressor();
+    this.compressor.threshold.value = -18;
+    this.compressor.knee.value = 12;
+    this.compressor.ratio.value = 3;
+    this.compressor.attack.value = 0.005;
+    this.compressor.release.value = 0.2;
+    this.master.connect(this.compressor).connect(this.ctx.destination);
     await Promise.all(
       (Object.keys(FILES) as SoundKey[]).map(async (k) => {
         try {
@@ -73,7 +89,7 @@ export class Sound {
     this.ambience.buffer = buf;
     this.ambience.loop = true;
     this.ambienceGain = this.ctx.createGain();
-    this.ambienceGain.gain.value = 0.18;
+    this.ambienceGain.gain.value = 0.12;
     this.ambience.connect(this.ambienceGain).connect(this.master);
     this.ambience.start();
   }
@@ -83,36 +99,29 @@ export class Sound {
     this.ambienceGain.gain.setTargetAtTime(level, this.ctx.currentTime, 0.4);
   }
 
-  /** 심판 휘슬 (합성음) */
+  /** 짧은/긴 CC0 휘슬 샘플을 재개 사유에 맞춰 순서대로 낸다. */
   whistle(pattern: number[] = [0.35]): void {
     if (!this.ctx || !this.master || this.muted) return;
     let t = this.ctx.currentTime + 0.02;
     for (const len of pattern) {
-      const osc = this.ctx.createOscillator();
-      const lfo = this.ctx.createOscillator();
-      const lfoGain = this.ctx.createGain();
-      const g = this.ctx.createGain();
-      osc.type = 'square';
-      osc.frequency.value = 2650;
-      lfo.frequency.value = 28; // 휘슬 특유의 떨림
-      lfoGain.gain.value = 180;
-      lfo.connect(lfoGain).connect(osc.frequency);
-      g.gain.setValueAtTime(0, t);
-      g.gain.linearRampToValueAtTime(0.07, t + 0.02);
-      g.gain.setValueAtTime(0.07, t + len - 0.04);
-      g.gain.linearRampToValueAtTime(0, t + len);
-      osc.connect(g).connect(this.master);
-      osc.start(t);
-      lfo.start(t);
-      osc.stop(t + len);
-      lfo.stop(t + len);
+      const buf = this.buffers.get(len < 0.4 ? 'whistle-short' : 'whistle-long');
+      if (buf) {
+        const src = this.ctx.createBufferSource();
+        const gain = this.ctx.createGain();
+        src.buffer = buf;
+        src.loop = len > buf.duration;
+        gain.gain.value = AUDIO_MIX.whistle * 0.5;
+        src.connect(gain).connect(this.master);
+        src.start(t);
+        src.stop(t + len);
+      }
       t += len + 0.12;
     }
   }
 
   toggleMute(): boolean {
     this.muted = !this.muted;
-    if (this.master) this.master.gain.value = this.muted ? 0 : 0.8;
+    if (this.master) this.master.gain.value = this.muted ? 0 : AUDIO_MIX.master;
     return this.muted;
   }
 }

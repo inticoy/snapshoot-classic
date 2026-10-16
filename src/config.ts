@@ -250,3 +250,15 @@ export const PLAYGROUND = {
   duration: 24 * 60 * 60,
   panelPeriod: 0.1,
 };
+
+// 음원은 단발 -3 dBFS, 관중 -23 LUFS로 맞췄으므로 여기서는 경기 내 상대 크기만 조절한다.
+export const AUDIO_MIX = {
+  master: 0.8,
+  ball: 0.42,
+  body: 0.38,
+  crowd: 0.55,
+  whistle: 0.7,
+  touchGap: 0.28,
+  quietTouchSpeed: 1.2,
+  touchMaxDistance: 25,
+} as const;
