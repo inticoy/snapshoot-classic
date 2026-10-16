@@ -87,7 +87,7 @@ const GRF_TIPS: [joint: Joint, node: string, offset: [number, number, number]][]
 ];
 
 /** GRF 애니메이션 프레임 속도 (게임이 100Hz로 돈다) */
-const GRF_FPS = 100;
+export const GRF_FPS = 100;
 
 interface Track { frames: number[]; values: number[][] }
 
@@ -114,7 +114,13 @@ export function parseGrf(text: string): GrfAnim {
     if (line.startsWith('<')) continue;
     const parts = line.split(',');
     const name = parts[0];
-    // 관절 트랙만 읽는다 (extension 같은 부가 데이터 줄은 형식이 다르다)
+    // 공 터치 정보: extension,football,<프레임>,<공 위치 x,y,z (선수 기준)>
+    if (name === 'extension' && parts[1] === 'football') {
+      meta.set('touchframe', parts[2]);
+      meta.set('touchpos', parts.slice(3, 6).join(','));
+      continue;
+    }
+    // 관절 트랙만 읽는다 (그 밖의 부가 데이터 줄은 형식이 다르다)
     if (name !== 'player' && !GRF_NODE_NAMES.has(name)) continue;
     const stride = name === 'player' ? 4 : 5;
     const t: Track = { frames: [], values: [] };
@@ -124,7 +130,7 @@ export function parseGrf(text: string): GrfAnim {
       t.values.push(parts.slice(k + 1, k + stride).map(Number));
       lastFrame = Math.max(lastFrame, frame);
     }
-    tracks.set(name, t);
+    if (t.frames.length) tracks.set(name, t); // 키가 없는 줄은 기본 자세
   }
   return { tracks, lastFrame, meta };
 }
@@ -149,7 +155,7 @@ function sampleTrack(t: Track, frame: number, out: number[]): number[] {
 }
 
 /** GRF 좌표(Z 위, -Y 앞) → three.js(Y 위, +Z 앞, +X 왼쪽) */
-const toThree = (v: THREE.Vector3) => v.set(v.x, v.z, -v.y);
+export const toThree = (v: THREE.Vector3) => v.set(v.x, v.z, -v.y);
 
 export function grfSource(name: string, anim: GrfAnim): PoseSource {
   const buf: number[] = [];

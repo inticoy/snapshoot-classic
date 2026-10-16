@@ -34,6 +34,8 @@ try {
   await page.keyboard.up('KeyD');
   await page.keyboard.up('KeyZ');
   await page.waitForFunction(() => window.__game.match.phase === 'playing');
+  // 킥 동작: 발이 공에 닿는 순간(약 0.16초 뒤) 슛이 기록된다
+  await page.waitForFunction(() => window.__game.match.stats.shots[0] >= 1, null, { timeout: 3000 }).catch(() => {});
   const shots = await page.evaluate(() => window.__game.match.stats.shots[0]);
   assert.ok(shots >= 1, '프리킥 슛이 기록되지 않음');
 

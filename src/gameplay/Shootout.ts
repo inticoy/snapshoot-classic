@@ -158,7 +158,7 @@ export class Shootout {
     const m = this.m;
     const k = this.kicker!;
     this.charge = null;
-    m.shoot(k, charge, false, penaltyAim(this.spot, this.dir, aim));
+    m.shoot(k, charge, false, penaltyAim(this.spot, this.dir, aim), true);
     const z = shotLineZ(this.spot, m.ball.velocity, this.dir);
     const userKeeper = this.turn === 1 && m.userControl;
     diveKeeper(this.keeper!, userKeeper ? sideFromInput(cmd.move.z) : keeperGuess(() => m.random.next(), this.keeper!, z));

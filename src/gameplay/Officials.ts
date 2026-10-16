@@ -25,6 +25,8 @@ export class Official {
   readonly item: THREE.Mesh;
   gesture: Gesture = 'none';
   gestureTimer = 0;
+  /** 카드를 손에 들고 있는 남은 시간 */
+  showCard = 0;
 
   constructor(readonly role: 'referee' | 'assistant', name: string, factory: PlayerModelFactory, item: THREE.Mesh) {
     const look = appearance(name);
@@ -60,10 +62,12 @@ export class Official {
     this.model.setGesture?.(this.gesture);
     this.model.update(dt);
     // 카드는 든 손에, 깃발은 평소에도 손에 쥐고 있다
-    const showItem = this.role === 'assistant' || this.gesture === 'raise';
+    this.showCard = Math.max(0, this.showCard - dt);
+    const showItem = this.role === 'assistant' || this.gesture === 'raise' || this.showCard > 0;
     this.item.visible = showItem && !!this.model.handPosition;
     if (this.item.visible) {
-      this.model.handPosition!(this.item.position);
+      // 모션캡처 카드 동작은 왼손으로 든다
+      this.model.handPosition!(this.item.position, this.showCard > 0 && this.gesture !== 'raise' ? 'L' : 'R');
       if (this.role === 'assistant') this.item.position.y += this.gesture === 'raise' ? 0.25 : -0.25;
       else this.item.position.y += 0.08;
       this.item.rotation.y = this.model.root.rotation.y;
@@ -185,7 +189,10 @@ export class Officials {
       if (e.type === 'card') {
         const card = this.referee.item.material as THREE.MeshBasicMaterial;
         card.color.set(e.card === 'red' ? 0xe0242f : 0xffd400);
-        this.referee.gesture = 'raise';
+        // 모션캡처 카드 동작이 있으면 그걸로, 없으면 팔 들기
+        const played = this.referee.model.playMotion?.(e.card === 'red' ? 'mc_card_red' : 'mc_card_yellow', { startAt: 0.1 });
+        this.referee.gesture = played ? 'none' : 'raise';
+        this.referee.showCard = 2.8;
         this.referee.gestureTimer = 2.8;
         this.cardTarget = e.player.pos.clone();
       } else if (e.type === 'foul' || e.type === 'advantage') {

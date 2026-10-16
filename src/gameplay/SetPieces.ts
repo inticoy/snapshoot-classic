@@ -90,6 +90,7 @@ export class SetPieces {
     const m = this.m;
     m.phase = 'out';
     m.rules.clearPlay();
+    m.cancelWindups();
     this.outTimer = OUT_DELAY;
     m.charge = null;
     m.passTarget = null;
@@ -415,7 +416,8 @@ export class SetPieces {
     m.phase = 'playing';
     m.rules.exemptNext = NO_OFFSIDE.includes(sp.kind);
     if (style === 'shot') {
-      m.shoot(t, charge, finesse, dir);
+      // PK는 키퍼가 차는 순간 방향을 고르므로 동작만 맞추고 바로 찬다
+      m.shoot(t, charge, finesse, dir, sp.kind === 'penalty');
       if (sp.kind === 'penalty') {
         // 키퍼는 차는 순간 한쪽을 골라 몸을 던진다 (사용자 키퍼면 누르고 있던 방향)
         const keeper = m.teams[1 - sp.team][0];

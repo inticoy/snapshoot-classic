@@ -38,8 +38,12 @@ export interface CharacterModel {
   update(dt: number): void;
   /** 심판 동작: 오른팔 들기(카드·깃발) / 앞으로 가리키기(프리킥 방향). 스킨드 캐릭터만 지원 */
   setGesture?(gesture: Gesture): void;
-  /** 오른손 월드 위치 (카드·깃발을 쥐여 줄 때) */
-  handPosition?(out: THREE.Vector3): THREE.Vector3 | null;
+  /** 구운 동작(모션캡처·GRF) 재생. 지원하지 않거나 데이터가 없으면 false */
+  playMotion?(id: string, opts?: { startAt?: number; speed?: number; loop?: boolean; then?: { id: string; speed: number } }): boolean;
+  /** 반복 중인 동작을 끝내고 이동 클립으로 돌아간다 */
+  stopMotion?(): void;
+  /** 손 월드 위치 (카드·깃발을 쥐여 줄 때, 기본 오른손) */
+  handPosition?(out: THREE.Vector3, side?: 'L' | 'R'): THREE.Vector3 | null;
 }
 
 export type Gesture = 'none' | 'raise' | 'point';

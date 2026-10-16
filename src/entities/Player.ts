@@ -9,6 +9,9 @@ import type { Role, Slot } from '../data/Formation';
 export type { Role };
 import { n, type OutfieldStats } from '../data/Stats';
 import { appearance, backName } from '../data/Appearance';
+import { visualRandom } from '../core/Random';
+import { pickMotion, speedClass } from '../gameplay/Motions';
+import type { MotionEntry } from '../anim/MotionLibrary';
 
 
 export type PlayerModelFactory = (colors: ModelColors, number: number, keeper: boolean) => CharacterModel;
@@ -87,6 +90,9 @@ export class Player {
 
   /** 팀이 공격하는 방향 (+1 = +X). 후반에 진영을 바꾸면 Match가 뒤집는다 */
   attackDir: 1 | -1 = 1;
+  /** 킥 동작 중에는 몸 방향을 이동 방향으로 돌리지 않는다 (동작이 정한 방향 유지) */
+  facingLock = 0;
+  private celebrating = false;
   /** 이번 경기 경고 수와 퇴장 여부 */
   yellows = 0;
   sentOff = false;
@@ -140,6 +146,7 @@ export class Player {
     this.tackleCooldown = Math.max(0, this.tackleCooldown - dt);
     this.stunned = Math.max(0, this.stunned - dt);
     this.actionLock = Math.max(0, this.actionLock - dt);
+    this.facingLock = Math.max(0, this.facingLock - dt);
 
     if (this.tackleTimer > 0) {
       this.tackleTimer -= dt;
@@ -169,7 +176,7 @@ export class Player {
 
     // 이동 방향으로 몸을 돌린다
     const speed = Math.hypot(this.vel.x, this.vel.z);
-    if (speed > 0.4 && this.tackleTimer <= 0 && this.diveTimer <= 0) {
+    if (speed > 0.4 && this.tackleTimer <= 0 && this.diveTimer <= 0 && this.facingLock <= 0) {
       const targetAngle = Math.atan2(this.vel.x, this.vel.z);
       const cur = Math.atan2(this.facing.x, this.facing.z);
       let d = targetAngle - cur;
@@ -188,6 +195,20 @@ export class Player {
     if (d.lengthSq() > 1e-4) this.facing.copy(d.normalize());
   }
 
+  /** 구운 동작 재생 (모션캡처·GRF). 데이터가 없으면 false → 기존 오버레이로 대체 */
+  playMotion(entry: MotionEntry | null, startAt = 0, speed = 1): boolean {
+    // 누운 채 끝나는 동작은 일어나기를 빠르게 이어 붙인다 (경기 판정상 일어나는 시간에 맞춤)
+    const then = entry?.next ? { id: entry.next, speed: 1.7 } : undefined;
+    if (!entry || !this.model.playMotion?.(entry.id, { startAt, speed, then })) return false;
+    this.animTimer = Math.max(this.animTimer, (entry.duration - startAt) / speed + (then ? 0.6 : 0));
+    return true;
+  }
+
+  /** 태클에 걸려 넘어짐 */
+  fall(): void {
+    this.playMotion(pickMotion('fall', speedClass(this), null, visualRandom.next()));
+  }
+
   startTackle(dir: THREE.Vector3, kind: 'slide' | 'stand' = 'slide'): void {
     this.tackleDir.copy(dir).setY(0).normalize();
     this.facing.copy(this.tackleDir);
@@ -196,7 +217,9 @@ export class Player {
     if (kind === 'slide') {
       this.tackleTimer = PLAYER.tackleDuration;
       this.tackleCooldown = PLAYER.tackleCooldown;
-      this.model.play('tackle');
+      // GRF 슬라이딩: 가장 낮은 순간(공을 걷어내는 순간) 조금 전부터
+      const slide = pickMotion('slide', speedClass(this), null, visualRandom.next());
+      if (!this.playMotion(slide, Math.max(0, (slide?.key ?? 0) - 0.25))) this.model.play('tackle');
     } else {
       this.tackleTimer = PLAYER.standTackleDuration;
       this.tackleCooldown = PLAYER.standTackleCooldown;
@@ -213,6 +236,10 @@ export class Player {
     this.diveKind = kind;
     this.diveSide = localSide;
     this.diveTimer = kind === 'smother' ? KEEPER.smotherDuration : KEEPER.diveDuration;
+    // 모션캡처 다이빙 (localSide 1 = 몸의 왼쪽). 발밑 다이빙은 해당 동작이 없어 오버레이
+    const dive = kind === 'save' ? pickMotion('dive', 'idle', localSide === 1 ? 'L' : 'R', visualRandom.next()) : null;
+    // 모션캡처 선방은 옆으로 뻗는 동작이라, 몸 전체를 눕히는 기존 기울기(오버레이)를 함께 얹어 '날아가는' 다이빙으로 만든다
+    this.playMotion(dive, Math.max(0, (dive?.key ?? 0) - 0.12), 1.15);
     this.model.play(kind === 'smother' ? 'smother' : 'dive', { side: localSide });
   }
 
@@ -244,7 +271,15 @@ export class Player {
     const inAction = this.animTimer > 0 || this.tackleTimer > 0 || this.diveTimer > 0 || this.stunned > 0;
     if (!inAction) {
       const base: AnimState = this.basePose ?? (this.keeperAdvancing ? 'advance' : speed > 0.6 ? 'run' : 'idle');
-      if (this.model.current !== base) this.model.play(base);
+      // 세리머니: 모션캡처 세리머니를 반복 (없으면 기존 춤 클립)
+      if (base === 'celebrate' && !this.celebrating) {
+        const c = pickMotion('celebrate', 'idle', null, visualRandom.next());
+        this.celebrating = !!c && !!this.model.playMotion?.(c.id, { loop: true });
+      } else if (base !== 'celebrate' && this.celebrating) {
+        this.celebrating = false;
+        this.model.stopMotion?.();
+      }
+      if (this.model.current !== base && !this.celebrating) this.model.play(base);
     }
     // 위치는 매 프레임 반영하고 멀리 있는 평상시 동작만 30Hz로 갱신한다.
     this.visualTime += dt;

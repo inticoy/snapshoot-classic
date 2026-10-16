@@ -20,6 +20,8 @@ export function simulation(seed = 0, options: MatchOptions = {}) {
     random: new Random(seed),
     createPlayerModel: () => new SimulationModel(),
     goalVisuals: false,
+    // 기존 물리·조작 테스트는 즉시 킥 기준. 킥 동작은 tests/motion.test.ts에서 따로 검증한다
+    kickMotion: false,
     ...options,
   });
   return { physics, match };

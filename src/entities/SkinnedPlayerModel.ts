@@ -5,6 +5,7 @@ import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.j
 import type { AnimState, CharacterModel, Gesture, ModelColors } from './PlayerModel';
 import { visualRandom } from '../core/Random';
 import { makeDecalTexture } from './KitDecal';
+import { MotionClips } from '../anim/MotionLibrary';
 
 /**
  * 스킨드 캐릭터 (Quaternius Universal Animation Library, CC0).
@@ -41,6 +42,14 @@ export async function loadCharacterAsset(url: string): Promise<boolean> {
     console.warn('character load failed, falling back to procedural model', e);
     return false;
   }
+}
+
+/** 모션캡처·GRF에서 구운 동작 (없으면 기존 코드 오버레이로 동작) */
+let motions: MotionClips | null = null;
+
+export async function loadMotionLibrary(url: string): Promise<boolean> {
+  motions = await MotionClips.load(url);
+  return motions !== null;
 }
 
 export function hasCharacterAsset(): boolean {
@@ -102,6 +111,8 @@ export class SkinnedPlayerModel implements CharacterModel {
   private danceW = 0;
   private gesture: Gesture = 'none';
   private readonly gestureW = { raise: 0, point: 0 };
+  /** 재생 중인 한 번짜리 동작 (킥·슬라이딩·다이빙 등) */
+  private motion: { action: THREE.AnimationAction; w: number; loop: boolean; fadeOut: number; then?: { id: string; speed: number } } | null = null;
 
   constructor(colors: ModelColors, private readonly keeper: boolean) {
     if (!asset) throw new Error('character asset not loaded');
@@ -133,12 +144,43 @@ export class SkinnedPlayerModel implements CharacterModel {
     }
   }
 
+  /**
+   * 구운 동작 재생. startAt부터 speed 배속으로 한 번 (loop면 반복) 재생하고 끝나면 이동 클립으로 섞여 돌아간다.
+   * 동작 데이터가 없으면 false (호출 측이 오버레이로 대체한다)
+   */
+  playMotion(id: string, opts: { startAt?: number; speed?: number; loop?: boolean; then?: { id: string; speed: number } } = {}): boolean {
+    const clip = motions?.clip(id);
+    if (!clip) return false;
+    const prev = this.motion;
+    const action = this.mixer.clipAction(clip);
+    if (prev && prev.action !== action) prev.action.stop();
+    action.reset();
+    action.setLoop(opts.loop ? THREE.LoopRepeat : THREE.LoopOnce, Infinity);
+    action.clampWhenFinished = true;
+    action.time = Math.max(0, opts.startAt ?? 0);
+    action.timeScale = opts.speed ?? 1;
+    action.setEffectiveWeight(prev ? prev.w : 0);
+    action.play();
+    this.motion = { action, w: prev ? prev.w : 0, loop: !!opts.loop, fadeOut: 0.18, then: opts.then };
+    // 같은 부위를 움직이는 오버레이는 끈다
+    this.state = 'run';
+    return true;
+  }
+
+  stopMotion(): void {
+    if (this.motion) this.motion.loop = false, (this.motion.action.time = Math.max(this.motion.action.time, this.motion.action.getClip().duration - this.motion.fadeOut));
+  }
+
+  get motionPlaying(): boolean {
+    return !!this.motion;
+  }
+
   setGesture(gesture: Gesture): void {
     this.gesture = gesture;
   }
 
-  handPosition(out: THREE.Vector3): THREE.Vector3 | null {
-    const hand = this.bones.get('DEF-handR');
+  handPosition(out: THREE.Vector3, side: 'L' | 'R' = 'R'): THREE.Vector3 | null {
+    const hand = this.bones.get(side === 'L' ? 'DEF-handL' : 'DEF-handR');
     return hand ? hand.getWorldPosition(out) : null;
   }
 
@@ -162,6 +204,7 @@ export class SkinnedPlayerModel implements CharacterModel {
 
   update(dt: number): void {
     this.actionT += dt;
+    this.updateMotionWeight(dt);
     this.updateClipWeights(dt);
     this.mixer.update(dt);
 
@@ -181,6 +224,27 @@ export class SkinnedPlayerModel implements CharacterModel {
     if (this.gestureW.point > 0.002) {
       this.rotateBone('DEF-upper_armR', Z_AXIS, -1.45 * this.gestureW.point);
       this.rotateBone('DEF-upper_armR', Y_AXIS, -1.1 * this.gestureW.point);
+    }
+  }
+
+  /** 동작 가중치: 시작 0.08초에 걸쳐 들어오고, 끝나기 fadeOut 전부터 이동 클립으로 섞여 나간다 */
+  private updateMotionWeight(dt: number): void {
+    const m = this.motion;
+    if (!m) return;
+    const clip = m.action.getClip();
+    const left = (clip.duration - m.action.time) / Math.max(0.01, Math.abs(m.action.timeScale));
+    // 이어 붙일 동작이 있으면 끝나기 직전에 넘겨준다 (가중치는 이어받아 끊김 없이)
+    if (m.then && left < 0.1) {
+      const next = m.then;
+      m.then = undefined;
+      if (this.playMotion(next.id, { speed: next.speed })) return;
+    }
+    const target = !m.loop && left < m.fadeOut ? Math.max(0, left / m.fadeOut) : 1;
+    m.w = target < m.w ? target : Math.min(1, m.w + dt / 0.08);
+    m.action.setEffectiveWeight(m.w);
+    if (!m.loop && left <= 0.001 && m.w <= 0.001) {
+      m.action.stop();
+      this.motion = null;
     }
   }
 
@@ -210,7 +274,7 @@ export class SkinnedPlayerModel implements CharacterModel {
 
     const celebrate = this.state === 'celebrate';
     this.danceW += ((celebrate ? 1 : 0) - this.danceW) * (1 - Math.exp(-5 * dt));
-    const rest = 1 - this.danceW;
+    const rest = (1 - this.danceW) * (1 - (this.motion?.w ?? 0));
     const idleClip: Clip = this.keeper && this.state !== 'hold' ? 'crouch' : 'idle';
 
     const set = (k: Clip, w: number) => this.actions[k]?.setEffectiveWeight(w);
@@ -219,7 +283,7 @@ export class SkinnedPlayerModel implements CharacterModel {
     set('walk', loco.walk * rest);
     set('jog', loco.jog * rest);
     set('sprint', loco.sprint * rest);
-    set('dance', this.danceW);
+    set('dance', this.danceW * (1 - (this.motion?.w ?? 0)));
 
     // 실제 이동 속도에 맞춰 재생 속도 조절
     const scale = (k: 'walk' | 'jog' | 'sprint') => THREE.MathUtils.clamp(s / CLIP_SPEED[k], 0.6, 1.5);

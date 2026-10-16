@@ -60,6 +60,49 @@ function basis(left: THREE.Vector3, up: THREE.Vector3, out: THREE.Quaternion): T
 const legLength = (p: Pose) =>
   p.get('lHip')!.distanceTo(p.get('lKnee')!) + p.get('lKnee')!.distanceTo(p.get('lAnkle')!);
 
+const MIRROR: Partial<Record<Joint, Joint>> = {
+  lShoulder: 'rShoulder', lArm: 'rArm', lElbow: 'rElbow', lHand: 'rHand', lHandTip: 'rHandTip',
+  lHip: 'rHip', lKnee: 'rKnee', lAnkle: 'rAnkle', lToe: 'rToe',
+};
+for (const [a, b] of Object.entries(MIRROR) as [Joint, Joint][]) MIRROR[b] = a;
+
+/** 몸이 바라보는 방향(수평) 각도. +Z = 0, +X(왼쪽) = +π/2 */
+export function bodyYaw(p: Pose): number {
+  // 엉덩이 선만 보면 킥 때 골반이 크게 돌아 흔들리므로 어깨 선과 평균
+  const up = new THREE.Vector3(0, 1, 0);
+  const hip = new THREE.Vector3().crossVectors(new THREE.Vector3().subVectors(p.get('lHip')!, p.get('rHip')!), up);
+  const sh = new THREE.Vector3().crossVectors(new THREE.Vector3().subVectors(p.get('lArm')!, p.get('rArm')!), up);
+  const fwd = hip.setY(0).normalize().add(sh.setY(0).normalize());
+  return Math.atan2(fwd.x, fwd.z);
+}
+
+/**
+ * 원본의 한 구간을 잘라 쓰고, 좌우를 뒤집거나(mirror) 수평으로 돌린다(yaw: 이만큼 빼서 정면으로).
+ * 뒤집기는 X를 반전하고 왼쪽·오른쪽 관절을 맞바꾼다. 캐릭터가 +Z를 보므로 좌우 대칭이 된다.
+ */
+export function sliceSource(src: PoseSource, opts: { start?: number; end?: number; mirror?: boolean; yaw?: number; name?: string }): PoseSource {
+  const start = opts.start ?? 0;
+  const end = Math.min(src.duration, opts.end ?? src.duration);
+  const rot = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), -(opts.yaw ?? 0));
+  return {
+    name: opts.name ?? src.name,
+    duration: end - start,
+    sample(t) {
+      const p = src.sample(start + Math.min(Math.max(0, t), end - start));
+      const out: Pose = new Map();
+      const hips = p.get('hips')!;
+      // 뒤집은 다음 돌린다 (yaw는 뒤집힌 자세 기준으로 잰 값)
+      for (const [j, v] of p) {
+        const w = v.clone();
+        if (opts.mirror) w.x = 2 * hips.x - w.x;
+        w.sub(hips).applyQuaternion(rot).add(hips);
+        out.set(opts.mirror ? MIRROR[j] ?? j : j, w);
+      }
+      return out;
+    },
+  };
+}
+
 export interface BakeOptions {
   fps?: number;
   /** 제자리 재생: 엉덩이 수평 이동을 없앤다 */
@@ -91,6 +134,8 @@ export function bakeClip(source: PoseSource, model: THREE.Object3D, opts: BakeOp
   const first = source.sample(0);
   const scale = tgtLeg / legLength(first);
   const origin = first.get('hips')!.clone();
+  // 선 자세 엉덩이 높이 ≈ 다리 길이 × 1.09 (Rokoko 94/86.5, GRF 0.96/0.86). 구간 첫 프레임이 웅크린 자세여도 맞게
+  const standHip = legLength(first) * 1.09;
 
   const frames = Math.max(2, Math.round(source.duration * fps) + 1);
   const times: number[] = [];
@@ -112,7 +157,8 @@ export function bakeClip(source: PoseSource, model: THREE.Object3D, opts: BakeOp
 
     // 엉덩이: 위치 + 몸통 방향
     const hp = p.get('hips')!.clone().sub(origin).multiplyScalar(scale);
-    if (opts.inPlace) hp.x = hp.z = 0;
+    // 제자리: 수평 이동은 게임이 맡고, 높이는 '서 있을 때 엉덩이 높이' 대비 비율로 (앉기·눕기 유지)
+    if (opts.inPlace) hp.set(0, hipsRestWorld.y * (p.get('hips')!.y / standHip - 1), 0);
     const world = hipsRestWorld.clone().add(hp);
     hips.position.copy(hips.parent!.worldToLocal(world.clone()));
     const hipBasis = basis(v1.subVectors(p.get('lHip')!, p.get('rHip')!), v2.subVectors(p.get('chest')!, p.get('hips')!), new THREE.Quaternion());

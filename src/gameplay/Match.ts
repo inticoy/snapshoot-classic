@@ -19,6 +19,8 @@ import { Keepers } from './Keepers';
 import { Rules, type Card } from './Rules';
 import { Shootout } from './Shootout';
 import { Officials } from './Officials';
+import { planKick } from './Motions';
+import type { MotionKind } from '../anim/MotionLibrary';
 
 export type Phase = 'kickoff' | 'playing' | 'out' | 'setpiece' | 'goal' | 'halftime' | 'shootout' | 'fulltime';
 
@@ -94,6 +96,11 @@ export interface MatchOptions {
   userControl?: boolean;
   /** 무승부면 승부차기 (기본: 설정값) */
   shootout?: boolean;
+  /**
+   * 킥 동작: 버튼을 뗀 뒤 동작에 맞춰 몸 방향을 정하고 발이 닿는 순간에 공이 나간다 (기본 켜짐).
+   * 끄면 예전처럼 즉시 찬다 (기존 물리·조작 테스트용)
+   */
+  kickMotion?: boolean;
 }
 
 export class Match {
@@ -137,6 +144,8 @@ export class Match {
   passTarget: Player | null = null;
   lastScorer: Player | null = null;
   private kickoffTeam: 0 | 1 = 0;
+  /** 킥 동작 중 공이 발에 닿기까지 남은 시간과 그때 실행할 킥 */
+  private readonly windups = new Map<Player, { timer: number; run: () => void }>();
   private dribbleTouch = 0;
 
   constructor(private readonly physics: PhysicsWorld, private readonly options: MatchOptions = {}) {
@@ -224,6 +233,7 @@ export class Match {
     this.passTarget = null;
     this.setPieces.current = null;
     this.rules.clearPlay();
+    this.windups?.clear();
     this.officials?.reset();
     for (const p of this.players) {
       const a = p.attackDir;
@@ -320,6 +330,52 @@ export class Match {
     this.officials.update(dt);
   }
 
+  /** 킥 동작 진행: 발이 닿는 순간 공이 아직 발 앞에 있으면 찬다 (그 사이 뺏기면 취소) */
+  private updateWindups(dt: number): void {
+    for (const [p, w] of this.windups) {
+      p.vel.multiplyScalar(Math.exp(-4 * dt)); // 차는 동안 속도가 준다
+      w.timer -= dt;
+      if (w.timer > 0) continue;
+      this.windups.delete(p);
+      const bp = this.ball.position;
+      const atFeet = this.ball.owner === p || (!this.ball.owner && Math.hypot(bp.x - p.pos.x, bp.z - p.pos.z) < 1.6);
+      if (atFeet) w.run();
+    }
+  }
+
+  /** 지금 킥 동작 중인지 (입력·AI 판단을 막는다) */
+  kicking(p: Player): boolean {
+    return this.windups.has(p);
+  }
+
+  cancelWindups(): void {
+    this.windups.clear();
+  }
+
+  /**
+   * 동작 라이브러리에서 상황에 맞는 킥 동작을 골라 재생하고, 터치 순간에 run(실제 킥)을 실행한다.
+   * instant면 동작만 맞추고 바로 찬다 (PK처럼 키퍼 반응을 차는 순간에 정해야 할 때)
+   */
+  private withKickMotion(p: Player, kind: MotionKind, vel: CANNON.Vec3, run: () => void, instant = false): void {
+    if (this.windups.has(p)) return;
+    const foot = this.kicks.footFactor(p).side === 1 ? 'R' : 'L';
+    const plan = this.options.kickMotion !== false ? planKick(p, kind, vel.x, vel.z, foot, this.random.next()) : null;
+    if (!plan) {
+      run();
+      return;
+    }
+    const windup = instant ? 0 : plan.windup;
+    p.facing.set(Math.sin(plan.facing), 0, Math.cos(plan.facing));
+    p.facingLock = windup + 0.35;
+    p.playMotion(plan.entry, plan.entry.key - windup);
+    if (windup <= 0) {
+      run();
+      return;
+    }
+    p.actionLock = Math.max(p.actionLock, windup);
+    this.windups.set(p, { timer: windup, run });
+  }
+
   private endHalf(): void {
     this.charge = null;
     this.queued = null;
@@ -397,6 +453,7 @@ export class Match {
     if (this.phase !== 'playing') return; // 반칙 휘슬
     this.rules.update(dt);
     if (this.phase !== 'playing') return; // 어드밴티지 무효 → 프리킥
+    this.updateWindups(dt);
     this.carryBall(dt);
     this.stepWorld(dt);
     this.deflectOffBodies();
@@ -635,7 +692,7 @@ export class Match {
     }
 
     // 파워 게이지: D 슛 / S 패스 / W 스루 / A 로빙. Z = 감아차기, Q = 칩슛 / 로빙 스루
-    if (attacking && !this.charge) {
+    if (attacking && !this.charge && !this.windups.has(p)) {
       for (const kind of KICK_KINDS) {
         if (cmd[kind].pressed && !(kind === 'through' && this.keeperRush)) {
           this.charge = { kind, value: 0, finesse: cmd.finesse.held, chip: cmd.modifier.held };
@@ -758,37 +815,46 @@ export class Match {
   // ---------------------------------------------------------------- 액션
 
   /** 슛. charge 0..1, aim = 입력 방향. 파워가 너무 세면 공이 뜬다 (FIFA식) */
-  shoot(p: Player, charge: number, finesse: boolean, aim: THREE.Vector3): void {
-    this.applyShot(p, this.kicks.shot(p, charge, finesse, aim, this.assistFor(p, 'shot')));
+  shoot(p: Player, charge: number, finesse: boolean, aim: THREE.Vector3, instant = false): void {
+    if (this.windups.has(p)) return;
+    this.applyShot(p, this.kicks.shot(p, charge, finesse, aim, this.assistFor(p, 'shot')), instant);
   }
 
-  private applyShot(p: Player, r: KickResult): void {
-    this.kickBall(p, r.vel, r.spin);
-    this.ball.newShot(p);
-    this.stats.shots[p.team]++;
-    this.passTarget = null;
+  private applyShot(p: Player, r: KickResult, instant = false): void {
+    this.withKickMotion(p, 'shot', r.vel, () => {
+      this.kickBall(p, r.vel, r.spin);
+      this.ball.newShot(p);
+      this.stats.shots[p.team]++;
+      this.passTarget = null;
+    }, instant);
   }
 
   /** 패스. short = 땅볼, through = 침투 공간으로, lob = 띄워서, lobThrough = 띄운 스루 */
   pass(p: Player, dir: THREE.Vector3, kind: PassKind = 'short', charge = 0.5): void {
+    if (this.windups.has(p)) return;
     const r = this.kicks.pass(p, dir, kind, charge, this.assistFor(p, 'pass'));
-    this.kickBall(p, r.vel, r.spin);
-    this.rules.recordPass(p);
-    this.ball.shot = null;
-    this.passTarget = r.receiver;
-    this.stats.passes[p.team]++;
-    this.pendingPass = p.team;
-    if (r.receiver && p.team === 0 && !r.receiver.isKeeper) {
-      this.controlled = r.receiver;
-      this.receiveTimer = 0;
-    }
+    this.withKickMotion(p, kind === 'lob' || kind === 'lobThrough' ? 'lob' : 'pass', r.vel, () => {
+      this.kickBall(p, r.vel, r.spin);
+      this.rules.recordPass(p);
+      this.ball.shot = null;
+      this.passTarget = r.receiver;
+      this.stats.passes[p.team]++;
+      this.pendingPass = p.team;
+      if (r.receiver && p.team === 0 && !r.receiver.isKeeper) {
+        this.controlled = r.receiver;
+        this.receiveTimer = 0;
+      }
+    });
   }
 
   private kickBall(p: Player, vel: CANNON.Vec3, spin: CANNON.Vec3): void {
     // 공이 몸의 오른쪽에 있으면 오른발로 찬다
-    const { side } = this.kicks.footFactor(p);
-    p.facing.set(vel.x, 0, vel.z).normalize();
-    p.playAction('kick', 0.4, { side });
+    // 킥 동작(모션)이 몸 방향을 정했으면 그대로 두고, 아니면 공 방향으로 돌려 코드 오버레이로 찬다
+    if (p.facingLock <= 0) {
+      const { side } = this.kicks.footFactor(p);
+      p.facing.set(vel.x, 0, vel.z).normalize();
+      p.playAction('kick', 0.4, { side });
+    }
     // 들고 있던 공(키퍼)은 발 앞에서 출발
     if (this.ball.position.y > 0.5 && p.isKeeper) {
       this.ball.body.position.set(p.pos.x + p.facing.x * 0.6, 0.9, p.pos.z + p.facing.z * 0.6);
@@ -871,6 +937,7 @@ export class Match {
         const foul = this.rules.judgeTackle(p, o, success, o.facing.dot(p.tackleDir));
         if (foul) {
           o.stunned = 0.55;
+          o.fall();
           o.basePose = null;
           if (o.team === 0) this.charge = null;
           this.rules.call(foul, !success);
@@ -880,6 +947,7 @@ export class Match {
         if (success) {
           this.stats.tackles[p.team]++;
           o.stunned = 0.55;
+          if (p.tackleKind === 'slide') o.fall();
           o.basePose = null;
           if (o.team === 0) this.charge = null;
           if (p.tackleKind === 'stand') {
