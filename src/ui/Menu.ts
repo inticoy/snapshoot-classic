@@ -1,4 +1,5 @@
 import { TEAMS } from '../data/Teams';
+import { STAT_LABELS, faceStats } from '../data/Stats';
 import type { MatchStats } from '../gameplay/Match';
 
 export interface MenuItem {
@@ -209,4 +210,85 @@ export function statsPanel(stats: MatchStats, score: [number, number], title: st
           .join('')}
       </div>
     </div>`;
+}
+
+// ---------------------------------------------------------------- 능력치
+
+const STAT_GROUPS: [string, (keyof typeof STAT_LABELS)[]][] = [
+  ['속도', ['sprintSpeed', 'acceleration']],
+  ['슈팅', ['finishing', 'shotPower', 'longShots', 'curve']],
+  ['패스', ['shortPassing', 'longPassing', 'vision']],
+  ['드리블', ['dribbling', 'ballControl', 'agility', 'balance', 'reactions', 'composure']],
+  ['수비', ['defAwareness', 'standingTackle', 'slidingTackle', 'interceptions']],
+  ['피지컬', ['strength', 'stamina']],
+  ['골키퍼', ['diving', 'handling', 'kicking', 'reflexes', 'positioning']],
+];
+
+function statTier(v: number): string {
+  return v >= 85 ? 'elite' : v >= 75 ? 'good' : v >= 60 ? 'mid' : 'low';
+}
+
+export function playerCard(team: 0 | 1, index: number): string {
+  const p = TEAMS[team].players[index];
+  const keeper = p.pos === 'GK';
+  const face = faceStats(p.stats, keeper);
+  return `
+    <div class="pcard ${team === 0 ? 'home' : 'away'}">
+      <div class="pcard-top"><b>${p.ovr}</b><span>${p.pos}</span></div>
+      <div class="pcard-name">${p.short}</div>
+      <div class="pcard-face">${face.map(([k, v]) => `<div><b>${v}</b><span>${k}</span></div>`).join('')}</div>
+      <div class="pcard-meta"><span>${p.foot === 'L' ? '왼발' : '오른발'}</span><span>약발 ${'★'.repeat(p.weakFoot)}</span><span>개인기 ${'★'.repeat(p.skill)}</span></div>
+    </div>`;
+}
+
+export function playerDetailPanel(team: 0 | 1, index: number): string {
+  const p = TEAMS[team].players[index];
+  const groups = STAT_GROUPS.filter(([g]) => (p.pos === 'GK' ? true : g !== '골키퍼'));
+  const rows = groups
+    .map(([g, keys]) => {
+      const items = keys
+        .map((k) => {
+          const v = (p.stats as Partial<Record<keyof typeof STAT_LABELS, number>>)[k];
+          if (v === undefined) return '';
+          return `<li><span>${STAT_LABELS[k]}</span><i><em class="${statTier(v)}" style="width:${v}%"></em></i><b class="${statTier(v)}">${v}</b></li>`;
+        })
+        .join('');
+      return `<div class="sgroup"><h4>${g}</h4><ul>${items}</ul></div>`;
+    })
+    .join('');
+  return `
+    <div class="card detail">
+      ${playerCard(team, index)}
+      <div class="sgroups">${rows}</div>
+    </div>`;
+}
+
+export function squadPanel(): string {
+  return `
+    <div class="card">
+      <h3>SQUADS</h3>
+      ${([0, 1] as const)
+        .map(
+          (t) => `<div class="squad-row"><div class="squad-team">${TEAMS[t].name.toUpperCase()}</div><div class="squad-cards">${[0, 1, 2]
+            .map((i) => playerCard(t, i))
+            .join('')}</div></div>`,
+        )
+        .join('')}
+    </div>`;
+}
+
+export function assistPanel(kind: 'pass' | 'shot'): string {
+  const pass = `
+    <h3>PASS ASSISTANCE</h3>
+    <p><b>보조</b> · 방향키 쪽 넓은 범위에서 동료를 찾아 방향과 세기를 자동으로 맞춥니다.<br/>
+    <b>세미</b> · 좁은 범위의 동료에게 방향과 세기를 맞추지만, 게이지에 따라 세기가 조금 달라집니다.<br/>
+    <b>수동</b> · 방향키와 게이지 그대로. 동료가 없어도 원하는 곳으로 찰 수 있습니다.</p>
+    <p style="margin-top:10px">어떤 설정이든 <b>짧은 패스 · 긴 패스 · 시야</b> 능력치와 압박, 약발에 따라 오차가 생깁니다.</p>`;
+  const shot = `
+    <h3>SHOT ASSISTANCE</h3>
+    <p><b>보조</b> · 방향키를 어디로 두든 골문 안을 노립니다 (입력은 좌우 선택).<br/>
+    <b>세미</b> · 골문 근처까지만 보정. 방향을 잘못 주면 옆으로 빗나갑니다.<br/>
+    <b>수동</b> · 방향키 방향 그대로 찹니다.</p>
+    <p style="margin-top:10px">정확도는 <b>골 결정력</b>(박스 안) · <b>중거리 슛</b>(박스 밖) · <b>커브</b>(감아차기), 속도는 <b>슛 파워</b>. 압박·질주는 <b>침착성</b>이 버텨 줍니다.</p>`;
+  return `<div class="card">${kind === 'pass' ? pass : shot}</div>`;
 }

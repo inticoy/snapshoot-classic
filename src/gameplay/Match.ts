@@ -6,6 +6,9 @@ import { Goal } from '../entities/Goal';
 import { Player } from '../entities/Player';
 import type { PhysicsWorld } from '../physics/PhysicsWorld';
 import { TeamAI } from '../ai/TeamAI';
+import { Kicks, gauss, type KickResult, type PassKind } from './Kicks';
+import { settings, type AssistLevel } from '../core/Settings';
+import { n } from '../data/Stats';
 import type { ButtonState } from '../core/Input';
 import { TEAMS } from '../data/Teams';
 
@@ -61,12 +64,6 @@ const tmp2 = new THREE.Vector3();
 const cv = new CANNON.Vec3();
 const cspin = new CANNON.Vec3();
 
-export function gauss(): number {
-  // Box-Muller
-  const u = 1 - Math.random();
-  const v = Math.random();
-  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
-}
 
 export class Match {
   readonly players: Player[] = [];
@@ -76,6 +73,7 @@ export class Match {
   readonly score: [number, number] = [0, 0];
   readonly events: MatchEvent[] = [];
   readonly ai: TeamAI;
+  readonly kicks: Kicks;
 
   phase: Phase = 'kickoff';
   phaseTimer = 0;
@@ -109,6 +107,7 @@ export class Match {
     }
     this.controlled = this.teams[0][2];
     this.ai = new TeamAI(this);
+    this.kicks = new Kicks(this);
     this.setupBallCollisions();
     this.startKickoff(0);
   }
@@ -341,29 +340,15 @@ export class Match {
     else this.pass(p, dir, kind === 'pass' ? 'short' : kind, value);
   }
 
-  /** Q+D 칩슛: 키퍼 머리 위로 띄워서 크로스바 아래로 떨어뜨린다 */
+  /** 사용자 팀은 설정한 보정, AI는 항상 보조 (오차는 능력치로) */
+  assistFor(p: Player, kind: 'pass' | 'shot'): AssistLevel {
+    if (p.team !== 0) return 'assisted';
+    return kind === 'pass' ? settings.passAssist : settings.shotAssist;
+  }
+
+  /** Q+D 칩슛 */
   chipShot(p: Player, charge: number, aim: THREE.Vector3): void {
-    const goalX = this.oppGoalX(p.team);
-    const bp = this.ball.position;
-    const hw = GOAL.width / 2;
-    let targetZ = bp.z * 0.3;
-    if (aim.lengthSq() > 0.01 && aim.x * p.attackDir > 0.15) {
-      targetZ = THREE.MathUtils.clamp(bp.z + (aim.z / aim.x) * (goalX - bp.x), -hw + 0.5, hw - 0.5);
-    }
-    targetZ += gauss() * (0.3 + charge * 0.6);
-    const dist = Math.hypot(goalX - bp.x, targetZ - bp.z);
-    // 파워가 셀수록 더 높고 멀리 (너무 세면 넘어간다)
-    const T = 1.0 + dist * 0.06;
-    const landY = 0.9 + charge * 1.6 + gauss() * 0.2;
-    const g = -this.physics.world.gravity.y;
-    const vh = (dist / T) * (1 + dist * 0.008);
-    const vy = (landY - bp.y + 0.5 * g * T * T) / T;
-    tmp2.set(goalX - bp.x, 0, targetZ - bp.z).normalize();
-    cv.set(tmp2.x * vh, vy, tmp2.z * vh);
-    this.kickBall(p, cv, cspin.set(0, 0, 0));
-    this.ball.newShot(p);
-    this.stats.shots[p.team]++;
-    this.passTarget = null;
+    this.applyShot(p, this.kicks.chip(p, charge, aim, this.assistFor(p, 'shot')));
   }
 
   switchToNearest(): void {
@@ -382,167 +367,34 @@ export class Match {
 
   // ---------------------------------------------------------------- 액션
 
-  /**
-   * 슛. charge 0..1, aim = 입력 방향 (없으면 골문 중앙 근처).
-   * 파워가 너무 세면 공이 뜬다 (FIFA식).
-   */
+  /** 슛. charge 0..1, aim = 입력 방향. 파워가 너무 세면 공이 뜬다 (FIFA식) */
   shoot(p: Player, charge: number, finesse: boolean, aim: THREE.Vector3): void {
-    const goalX = this.oppGoalX(p.team);
-    const bp = this.ball.position;
-    const hw = GOAL.width / 2;
-    const toGoalX = goalX - bp.x;
+    this.applyShot(p, this.kicks.shot(p, charge, finesse, aim, this.assistFor(p, 'shot')));
+  }
 
-    let targetZ: number;
-    let targetX = goalX;
-    const dir = aim.lengthSq() > 0.01 ? aim.clone().normalize() : null;
-    if (dir && dir.x * p.attackDir > 0.15) {
-      const t = toGoalX / dir.x;
-      targetZ = THREE.MathUtils.clamp(bp.z + dir.z * t, -hw - 1.5, hw + 1.5);
-    } else if (dir && dir.x * p.attackDir <= 0.15 && Math.abs(toGoalX) > 25) {
-      // 골대 반대쪽을 보고 차면 그냥 그 방향으로 걷어낸다
-      targetX = bp.x + dir.x * 30;
-      targetZ = bp.z + dir.z * 30;
-    } else {
-      // 입력이 없으면 먼 쪽 포스트를 노린다
-      targetZ = (bp.z > 0 ? -1 : 1) * (hw - 0.9) * (0.3 + Math.random() * 0.7);
-    }
-
-    if (finesse) {
-      // 감아차기는 먼 쪽 포스트 안쪽
-      const side = dir && Math.abs(dir.z) > 0.25 ? Math.sign(dir.z) : bp.z > 0 ? -1 : 1;
-      targetZ = side * (hw - 0.55);
-    }
-
-    // 정확도: 파워가 셀수록, 스프린트 중일수록, 압박받을수록 흔들린다
-    const pressure = this.nearestOpponentDist(p) < 1.6 ? 0.35 : 0;
-    const spread = (finesse ? 0.25 : 0.2) + 0.9 * charge * charge + (p.sprinting ? 0.35 : 0) + pressure;
-    targetZ += gauss() * spread;
-
-    const speed = finesse
-      ? SHOT.finesseMinSpeed + (SHOT.finesseMaxSpeed - SHOT.finesseMinSpeed) * charge
-      : SHOT.minSpeed + (SHOT.maxSpeed - SHOT.minSpeed) * charge;
-    const targetY = THREE.MathUtils.clamp(
-      // 80% 이상 차지하면 급격히 뜬다 (크로스바 위로 넘어갈 위험)
-      (finesse ? 0.9 : 0.3) + 1.6 * charge * charge + Math.max(0, charge - 0.8) * 9 + gauss() * spread * 0.4,
-      0.15,
-      6,
-    );
-
-    const target = new THREE.Vector3(targetX, targetY, targetZ);
-    const horiz = new THREE.Vector3(target.x - bp.x, 0, target.z - bp.z);
-    const dist = horiz.length();
-    horiz.normalize();
-    // 공기 저항으로 느려지는 만큼 비행 시간을 늘려 잡는다
-    const T = (dist / speed) * (1 + dist * 0.008);
-    const g = -this.physics.world.gravity.y;
-
-    let launchDir = horiz.clone();
-    cspin.set(0, 0, 0);
-    if (finesse) {
-      // 마그누스 횡가속도만큼 반대쪽으로 겨냥하고, 회전으로 휘어 들어오게
-      const aLat = (BALL.magnus * SHOT.finesseSpin * speed) / BALL.mass;
-      const offset = Math.min(3.5, 0.5 * aLat * T * T * 0.8);
-      const lateral = new THREE.Vector3(-horiz.z, 0, horiz.x); // horiz 기준 왼쪽
-      const curlSide = Math.sign(targetZ - bp.z) * Math.sign(lateral.z) || 1;
-      // 목표에서 바깥쪽으로 offset 만큼 밀어서 출발
-      const aimPoint = target.clone().addScaledVector(lateral, -curlSide * offset);
-      launchDir = new THREE.Vector3(aimPoint.x - bp.x, 0, aimPoint.z - bp.z).normalize();
-      // F = s * (vz, 0, -vx) 가 lateral*curlSide 쪽을 향하도록 부호 결정
-      const fx = launchDir.z, fz = -launchDir.x;
-      const s = Math.sign(fx * lateral.x * curlSide + fz * lateral.z * curlSide) || 1;
-      cspin.set(0, s * SHOT.finesseSpin, 0);
-    }
-
-    const vy = (targetY - bp.y + 0.5 * g * T * T) / T;
-    cv.set(launchDir.x * speed, Math.max(0.5, vy), launchDir.z * speed);
-    this.kickBall(p, cv, cspin);
+  private applyShot(p: Player, r: KickResult): void {
+    this.kickBall(p, r.vel, r.spin);
     this.ball.newShot(p);
     this.stats.shots[p.team]++;
     this.passTarget = null;
   }
 
-  /**
-   * 패스. short = 땅볼 패스, through = 동료가 달려갈 앞 공간으로, lob = 띄워서.
-   * charge(0..1)는 세기/거리에 반영된다.
-   */
-  pass(p: Player, dir: THREE.Vector3, kind: 'short' | 'through' | 'lob' | 'lobThrough' = 'short', charge = 0.5): void {
-    const d = dir.clone().setY(0).normalize();
-    let best: Player | null = null;
-    let bestScore = Infinity;
-    for (const m of this.teams[p.team]) {
-      if (m === p) continue;
-      tmp.copy(m.pos).sub(p.pos).setY(0);
-      const dist = tmp.length();
-      if (dist < 2) continue;
-      const angle = tmp.normalize().angleTo(d);
-      if (angle > 1.25) continue;
-      // 키퍼에게 백패스는 정말 그 방향일 때만
-      const keeperPenalty = m.isKeeper ? (kind === 'short' ? 1.2 : 9) : 0;
-      const forward = (m.pos.x - p.pos.x) * p.attackDir;
-      const aerial = kind === 'lob' || kind === 'lobThrough';
-      const throughBall = kind === 'through' || kind === 'lobThrough';
-      const blocked = aerial ? 0 : this.laneBlocked(p, m) * 1.5;
-      const score = angle * 2.2 + dist * 0.03 + keeperPenalty + blocked - (throughBall ? forward * 0.04 : 0);
-      if (score < bestScore) {
-        bestScore = score;
-        best = m;
-      }
-    }
-
-    const bp = this.ball.position;
-    const g = -this.physics.world.gravity.y;
-    let tx: number, tz: number;
-    if (best) {
-      if (kind === 'through' || kind === 'lobThrough') {
-        // 받는 선수가 상대 골대 쪽으로 뛰어들어갈 공간
-        const run = new THREE.Vector3(p.attackDir, 0, 0).lerp(d, 0.35).normalize();
-        const lead = 3 + 9 * charge;
-        tx = best.pos.x + run.x * lead;
-        tz = best.pos.z + run.z * lead;
-      } else {
-        const dist = best.pos.distanceTo(tmp.set(bp.x, 0, bp.z));
-        const lead = kind === 'lob' ? 0.75 + dist * 0.035 : dist / 14;
-        tx = best.pos.x + best.vel.x * lead * 0.85;
-        tz = best.pos.z + best.vel.z * lead * 0.85;
-      }
-    } else {
-      // 받을 사람이 없으면 그 방향 빈 공간으로
-      const dist = kind === 'lob' || kind === 'lobThrough' ? 12 + 25 * charge : 8 + 14 * charge;
-      tx = bp.x + d.x * dist;
-      tz = bp.z + d.z * dist;
-    }
-    // 경기장 안쪽으로 제한
-    tx = THREE.MathUtils.clamp(tx, -PITCH.halfL + 1, PITCH.halfL - 1);
-    tz = THREE.MathUtils.clamp(tz, -PITCH.halfW + 1, PITCH.halfW - 1);
-
-    const D = Math.hypot(tx - bp.x, tz - bp.z);
-    tmp2.set(tx - bp.x, 0, tz - bp.z).normalize();
-    if (kind === 'lob' || kind === 'lobThrough') {
-      // 목표 지점에 떨어지도록 체공 시간으로 역산 (로빙 스루는 낮고 빠르게)
-      const T = kind === 'lob' ? 0.75 + D * 0.035 : 0.6 + D * 0.026;
-      const vh = (D / T) * (1 + D * 0.006) * (0.9 + 0.2 * charge);
-      cv.set(tmp2.x * vh, 0.5 * g * T, tmp2.z * vh);
-    } else {
-      const base = kind === 'through' ? 7 + D * 0.62 : 6 + D * 0.72;
-      const speed = THREE.MathUtils.clamp(base * (0.85 + 0.35 * charge), PASS.minSpeed, PASS.maxSpeed + 2);
-      cv.set(tmp2.x * speed, D > 22 ? 2.2 : 0.4, tmp2.z * speed);
-    }
-    this.kickBall(p, cv, cspin.set(0, 0, 0));
+  /** 패스. short = 땅볼, through = 침투 공간으로, lob = 띄워서, lobThrough = 띄운 스루 */
+  pass(p: Player, dir: THREE.Vector3, kind: PassKind = 'short', charge = 0.5): void {
+    const r = this.kicks.pass(p, dir, kind, charge, this.assistFor(p, 'pass'));
+    this.kickBall(p, r.vel, r.spin);
     this.ball.shot = null;
-    this.passTarget = best;
+    this.passTarget = r.receiver;
     this.stats.passes[p.team]++;
     this.pendingPass = p.team;
-    if (best && p.team === 0 && !best.isKeeper) this.controlled = best;
+    if (r.receiver && p.team === 0 && !r.receiver.isKeeper) this.controlled = r.receiver;
   }
 
   private kickBall(p: Player, vel: CANNON.Vec3, spin: CANNON.Vec3): void {
-    // 공을 찬 발 쪽 결정 (공이 몸의 오른쪽인지 왼쪽인지)
-    tmp.set(this.ball.position.x - p.pos.x, 0, this.ball.position.z - p.pos.z);
-    const right = new THREE.Vector3(-p.facing.z, 0, p.facing.x);
+    // 공이 몸의 오른쪽에 있으면 오른발로 찬다
+    const { side } = this.kicks.footFactor(p);
     p.facing.set(vel.x, 0, vel.z).normalize();
-    p.playAction('kick', 0.4, {
-      side: tmp.dot(right) > 0 ? -1 : 1,
-    });
+    p.playAction('kick', 0.4, { side });
     // 들고 있던 공(키퍼)은 발 앞에서 출발
     if (this.ball.position.y > 0.5 && p.isKeeper) {
       this.ball.body.position.set(p.pos.x + p.facing.x * 0.6, 0.9, p.pos.z + p.facing.z * 0.6);
@@ -589,7 +441,11 @@ export class Match {
     // 스프린트 중에는 공을 조금 더 멀리 치고 나간다 (터치)
     this.dribbleTouch += dt * (2 + Math.hypot(o.vel.x, o.vel.z) * 0.5);
     const speed = Math.hypot(o.vel.x, o.vel.z);
-    const reach = PLAYER.dribbleOffset + (o.sprinting ? 0.3 : 0) + Math.max(0, Math.sin(this.dribbleTouch * Math.PI)) * 0.08 * Math.min(1, speed / 3);
+    const st = o.profile.stats;
+    const reach =
+      PLAYER.dribbleOffset + 0.08 - 0.16 * n(st.ballControl) +
+      (o.sprinting ? 0.18 + 0.25 * (1 - n(st.dribbling)) : 0) +
+      Math.max(0, Math.sin(this.dribbleTouch * Math.PI)) * 0.08 * Math.min(1, speed / 3);
     tmp.copy(o.pos).addScaledVector(o.facing, reach);
     cv.set(tmp.x, 0, tmp.z);
     this.ball.carry(cv, o.cannonVel, dt);
@@ -606,7 +462,13 @@ export class Match {
       if (o && o.team !== p.team) {
         // 정면 태클이 성공률이 높다
         const facingDot = -o.facing.dot(p.tackleDir);
-        const chance = (p.tackleKind === 'stand' ? 0.38 : 0.42) + 0.33 * Math.max(0, facingDot);
+        const ts = p.profile.stats, os = o.profile.stats;
+        const tackleSkill =
+          p.tackleKind === 'stand'
+            ? n(ts.standingTackle) * 0.6 + n(ts.defAwareness) * 0.4
+            : n(ts.slidingTackle) * 0.8 + n(ts.defAwareness) * 0.2;
+        const evade = n(os.dribbling) * 0.4 + n(os.balance) * 0.35 + n(os.strength) * 0.25;
+        const chance = THREE.MathUtils.clamp(0.22 + 0.5 * tackleSkill - 0.28 * evade + 0.3 * Math.max(0, facingDot), 0.08, 0.92);
         const success = Math.random() < chance;
         p.tackleResolved = true;
         p.tackleTimer = Math.min(p.tackleTimer, 0.08);
@@ -662,18 +524,31 @@ export class Match {
         continue;
       }
       if (bp.y > 1.0) continue;
+      const st = p.profile.stats;
       this.footPoint(p, tmp);
       const d = Math.hypot(bp.x - tmp.x, bp.z - tmp.z);
-      if (d > PLAYER.controlRadius) continue;
+      const intercepting = this.pendingPass !== null && this.pendingPass !== p.team;
+      const radius = PLAYER.controlRadius - 0.06 + 0.14 * n(st.reactions) + (intercepting ? 0.3 * n(st.interceptions) : 0);
+      if (d > radius) continue;
       // 너무 빠른 공은 트래핑 실패 (몸에 맞고 튕김)
       const rel = Math.hypot(bv.x - p.vel.x, bv.z - p.vel.z);
-      if (rel > 19) continue;
+      if (rel > 13 + 9 * n(st.ballControl)) continue;
       if (d < bestD) {
         best = p;
         bestD = d;
       }
     }
     if (!best) return;
+    // 볼 컨트롤이 낮으면 빠른 공을 받을 때 터치가 길어진다 (헤비 터치)
+    const rel = Math.hypot(bv.x - best.vel.x, bv.z - best.vel.z);
+    if (!best.isKeeper && rel > 9 && Math.random() < (1 - n(best.profile.stats.ballControl)) * 0.7) {
+      const push = 2.5 + rel * 0.15;
+      cv.set(best.facing.x * push + bv.x * 0.15, 0.3, best.facing.z * push + bv.z * 0.15);
+      this.ball.kick(cv, cspin.set(0, 0, 0), best);
+      this.ball.shot = null;
+      best.kickCooldown = 0.22;
+      return;
+    }
     this.gainPossession(best);
   }
 
@@ -745,8 +620,11 @@ export class Match {
         if (a.tackleTimer > 0 || b.tackleTimer > 0 || a.diveTimer > 0 || b.diveTimer > 0) continue;
         const push = (minD - d) / 2;
         const nx = dx / d, nz = dz / d;
-        // 공을 가진 선수가 조금 더 버틴다
-        const wa = this.ball.owner === a ? 0.35 : this.ball.owner === b ? 1.65 : 1;
+        // 몸싸움/밸런스가 좋을수록, 공을 가진 선수일수록 덜 밀린다
+        const mass = (q: Player) =>
+          (0.6 + n(q.profile.stats.strength) + 0.4 * n(q.profile.stats.balance)) * (this.ball.owner === q ? 1.8 : 1);
+        const ma = mass(a), mb = mass(b);
+        const wa = (2 * mb) / (ma + mb);
         const wb = 2 - wa;
         a.pos.x -= nx * push * wa;
         a.pos.z -= nz * push * wa;
@@ -823,7 +701,8 @@ export class Match {
       const dx = bp.x - gx;
       const dz = bp.z;
       const dist = Math.hypot(dx, dz);
-      const out = THREE.MathUtils.clamp(dist * 0.1, 0.5, 3.2);
+      const gs = k.profile.stats;
+      const out = THREE.MathUtils.clamp(dist * (0.07 + 0.05 * n(gs.positioning ?? 60)), 0.5, 3.2);
       targetX = gx + (dx / dist) * out;
       targetZ = (dz / dist) * out;
       targetZ = THREE.MathUtils.clamp(targetZ, -GOAL.width / 2 + 0.3, GOAL.width / 2 - 0.3);
@@ -846,7 +725,9 @@ export class Match {
     const lofted = !!this.ball.shot && bp.y > 2.2 && bv.y > -1;
     const backpedal = (targetX - k.pos.x) * a < 0;
     const scale = lofted && backpedal ? 0.35 : 1;
-    k.steer(tmp, urgent, false, dt, (KEEPER.speed / PLAYER.jogSpeed) * scale);
+    // GK 다이빙 능력치가 좌우 이동 속도에도 반영된다
+    const agility = 0.88 + 0.22 * n(k.profile.stats.diving ?? 60);
+    k.steer(tmp, urgent, false, dt, (KEEPER.speed / PLAYER.jogSpeed) * scale * agility);
     // 키퍼는 항상 공을 바라본다
     if (!urgent || d < 1) k.faceTowards(bp.x, bp.z);
   }
@@ -860,7 +741,8 @@ export class Match {
     const gx = this.ownGoalX(k.team);
     const behind = Math.abs(gx - k.pos.x) - Math.abs(gx - bp.x);
     if (behind > 0.35) return;
-    const reach = k.diveTimer > 0 ? KEEPER.diveReach : KEEPER.reach;
+    const gs = k.profile.stats;
+    const reach = k.diveTimer > 0 ? KEEPER.diveReach * (0.85 + 0.25 * n(gs.diving ?? 60)) : KEEPER.reach;
     // 다이빙 중에는 몸이 옆으로 누워 있으므로 손 위치는 다이빙 방향
     const hx = k.pos.x + (k.diveTimer > 0 ? k.diveVel.x * 0.12 : 0);
     const hz = k.pos.z + (k.diveTimer > 0 ? Math.sign(k.diveVel.z) * 0.6 : 0);
@@ -874,7 +756,8 @@ export class Match {
     // 위에서 떨어지는 공은 잡기 어렵다
     const dropping = this.ball.velocity.y < -3 ? 0.3 : 0;
     const chance = THREE.MathUtils.clamp(
-      1.28 - speed / 30 - placement * 0.45 - curling - dropping - (d > KEEPER.reach ? 0.12 : 0),
+      1.28 - speed / 30 - placement * 0.45 - curling - dropping - (d > KEEPER.reach ? 0.12 : 0) +
+        (n(gs.reflexes ?? 60) - 0.7) * 0.4 + (n(gs.positioning ?? 60) - 0.7) * 0.15,
       0.15,
       0.95,
     );
@@ -882,7 +765,9 @@ export class Match {
     this.stats.onTarget[shot.by.team]++;
 
     const a = k.attackDir;
-    if (speed < 17 && Math.random() < 0.75) {
+    // GK 핸들링이 좋을수록 빠른 슛도 잡아낸다 (아니면 쳐낸다)
+    const handling = n(gs.handling ?? 60);
+    if (speed < 13 + 7 * handling && Math.random() < 0.45 + 0.45 * handling) {
       // 캐치
       this.ball.owner = k;
       this.ball.lastTouch = k;

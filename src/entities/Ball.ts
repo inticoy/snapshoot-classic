@@ -110,8 +110,13 @@ export class Ball {
     // 띄우는 킥은 지면 접촉을 떼어야 첫 프레임 마찰로 속도를 잃지 않는다
     if (velocity.y > 1 && this.body.position.y < BALL.radius + 0.03) this.body.position.y = BALL.radius + 0.03;
     this.body.velocity.copy(velocity);
-    // 사이드스핀만 준다 (굴림 회전은 지면 마찰이 만들어 준다)
     this.body.angularVelocity.copy(spin);
+    // 땅볼은 처음부터 굴러가는 회전을 준다. 회전 없이 미끄러지면 지면 마찰이
+    // 미끄러짐 → 구름 전환 과정에서 속도의 약 1/3을 빼앗는다
+    if (velocity.y < 1.5) {
+      this.body.angularVelocity.x += velocity.z / BALL.radius;
+      this.body.angularVelocity.z += -velocity.x / BALL.radius;
+    }
     this.body.wakeUp();
   }
 

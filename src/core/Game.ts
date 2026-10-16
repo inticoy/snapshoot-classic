@@ -6,7 +6,8 @@ import { Stadium } from '../environment/Stadium';
 import { Match, type UserCommand } from '../gameplay/Match';
 import { CameraRig } from '../camera/CameraRig';
 import { Hud } from '../ui/Hud';
-import { Menu, controlsPanel, matchupPanel, statsPanel, type MenuScreen } from '../ui/Menu';
+import { Menu, assistPanel, controlsPanel, matchupPanel, playerDetailPanel, squadPanel, statsPanel, type MenuScreen } from '../ui/Menu';
+import { ASSIST_LABEL, cycleAssist, settings } from './Settings';
 import { Sound } from '../audio/Sound';
 import { TEAMS } from '../data/Teams';
 
@@ -32,6 +33,7 @@ export class Game {
   private accumulator = 0;
   private last = performance.now();
   private durationIndex = 1;
+  private playerIndex = 2;
   private readonly cmd: UserCommand = {
     move: new THREE.Vector3(),
     sprint: false,
@@ -66,7 +68,7 @@ export class Game {
     void this.match.ball.load('assets/ball/basic.glb');
 
     // 개발 중 콘솔에서 상태를 들여다보기 위한 훅
-    if (import.meta.env.DEV) (window as unknown as { __game: unknown }).__game = { match: this.match, game: this };
+    if (import.meta.env.DEV) (window as unknown as { __game: unknown }).__game = { match: this.match, game: this, settings };
 
     this.marker = this.createMarker();
     this.scene.add(this.marker);
@@ -94,7 +96,35 @@ export class Game {
   // ---------------------------------------------------------------- 메뉴
 
   private settingsItems(): MenuScreen['items'] {
+    const players = ([0, 1] as const).flatMap((t) => [0, 1, 2].map((i) => [t, i] as [0 | 1, number]));
+    const cur = () => players[this.playerIndex];
+    const step = (d: number) => (this.playerIndex = (this.playerIndex + d + players.length) % players.length);
     return [
+      {
+        id: 'passAssist',
+        label: '패스 보조',
+        value: () => ASSIST_LABEL[settings.passAssist],
+        onLeft: () => cycleAssist('passAssist', -1),
+        onRight: () => cycleAssist('passAssist', 1),
+        panel: () => assistPanel('pass'),
+      },
+      {
+        id: 'shotAssist',
+        label: '슛 보조',
+        value: () => ASSIST_LABEL[settings.shotAssist],
+        onLeft: () => cycleAssist('shotAssist', -1),
+        onRight: () => cycleAssist('shotAssist', 1),
+        panel: () => assistPanel('shot'),
+      },
+      {
+        id: 'player',
+        label: '선수 능력치',
+        value: () => TEAMS[cur()[0]].players[cur()[1]].short,
+        onLeft: () => step(-1),
+        onRight: () => step(1),
+        panel: () => playerDetailPanel(...cur()),
+      },
+      { id: 'squad', label: '스쿼드', panel: squadPanel, onSelect: () => {} },
       {
         id: 'camera',
         label: '카메라',

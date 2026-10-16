@@ -464,3 +464,50 @@ kbd {
 .loading-bar { width: 220px; height: 3px; background: rgba(255, 255, 255, 0.1); overflow: hidden; border-radius: 2px; }
 .loading-bar i { display: block; width: 40%; height: 100%; background: var(--accent); animation: loading 1s ease-in-out infinite; }
 @keyframes loading { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
+
+/* ---------- 선수 카드 / 능력치 ---------- */
+.pcard {
+  position: relative;
+  width: 168px;
+  flex-shrink: 0;
+  padding: 12px 14px 10px;
+  border-radius: 10px;
+  background: linear-gradient(160deg, #2a2f3d 0%, #11151d 70%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+.pcard::before { content: ''; position: absolute; inset: 0 auto 0 0; width: 4px; background: var(--home); }
+.pcard.away::before { background: #8fa3ff; }
+.pcard-top { display: flex; align-items: baseline; gap: 8px; }
+.pcard-top b { font-weight: 900; font-size: 38px; line-height: 1; color: var(--warn); }
+.pcard-top span { font-weight: 800; font-size: 16px; letter-spacing: 0.1em; color: var(--muted); }
+.pcard-name { font-weight: 800; font-size: 19px; letter-spacing: 0.05em; margin: 4px 0 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pcard-face { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px 6px; }
+.pcard-face div { display: flex; align-items: baseline; gap: 5px; }
+.pcard-face b { font-weight: 800; font-size: 18px; font-variant-numeric: tabular-nums; }
+.pcard-face span { font-weight: 700; font-size: 11px; letter-spacing: 0.08em; color: var(--muted); }
+.pcard-meta { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 4px 8px; font-family: var(--font-ko); font-size: 10.5px; color: #c7cede; }
+.pcard-meta span { color: #c7cede; }
+
+.card.detail { display: flex; gap: 22px; align-items: flex-start; }
+.sgroups { flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 14px 22px; min-width: 0; }
+.sgroup h4 { font-weight: 800; font-style: italic; letter-spacing: 0.12em; color: var(--accent); font-size: 13px; margin-bottom: 6px; font-family: var(--font-ko); }
+.sgroup ul { list-style: none; display: flex; flex-direction: column; gap: 5px; }
+.sgroup li { display: grid; grid-template-columns: 76px 1fr 26px; align-items: center; gap: 8px; font-family: var(--font-ko); font-size: 12.5px; color: #dfe4ee; }
+.sgroup li i { height: 5px; border-radius: 3px; background: rgba(255, 255, 255, 0.08); overflow: hidden; }
+.sgroup li em { display: block; height: 100%; }
+.sgroup li b { font-family: var(--font); font-weight: 800; font-size: 15px; text-align: right; font-variant-numeric: tabular-nums; }
+.elite { color: var(--accent); } em.elite { background: var(--accent); }
+.good { color: #a6e86b; } em.good { background: #a6e86b; }
+.mid { color: var(--warn); } em.mid { background: var(--warn); }
+.low { color: #ff7b6e; } em.low { background: #ff7b6e; }
+
+.squad-row + .squad-row { margin-top: 16px; }
+.squad-team { font-weight: 800; letter-spacing: 0.12em; color: var(--muted); font-size: 13px; margin-bottom: 8px; }
+.squad-cards { display: flex; gap: 10px; overflow-x: auto; }
+.card p b { color: #fff; }
+
+@media (max-width: 860px) {
+  .card.detail { flex-direction: column; }
+  .sgroups { grid-template-columns: 1fr; width: 100%; }
+}

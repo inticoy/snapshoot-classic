@@ -4,6 +4,7 @@ import { PITCH, PLAYER, TEAM_COLORS } from '../config';
 import { PlayerModel, type AnimState, type CharacterModel } from './PlayerModel';
 import { SkinnedPlayerModel, hasCharacterAsset } from './SkinnedPlayerModel';
 import type { PlayerProfile } from '../data/Teams';
+import { n, type OutfieldStats } from '../data/Stats';
 
 export type Role = 'GK' | 'DEF' | 'FWD';
 
@@ -60,11 +61,19 @@ export class Player {
     return this.tackleTimer > 0 || this.stunned > 0 || this.diveTimer > 0 || this.actionLock > 0;
   }
 
+  /** 능력치 0..1 */
+  stat(key: keyof OutfieldStats): number {
+    return n(this.profile.stats[key]);
+  }
+
   maxSpeed(hasBall: boolean): number {
-    let s = this.sprinting && this.stamina > 0.05 ? PLAYER.sprintSpeed : PLAYER.jogSpeed;
+    // 속력: 질주 최고 속도 (능력치 70 ≈ 7.6 m/s, 90 ≈ 8.4 m/s)
+    const sprint = PLAYER.sprintSpeed - 1.3 + 2.2 * this.stat('sprintSpeed');
+    let s = this.sprinting && this.stamina > 0.05 ? sprint : sprint * 0.72;
     // 스태미나가 떨어지면 느려진다
     s *= 0.8 + 0.2 * Math.min(1, this.stamina * 2);
-    if (hasBall) s *= PLAYER.dribbleSpeedFactor;
+    // 드리블: 공을 가지고 뛸 때 속도 손실
+    if (hasBall) s *= PLAYER.dribbleSpeedFactor - 0.08 + 0.13 * this.stat('dribbling');
     return s;
   }
 
@@ -76,12 +85,15 @@ export class Player {
     this.sprinting = sprint && desired.lengthSq() > 0.01;
     const target = desired.clone().multiplyScalar(this.maxSpeed(hasBall) * speedScale);
     const diff = target.sub(this.vel);
-    const rate = desired.lengthSq() > 0.01 ? PLAYER.accel : PLAYER.decel;
+    // 가속력: 출발/방향 전환 시 가속
+    const rate = desired.lengthSq() > 0.01 ? PLAYER.accel - 5 + 10 * this.stat('acceleration') : PLAYER.decel;
     const maxDelta = rate * dt;
     if (diff.length() > maxDelta) diff.setLength(maxDelta);
     this.vel.add(diff);
 
-    if (this.sprinting) this.stamina = Math.max(0, this.stamina - PLAYER.staminaDrain * dt);
+    // 스태미너: 질주 시 소모 속도
+    const drain = PLAYER.staminaDrain * (1.35 - 0.7 * this.stat('stamina'));
+    if (this.sprinting) this.stamina = Math.max(0, this.stamina - drain * dt);
     else this.stamina = Math.min(1, this.stamina + PLAYER.staminaRegen * dt);
   }
 
@@ -124,7 +136,9 @@ export class Player {
       const cur = Math.atan2(this.facing.x, this.facing.z);
       let d = targetAngle - cur;
       d = Math.atan2(Math.sin(d), Math.cos(d));
-      const turn = THREE.MathUtils.clamp(d, -PLAYER.turnRate * dt, PLAYER.turnRate * dt);
+      // 민첩성: 몸을 돌리는 속도
+      const turnRate = PLAYER.turnRate - 3 + 6 * this.stat('agility');
+      const turn = THREE.MathUtils.clamp(d, -turnRate * dt, turnRate * dt);
       const a = cur + turn;
       this.facing.set(Math.sin(a), 0, Math.cos(a));
     }

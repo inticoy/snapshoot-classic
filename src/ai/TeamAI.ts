@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { AI, GOAL, PITCH } from '../config';
 import type { Player } from '../entities/Player';
 import type { Match } from '../gameplay/Match';
+import { n } from '../data/Stats';
 
 interface Intent {
   target: THREE.Vector3;
@@ -39,7 +40,8 @@ export class TeamAI {
       if (p.isKeeper || m.isUserControlled(p)) continue;
       let t = this.timers.get(p)! - dt;
       if (t <= 0) {
-        t += AI.reaction;
+        // 반응 속도가 좋을수록 상황 판단이 빠르다
+        t += AI.reaction * (1.35 - 0.6 * n(p.profile.stats.reactions));
         this.decide(p);
       }
       this.timers.set(p, t);
