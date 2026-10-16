@@ -86,15 +86,47 @@ describe('실제 키 입력으로 개인기 실행 (플레이그라운드 스크
     expect(r.summary.losses).toBe(0);
   });
 
-  it('D 게이지 중 S → 페이크 슛: 공을 차지 않는다', () => {
+  it('달리다 D 게이지 중 S → 달리며 페이크 슛: 공을 차지 않는다', () => {
     const r = runScript(base([
       { t: 0, keys: ['ArrowUp'] },
       { t: 1, keys: ['ArrowUp', 'KeyD'] },
       { t: 1.12, keys: ['ArrowUp', 'KeyD', 'KeyS'] },
       { t: 1.18, keys: ['ArrowUp'] },
     ], 2.4));
-    expect(skillEvents(r)).toEqual(['fake_shot']);
+    // 달리는 중이므로 달리며 페이크 (제자리 헛발질은 멈춰 있거나 C를 같이 누를 때)
+    expect(skillEvents(r)).toEqual(['fake_shot_run']);
     expect(r.events.some((e) => e.type === 'kick')).toBe(false);
     expect(r.summary.possession).toBeGreaterThan(0.95);
+  });
+
+  it('달리다 A+S → 달리며 페이크: 넘어지지 않고 속도를 유지하며 공을 지킨다', () => {
+    const r = runScript(base([
+      { t: 0, keys: ['ArrowUp'] },
+      { t: 1, keys: ['ArrowUp', 'KeyA'] },
+      { t: 1.1, keys: ['ArrowUp', 'KeyA', 'KeyS'] },
+      { t: 1.15, keys: ['ArrowUp'] },
+    ], 2.2));
+    expect(skillEvents(r)).toEqual(['fake_shot_run']);
+    expect(r.events.some((e) => e.type === 'kick')).toBe(false);
+    expect(r.summary.losses).toBe(0);
+    // 페이크 동안에도 앞으로 계속 간다 (멈췄다 다시 출발하지 않는다)
+    const speeds = r.frames.filter((f) => f.t >= 1.1 && f.t <= 1.6).map((f) => Math.hypot(f.user.vel[0], f.user.vel[2]));
+    expect(Math.min(...speeds)).toBeGreaterThan(2);
+  });
+
+  it('C를 같이 누르면(C+A+S) 제자리 헛발질 페이크', () => {
+    const r = runScript(base([
+      { t: 0, keys: ['ArrowUp'] },
+      { t: 1, keys: ['ArrowUp', 'KeyC', 'KeyA'] },
+      { t: 1.1, keys: ['ArrowUp', 'KeyC', 'KeyA', 'KeyS'] },
+      { t: 1.15, keys: [] },
+    ], 2.2));
+    expect(skillEvents(r)).toEqual(['fake_pass']);
+  });
+
+  it('별이 높을수록 달리며 페이크가 빨리 끝난다', async () => {
+    const { SKILLS } = await import('../src/gameplay/Skills');
+    const def = SKILLS.find((s) => s.id === 'fake_shot_run')!;
+    expect(def.starScale).toBeGreaterThan(0);
   });
 });

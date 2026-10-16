@@ -16,6 +16,21 @@ export function makeSkillDefs(): SkillDef[] {
     shield: 0.85,
   };
 
+  /** 달리며 페이크 (A·D 게이지 중 S): 달리는 슛 동작을 공 차기 직전에 끊고 그대로 달려 나간다.
+   *  별이 높을수록 동작이 빠르고 매끄럽다 (전용 동작 대신 배속) */
+  const FAKE_RUN: SkillDef = {
+    id: 'fake_shot_run', name: '페이크 슛 (달리며)', stars: 1,
+    trigger: { kind: 'fake', from: 'shoot' },
+    duration: 0.42, carry: 0.85, starScale: 0.08,
+    body: [{ t: 0, x: 0, z: 0 }, { t: 0.42, x: 0, z: 0.08 }],
+    ball: [{ t: 0, x: 0.1, z: 0.62 }, { t: 0.22, x: 0.1, z: 0.72 }, { t: 0.42, x: 0.05, z: 0.85 }],
+    contacts: [],
+    motion: { id: 'grf_shot_walk_010_short_bit_longer', sprintId: 'grf_shot_sprint_010_close', kind: 'shot', angle: 0, toKey: 0.9, speed: 1 },
+    exit: { dir: 0, speed: 1.4, body: 0.5, input: true },
+    bait: { t: 0.15, dir: 0, strength: 1 },
+    shield: 0.85,
+  };
+
   /** 드래그백 (Z + ↓): 발바닥으로 공을 뒤로 끌며 몸을 돌린다 */
   const DRAG_BACK: SkillDef = {
     id: 'drag_back', name: '드래그백', stars: 2,
@@ -114,7 +129,7 @@ export function makeSkillDefs(): SkillDef[] {
     exit: { dir: Math.PI / 2, speed: 2.5, body: 2.2 },
     bait: { t: 0.2, dir: -Math.PI / 2, strength: 1 }, shield: 0.7,
   };
-  const defs: SkillDef[] = [FAKE_SHOT,
+  const defs: SkillDef[] = [FAKE_SHOT, FAKE_RUN,
     { ...FAKE_SHOT, id: 'fake_pass', name: '페이크 크로스', trigger: { kind: 'fake', from: 'lob' } },
     DRAG_BACK, FEINT_RIGHT, mirror(FEINT_RIGHT, 'feint_l', '왼쪽 속임 동작'),
     STEP_OVER, mirror(STEP_OVER, 'step_over_l', '왼쪽 스텝오버'),

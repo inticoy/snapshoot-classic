@@ -769,7 +769,9 @@ export class Match {
       // 슛·로빙 게이지 중 S = 페이크 (차는 척만 하고 공을 세운다)
       if ((c.kind === 'shoot' || c.kind === 'lob') && c.value > 0 && cmd.pass.pressed && this.ball.owner === p) {
         this.charge = null;
-        this.startSkill(p, c.kind === 'shoot' ? 'fake_shot' : 'fake_pass');
+        // 달리는 중이면 달리며 페이크, 멈춰 있거나 C를 같이 누르면(C+A+S) 제자리 헛발질
+        const running = Math.hypot(p.vel.x, p.vel.z) > 1.5 && !cmd.contain.held;
+        this.startSkill(p, running ? 'fake_shot_run' : c.kind === 'shoot' ? 'fake_shot' : 'fake_pass');
       }
     }
     if (this.charge) {

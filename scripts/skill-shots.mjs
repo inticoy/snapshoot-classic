@@ -18,6 +18,7 @@ function sequence(dirs, hold = false, modifier = 'ShiftLeft') {
 }
 const SCRIPTS = {
   fake_shot: { inputs: [{ t: 0, keys: [] }, { t: 0.55, keys: ['KeyD'] }, { t: 0.65, keys: ['KeyD', 'KeyS'] }, { t: 0.7, keys: [] }], at: [0.7, 0.85, 1, 1.15, 1.3] },
+  fake_shot_run: { inputs: [{ t: 0, keys: ['ArrowUp'] }, { t: 1, keys: ['ArrowUp', 'KeyA'] }, { t: 1.1, keys: ['ArrowUp', 'KeyA', 'KeyS'] }, { t: 1.15, keys: ['ArrowUp'] }], at: [1.12, 1.2, 1.28, 1.36, 1.5] },
   fake_pass: { inputs: [{ t: 0, keys: [] }, { t: 0.55, keys: ['KeyA'] }, { t: 0.65, keys: ['KeyA', 'KeyS'] }, { t: 0.7, keys: [] }], at: [0.7, 0.85, 1, 1.15, 1.3] },
   drag_back: sequence(['B'], false, 'KeyZ'),
   feint_r: sequence(['R']), feint_l: sequence(['L']),

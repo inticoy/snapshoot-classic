@@ -173,9 +173,11 @@ export class SkinnedPlayerModel implements CharacterModel {
     return true;
   }
 
-  stopMotion(): void {
+  /** freeze: 그 자리 포즈에서 멈춘 채 사라진다 (페이크처럼 차기 직전에 끊을 때 마저 차는 동작이 보이지 않게) */
+  stopMotion(freeze = false): void {
     const m = this.motion;
     if (!m) return;
+    if (freeze) m.action.timeScale = 0;
     m.loop = false;
     // 세리머니 종료 시 재생 위치를 끝으로 건너뛰면 포즈가 한 프레임에 튄다.
     m.stopping = true;

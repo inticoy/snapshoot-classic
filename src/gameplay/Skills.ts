@@ -49,13 +49,18 @@ export interface SkillDef {
   /** 발이 공을 건드리는 순간 (터치 소리, 동작-공 일치 검증) */
   contacts: { t: number; foot: 'L' | 'R' }[];
   /** 접촉을 구운 클립을 고정한다. [from, key × toKey) 구간을 duration에 맞춰 재생한다. */
-  motion?: { id: string; kind: MotionKind; angle: number; from?: number; toKey?: number; speed?: number };
+  /** sprintId: 질주 중(5.2 m/s 이상)에 대신 쓸 클립. speed를 주면 그 배속으로 재생하고 toKey 지점에서 끊는다 */
+  motion?: { id: string; sprintId?: string; kind: MotionKind; angle: number; from?: number; toKey?: number; speed?: number };
+  /** 선수 별이 개인기 별보다 높을수록 더 빠르고 매끄럽게 (별 하나당 starScale만큼 빨라진다) */
+  starScale?: number;
   /** 끝날 때 공 방향(시작 기준 rad, + = 오른쪽)·속도와 몸 속도. input = 그때 누른 방향이 있으면 그쪽 */
   exit: { dir: number; speed: number; body: number; input?: boolean };
   /** AI 수비를 속이는 순간과 방향 (rad). 가까운 수비가 잠깐 그쪽으로 몸을 싣는다 */
   bait?: { t: number; dir: number; strength: number };
   shield: number;
 }
+
+const flipId = (id: string) => (id.endsWith('~m') ? id.slice(0, -2) : `${id}~m`);
 
 /** 좌우 반전 */
 export function mirror(d: SkillDef, id: string, name: string): SkillDef {
@@ -67,7 +72,7 @@ export function mirror(d: SkillDef, id: string, name: string): SkillDef {
     body: d.body.map(flip),
     ball: d.ball.map(flip),
     contacts: d.contacts.map((c) => ({ t: c.t, foot: c.foot === 'L' ? 'R' : 'L' })),
-    motion: d.motion && { ...d.motion, id: d.motion.id.endsWith('~m') ? d.motion.id.slice(0, -2) : `${d.motion.id}~m`, angle: -d.motion.angle },
+    motion: d.motion && { ...d.motion, id: flipId(d.motion.id), sprintId: d.motion.sprintId && flipId(d.motion.sprintId), angle: -d.motion.angle },
     exit: { ...d.exit, dir: -d.exit.dir },
     bait: d.bait && { ...d.bait, dir: -d.bait.dir },
   };
@@ -208,6 +213,10 @@ interface Active {
   contact: number;
   baited: boolean;
   holding: boolean;
+  /** 시간 배속 (별 차이) */
+  rate: number;
+  /** 클립을 이 시각에 끊는다 (페이크) */
+  cut: number | null;
 }
 
 const pose = { x: 0, z: 0, y: 0, yaw: 0 };
@@ -246,10 +255,10 @@ export class SkillRunner {
     const v0 = Math.max(0, p.vel.x * fwd.x + p.vel.z * fwd.z);
     const a: Active = {
       def, p, t: 0, origin: p.pos.clone().setY(0), fwd, right: new THREE.Vector3(-fwd.z, 0, fwd.x), v0, contact: 0, baited: false, holding: false,
+      rate: 1 + (def.starScale ?? 0) * Math.max(0, p.profile.skill - def.stars), cut: null,
     };
     this.active.set(p, a);
-    p.actionLock = def.duration;
-    p.facingLock = def.duration;
+    p.actionLock = p.facingLock = def.duration / a.rate;
     this.playMotion(a);
     m.events.push({ type: 'skill', id: def.id, player: p });
     return true;
@@ -267,11 +276,15 @@ export class SkillRunner {
   private playMotion(a: Active): void {
     const motion = a.def.motion;
     if (!motion) return;
-    const entry = MOTION_CATALOG.find((e) => e.id === motion.id);
+    const id = a.v0 > 5.2 && motion.sprintId ? motion.sprintId : motion.id;
+    const entry = MOTION_CATALOG.find((e) => e.id === id);
     if (!entry) return;
     const end = motion.toKey === undefined ? entry.duration : entry.key * motion.toKey;
     const from = motion.from ?? 0;
-    a.p.playMotion(entry, from, motion.speed ?? (end - from) / a.def.duration);
+    // 배속을 정했으면 제 속도로 재생하다 end에서 끊고(달리기로 섞여 돌아감), 아니면 개인기 길이에 맞춰 늘인다
+    const speed = (motion.speed ?? (end - from) / a.def.duration) * a.rate;
+    a.cut = motion.speed !== undefined ? (end - from) / speed : null;
+    a.p.playMotion(entry, from, speed);
   }
 
   private toWorld(a: Active, x: number, z: number, out: THREE.Vector3): THREE.Vector3 {
@@ -287,7 +300,11 @@ export class SkillRunner {
         this.finish(a, false);
         continue;
       }
-      a.t += dt;
+      a.t += dt * a.rate;
+      if (a.cut !== null && a.t >= a.cut * a.rate) {
+        a.cut = null;
+        p.model.stopMotion?.(true);
+      }
       if (def.sustained && a.holding && a.t >= def.duration) {
         const end = def.body.at(-1)!;
         a.origin.addScaledVector(a.right, end.x).addScaledVector(a.fwd, end.z);
@@ -295,7 +312,7 @@ export class SkillRunner {
         a.contact = 0;
         this.playMotion(a);
       }
-      p.actionLock = p.facingLock = Math.max(dt * 2, def.duration - a.t);
+      p.actionLock = p.facingLock = Math.max(dt * 2, (def.duration - a.t) / a.rate);
       const t = Math.min(a.t, def.duration);
       sample(def.body, t, pose);
       this.toWorld(a, pose.x, pose.z + a.v0 * def.carry * t, w);

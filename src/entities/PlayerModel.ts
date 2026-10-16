@@ -41,7 +41,7 @@ export interface CharacterModel {
   /** 구운 동작(모션캡처·GRF) 재생. 지원하지 않거나 데이터가 없으면 false */
   playMotion?(id: string, opts?: { startAt?: number; speed?: number; loop?: boolean; then?: { id: string; speed: number } }): boolean;
   /** 반복 중인 동작을 끝내고 이동 클립으로 돌아간다 */
-  stopMotion?(): void;
+  stopMotion?(freeze?: boolean): void;
   /** 개발 텔레메트리는 실제 뼈의 월드 좌표를 읽는다. 절차적 모델에서는 미지원(null)이다. */
   readonly currentMotionId?: string | null;
   readonly hipsHeight?: number | null;
