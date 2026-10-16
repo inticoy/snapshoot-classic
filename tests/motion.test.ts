@@ -109,8 +109,9 @@ describe('구운 엉덩이 위치', () => {
     try {
       const library = (await MotionClips.load('/assets/motions.json'))!;
       for (const [id, ceiling] of [
-        ['grf_sliding_sprint_000', 0.45], ['mc_celebrate_1', 0.6], ['mc_dive_1', 0.6],
-        ['grf_sliding_sprint_000~m', 0.45], ['mc_dive_1~m', 0.6],
+      // 기준은 서 있는 엉덩이 높이(MPFB 몸 0.99m) 대비. 다이빙은 옆으로 몸을 던져 0.63m 안팎까지 내려간다
+        ['grf_sliding_sprint_000', 0.45], ['mc_celebrate_1', 0.6], ['mc_dive_1', 0.65],
+        ['grf_sliding_sprint_000~m', 0.45], ['mc_dive_1~m', 0.65],
       ] as const) {
         const hips = data.clips[id].hips;
         const heights = hips.filter((_, i) => i % 3 === 2);
@@ -152,7 +153,7 @@ it('실제 GLB 부모 변환으로도 낮아지고 월드 수평 이동은 제�
   vi.stubGlobal('fetch', async () => ({ ok: true, json: async () => data }));
   try {
     const library = (await MotionClips.load('/assets/motions.json'))!;
-    for (const [id, ceiling] of [['grf_sliding_sprint_000', 0.45], ['mc_celebrate_1', 0.6], ['mc_dive_1', 0.6]] as const) {
+    for (const [id, ceiling] of [['grf_sliding_sprint_000', 0.45], ['mc_celebrate_1', 0.6], ['mc_dive_1', 0.65]] as const) {
       const model = clone(gltf.scene);
       const hips = model.getObjectByName('DEF-hips')!;
       const mixer = new THREE.AnimationMixer(model);

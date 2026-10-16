@@ -1,0 +1,3 @@
+player.glb body mesh: generated with MPFB2 (MakeHuman for Blender), CC0 1.0.
+Skeleton and locomotion clips: Quaternius (see LICENSE-quaternius.txt).
+Rebuild: blender -b --python scripts/character/build_player.py -- <quaternius player.glb> public/assets/models/player.glb

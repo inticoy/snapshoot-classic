@@ -468,9 +468,10 @@ uniform sampler2D uDecal;
 
 bool isHair(vec3 p) {
   if (uHairStyle > 2.5) return false;                                   // 민머리
-  if (uHairStyle > 1.5) return p.y > 1.73 || (p.y > 1.57 && p.z < 0.0) || (p.y > 1.66 && abs(p.x) > 0.075); // 긴 머리
-  if (uHairStyle > 0.5) return p.y > 1.79 || (p.y > 1.68 && p.z < -0.05); // 버즈컷
-  return p.y > 1.76 || (p.y > 1.62 && p.z < -0.03);                     // 짧은 머리
+  // 머리 중심은 z ≈ +0.05 (얼굴이 앞으로 나와 있다)
+  if (uHairStyle > 1.5) return p.y > 1.75 || (p.y > 1.6 && p.z < 0.04) || (p.y > 1.68 && abs(p.x) > 0.07); // 긴 머리
+  if (uHairStyle > 0.5) return p.y > 1.79 || (p.y > 1.68 && p.z < 0.0);  // 버즈컷
+  return p.y > 1.77 || (p.y > 1.64 && p.z < 0.02);                      // 짧은 머리
 }
 
 // 데칼 아틀라스 투영. 영역 밖이면 알파 0
@@ -478,41 +479,41 @@ vec4 decalAt(vec3 p) {
   if (uHasDecal < 0.5) return vec4(0.0);
   float ax = abs(p.x);
   // 등: 이름 + 등번호 (뒤에서 보면 +X가 왼쪽)
-  if (p.z < -0.02 && ax < 0.16 && p.y > 1.02 && p.y < 1.43)
-    return texture2D(uDecal, vec2((0.16 - p.x) / 0.32 * 0.5, (p.y - 1.02) / 0.41));
+  if (p.z < -0.02 && ax < 0.16 && p.y > 1.07 && p.y < 1.48)
+    return texture2D(uDecal, vec2((0.16 - p.x) / 0.32 * 0.5, (p.y - 1.07) / 0.41));
   // 가슴 번호
-  if (p.z > 0.02 && ax < 0.065 && p.y > 1.24 && p.y < 1.37)
-    return texture2D(uDecal, vec2(0.75 + (p.x + 0.065) / 0.13 * 0.25, 0.5 + (p.y - 1.24) / 0.13 * 0.5));
-  // 얼굴
-  if (p.z > 0.0 && ax < 0.09 && p.y > 1.56 && p.y < 1.8)
-    return texture2D(uDecal, vec2(0.5 + (p.x + 0.09) / 0.18 * 0.25, (p.y - 1.56) / 0.24));
+  if (p.z > 0.06 && ax < 0.065 && p.y > 1.3 && p.y < 1.43)
+    return texture2D(uDecal, vec2(0.75 + (p.x + 0.065) / 0.13 * 0.25, 0.5 + (p.y - 1.3) / 0.13 * 0.5));
   return vec4(0.0);
 }
 
 vec3 kitColor(vec3 p) {
   float ax = abs(p.x);
-  if (p.y > 1.52) {
+  if (p.y > 1.54) {
+    // 눈알 (MPFB 눈 메시, 중심 x ±0.031, y 1.748, z 0.135): 앞쪽은 홍채
+    vec3 e = vec3(ax - 0.031, p.y - 1.748, p.z - 0.135);
+    if (length(e) < 0.014) return e.z > 0.006 ? vec3(0.16, 0.11, 0.08) : vec3(0.86, 0.84, 0.8);
     if (isHair(p)) return uHair;
     return uSkin;
   }
-  if (ax > 0.58) {
-    // 키퍼는 긴소매 + 장갑, 필드 플레이어는 맨팔
-    if (uKeeper > 0.5) return ax > 0.8 ? uGloves : uShirt;
+  if (ax > 0.42) {
+    // 키퍼는 긴소매 + 장갑, 필드 플레이어는 맨팔 (팔꿈치 x≈0.46, 손목 x≈0.74)
+    if (uKeeper > 0.5) return ax > 0.73 ? uGloves : uShirt;
     return uSkin;
   }
-  if (ax > 0.24 && p.y > 1.18) {
+  if (ax > 0.25 && p.y > 1.3) {
     // 소매 끝 라인
-    if (uStyle > 0.5 && uStyle < 1.5 && ax > 0.53) return uTrim;
+    if (uStyle > 0.5 && uStyle < 1.5 && ax > 0.385) return uTrim;
     return uShirt;
   }
-  if (p.y > 0.96) {
-    if (p.y > 1.485 && ax < 0.08) return uTrim;                          // 깃
-    if (uStyle > 0.5 && uStyle < 1.5 && p.y > 1.36 && ax > 0.19) return uTrim; // 어깨 라인
+  if (p.y > 1.04) {
+    if (p.y > 1.5 && ax < 0.1) return uTrim;                             // 깃
+    if (uStyle > 0.5 && uStyle < 1.5 && p.y > 1.42 && ax > 0.2) return uTrim; // 어깨 라인
     if (uStyle > 1.5 && fract(p.x * 9.0 + 0.5) < 0.2) return uTrim;      // 세로 줄무늬
     return uShirt;
   }
-  if (p.y > 0.52) return (uStyle > 0.5 && ax > 0.15 && ax < 0.17) ? uTrim : uShorts; // 바지 옆선
-  if (p.y > 0.09) return uSocks;
+  if (p.y > 0.6) return (uStyle > 0.5 && ax > 0.185 && ax < 0.205) ? uTrim : uShorts; // 바지 옆선
+  if (p.y > 0.1) return uSocks;
   return uBoots;
 }`,
       )
@@ -523,6 +524,6 @@ vec4 dec = decalAt(vKit);
 diffuseColor.rgb = mix(kitColor(vKit), dec.rgb, dec.a);`,
       );
   };
-  mat.customProgramCacheKey = () => 'kit-v3';
+  mat.customProgramCacheKey = () => 'kit-v5';
   return mat;
 }
