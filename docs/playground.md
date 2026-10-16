@@ -1,6 +1,6 @@
 # 플레이그라운드와 엉덩이 높이 검증
 
-`pnpm dev` 후 <http://localhost:5180/index.html?playground>에서 연다. 개발 서버 전용이며 일반 경기와 동일한 `Game`/`Match`, 카메라, 키보드, 터치 조작을 사용한다.
+`pnpm dev` 후 <http://localhost:5180/index.html?playground>, 배포 사이트는 <https://inticoy.github.io/snapshoot-classic/?playground>에서 연다. 일반 경기와 동일한 `Game`/`Match`, 카메라, 키보드, 터치 조작을 사용한다.
 
 - 버튼으로 자유 드리블 / 수비수 1명 / 상대 3명 압박 / 15m 패스 받기 / 슬라이딩 태클 / 키퍼 1대1을 선택한다.
 - 방향키 이동, E 질주, S 패스, W 스루, A 로빙(수비 시 슬라이딩), D 슛, Space 스탠딩 태클, Z+D 감아차기, Q+D 칩슛, V 카메라, Esc 일시정지.
