@@ -2,13 +2,14 @@ import * as THREE from 'three';
 import { GRAPHICS, PHYSICS, PITCH } from '../config';
 import { Input } from './Input';
 import { TouchControls } from '../ui/TouchControls';
+import type { TouchMode } from './TouchInput';
 import { PhysicsWorld } from '../physics/PhysicsWorld';
 import { Stadium } from '../environment/Stadium';
 import { Match, type UserCommand } from '../gameplay/Match';
 import { CAMERA_LABEL, CameraRig } from '../camera/CameraRig';
 import { Hud } from '../ui/Hud';
 import { Menu, assistPanel, controlsPanel, matchupPanel, playerDetailPanel, squadPanel, statsPanel, type MenuScreen } from '../ui/Menu';
-import { ASSIST_LABEL, MOVE_ASSIST_LABEL, GRAPHICS_LABEL, cycleAssist, cycleMoveAssist, cycleGraphics, graphicsQuality, settings, togglePhysicsPreset } from './Settings';
+import { ASSIST_LABEL, MOVE_ASSIST_LABEL, GRAPHICS_LABEL, cycleAssist, cycleMoveAssist, cycleGraphics, graphicsQuality, settings, togglePhysicsPreset, toggleShootout } from './Settings';
 import { PRESET_LABEL, activePhysics } from '../physics/presets';
 import { Sound } from '../audio/Sound';
 import { TEAMS } from '../data/Teams';
@@ -147,6 +148,15 @@ export class Game {
         panel: () => `<div class="card"><h3>자동 전환 이동 보조</h3><p>패스로 받는 선수가 바뀐 직후, 얼마 동안 AI가 받으러 가는 움직임을 유지할지 정합니다 (FC의 같은 이름 설정).<br/><br/><b>높음</b> · 0.55초 · <b>낮음</b> · 0.25초 · <b>없음</b> · 바로 내 입력<br/><br/>어떤 설정이든 방향키가 공 쪽을 향하면 공을 가로챌 지점으로 가서 그 앞에서 멈추므로 공을 지나치지 않고, 입력 없이 두면 자동으로 받으러 갑니다. 받는 순간 누르고 있던 방향으로 첫 터치를 합니다.</p></div>`,
       },
       {
+        id: 'shootout',
+        label: '무승부 시 승부차기',
+        value: () => (settings.shootout ? '켜기' : '끄기'),
+        onLeft: () => toggleShootout(),
+        onRight: () => toggleShootout(),
+        onSelect: () => toggleShootout(),
+        panel: () => `<div class="card"><h3>승부차기</h3><p>후반 추가 시간까지 비기면 승부차기로 승자를 가립니다. 5번씩 차고, 같으면 한 번씩 더 차는 서든 데스.<br/><br/><b>찰 때</b> · 방향키 ↑↓로 구석을 고르고 D를 꾹 눌렀다 떼기<br/><b>막을 때</b> · 상대가 차는 순간 누르고 있는 ↑↓ 쪽으로 키퍼가 몸을 던집니다. 아무것도 안 누르면 가운데에서 버팁니다.</p></div>`,
+      },
+      {
         id: 'player',
         label: '선수 능력치',
         value: () => TEAMS[cur()[0]].players[cur()[1]].short,
@@ -264,9 +274,12 @@ export class Game {
     this.state = 'result';
     this.hud.show(false);
     const [h, a] = this.match.score;
-    const verdict = h > a ? '승리' : h < a ? '패배' : '무승부';
+    const so = this.match.shootout;
+    const [ph, pa] = so.active ? so.score : [h, a];
+    const verdict = ph > pa ? '승리' : ph < pa ? '패배' : '무승부';
+    const pk = so.active ? ` (승부차기 ${ph} : ${pa})` : '';
     this.menu.open({
-      eyebrow: `경기 종료 · ${TEAMS[0].abbr} ${h} : ${a} ${TEAMS[1].abbr}`,
+      eyebrow: `경기 종료 · ${TEAMS[0].abbr} ${h} : ${a} ${TEAMS[1].abbr}${pk}`,
       title: verdict,
       panel: () => statsPanel(this.match.stats, [h, a], `경기 종료 · ${verdict}`),
       items: [
@@ -276,8 +289,30 @@ export class Game {
     });
   }
 
+  private openHalftime(): void {
+    this.state = 'paused';
+    this.hud.show(false);
+    this.match.cancelUserCharge();
+    this.input.clearVirtual();
+    const [h, a] = this.match.score;
+    this.menu.open({
+      eyebrow: `하프타임 · ${TEAMS[0].abbr} ${h} : ${a} ${TEAMS[1].abbr}`,
+      title: '하프타임',
+      panel: () => statsPanel(this.match.stats, [h, a], '전반 종료'),
+      onBack: () => this.resume(),
+      items: [
+        { id: 'second', label: '후반 시작', onSelect: () => this.resume() },
+        ...this.linkItems(() => this.openHalftime(), false),
+        { id: 'quit', label: '메인 메뉴', onSelect: () => this.openMainMenu() },
+      ],
+    });
+  }
+
   private clockText(): string {
-    return `${Math.min(90, Math.floor((this.match.clock / this.match.duration) * 90))}'`;
+    const m = this.match;
+    const base = m.half * 45;
+    const min = Math.floor(m.matchMinutes) + 1;
+    return min > base ? `${base}+${min - base}'` : `${Math.max(1, min)}'`;
   }
 
   private async startMatch(): Promise<void> {
@@ -312,7 +347,10 @@ export class Game {
   private frame(dt: number): void {
     this.ensureViewSize();
     const restart = this.match.setPieces.current;
-    const mode = restart?.team === 0 ? restart.kind
+    const so = this.match.shootout;
+    const mode: TouchMode = so.active && this.match.phase === 'shootout' ? (so.turn === 0 ? 'penalty' : 'keeper')
+      : restart?.team === 0 ? restart.kind
+      : restart?.kind === 'penalty' ? 'keeper'
       : this.match.userAttacking || this.match.ball.owner?.team === 0 ? 'attack' : 'defence';
     this.touch.update(this.state === 'playing', mode);
     const menuWasVisible = this.menu.visible;
@@ -380,7 +418,10 @@ export class Game {
 
   private handleEvents(): void {
     for (const e of this.match.events) {
-      if (import.meta.env.DEV && e.type !== 'bounce') console.debug('[event]', e.type, JSON.stringify({ ...e, scorer: undefined }));
+      // 선수 객체는 순환 참조라 이름만 남긴다
+      if (import.meta.env.DEV && e.type !== 'bounce') {
+        console.debug('[event]', e.type, JSON.stringify(e, (k, v) => (k && v && typeof v === 'object' && 'profile' in v ? v.profile.short : v)));
+      }
       switch (e.type) {
         case 'kick':
           this.sound.play('kick', Math.min(1, 0.35 + e.speed / 30), 0.9 + visualRandom.next() * 0.2);
@@ -423,9 +464,50 @@ export class Game {
           break;
         case 'restart':
           break;
+        case 'foul':
+          this.sound.whistle([0.22]);
+          this.hud.tick(`${e.penalty ? '페널티킥!' : '파울'} · ${e.by.profile.short}`, 2.2);
+          if (e.penalty) this.stadium.cheer(0.6);
+          break;
+        case 'advantage':
+          this.hud.tick('어드밴티지', 1.6);
+          break;
+        case 'card':
+          this.hud.card(e.player, e.card, e.second);
+          break;
+        case 'offside':
+          this.sound.whistle([0.16, 0.16]);
+          this.hud.tick(`오프사이드 · ${e.player.profile.short}`, 2.2);
+          this.hud.flag();
+          break;
+        case 'stoppage':
+          this.hud.stoppage(e.minutes);
+          break;
+        case 'penaltyKick':
+          this.sound.play(e.scored ? 'net' : 'save', 0.8);
+          if (e.scored) this.stadium.cheer(0.7);
+          this.hud.tick(`${e.kicker.profile.short} · ${e.scored ? '성공' : '실패'}`, 1.4);
+          break;
+        case 'shootoutEnd':
+          this.sound.whistle([0.3, 0.3, 0.9]);
+          this.stadium.cheer(1);
+          this.hud.tick(`승부차기 ${e.score[0]} : ${e.score[1]}`, 3);
+          setTimeout(() => {
+            if (this.match.phase === 'fulltime' && this.state === 'playing') this.openResult();
+          }, 2600);
+          break;
         case 'whistle':
           if (e.kind === 'kickoff') this.sound.whistle([0.45]);
-          else {
+          else if (e.kind === 'halftime') {
+            this.sound.whistle([0.3, 0.7]);
+            this.hud.tick('전반 종료', 2.4);
+            setTimeout(() => {
+              if (this.match.phase === 'halftime' && this.state === 'playing') this.openHalftime();
+            }, 2200);
+          } else if (this.match.phase === 'shootout') {
+            this.sound.whistle([0.3, 0.3, 0.9]);
+            this.hud.tick('무승부 · 승부차기', 3);
+          } else {
             this.sound.whistle([0.3, 0.3, 0.9]);
             this.hud.tick('경기 종료', 3);
             setTimeout(() => {

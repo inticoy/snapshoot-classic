@@ -45,6 +45,11 @@ export class Sound {
 
   play(key: SoundKey, volume = 1, rate = 1): void {
     if (!this.ctx || !this.master || this.muted) return;
+    // 비정상 값 하나로 AudioParam이 예외를 던지면 그 프레임의 HUD 갱신까지 멈춘다
+    if (!Number.isFinite(volume) || !Number.isFinite(rate)) {
+      if (import.meta.env.DEV) console.warn('[sound] 비정상 값', key, volume, rate);
+      return;
+    }
     const buf = this.buffers.get(key);
     if (!buf) return;
     // 같은 소리가 너무 촘촘히 겹치지 않게

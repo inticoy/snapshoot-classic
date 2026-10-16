@@ -1,16 +1,23 @@
 import * as THREE from 'three';
-import { BALL, PASS, PITCH } from '../config';
+import { BALL, GOAL, PASS, PITCH, RULES } from '../config';
+import { diveKeeper, keeperGuess, penaltyAim, penaltySpot, shotLineZ, sideFromInput } from './Penalty';
 import { CORNER_RUN_SPOTS } from '../data/SetPiecePositions';
 import type { Player } from '../entities/Player';
 import type { Match, UserCommand, KickKind } from './Match';
 
-export type RestartKind = 'throwin' | 'corner' | 'goalkick';
+export type RestartKind = 'throwin' | 'corner' | 'goalkick' | 'freekick' | 'indirect' | 'penalty';
 
 export const RESTART_LABEL: Record<RestartKind, string> = {
   throwin: '스로인',
   corner: '코너킥',
   goalkick: '골킥',
+  freekick: '프리킥',
+  indirect: '간접 프리킥',
+  penalty: '페널티킥',
 };
+
+/** 오프사이드 판정이 없는 재개 */
+const NO_OFFSIDE: RestartKind[] = ['throwin', 'corner', 'goalkick'];
 
 export interface SetPiece {
   kind: RestartKind;
@@ -20,6 +27,8 @@ export interface SetPiece {
   /** 준비 후 경과 시간 */
   timer: number;
   ready: boolean;
+  /** 직접 프리킥으로 골문을 노릴 수 있는 거리·각도 */
+  shooting: boolean;
 }
 
 const OUT_DELAY = 1.1; // 공이 나간 뒤 재개 준비까지
@@ -37,6 +46,8 @@ const tmp = new THREE.Vector3();
 export class SetPieces {
   current: SetPiece | null = null;
   private outTimer = 0;
+  /** 상대 PK 때 사용자가 누르고 있는 다이빙 방향 (z 축) */
+  private userDive = 0;
 
   constructor(private readonly m: Match) {}
 
@@ -54,7 +65,8 @@ export class SetPieces {
     if (Math.abs(bp.x) > PITCH.halfL + r) {
       // 골문 안이면 골 판정이 먼저 처리된다
       const end = Math.sign(bp.x);
-      const defending = (end > 0 ? 1 : 0) as 0 | 1; // +X 골대는 원정팀(1)이 지킨다
+      // 이 골라인 쪽으로 공격하는 팀의 상대가 지킨다 (후반에는 진영이 바뀐다)
+      const defending = (this.m.teams[0][0].attackDir === end ? 1 : 0) as 0 | 1;
       const side = Math.sign(bp.z) || 1;
       if (last && last.team === defending) {
         const attacking = (1 - defending) as 0 | 1;
@@ -67,22 +79,42 @@ export class SetPieces {
     return false;
   }
 
+  /** 반칙·오프사이드 휘슬 뒤 재개 (Rules가 호출) */
+  award(kind: 'freekick' | 'indirect' | 'penalty', team: 0 | 1, spot: THREE.Vector3): void {
+    const a = this.m.teams[team][0].attackDir;
+    if (kind === 'penalty') penaltySpot(a, spot);
+    this.begin(kind, team, spot);
+  }
+
   private begin(kind: RestartKind, team: 0 | 1, spot: THREE.Vector3): void {
     const m = this.m;
     m.phase = 'out';
+    m.rules.clearPlay();
     this.outTimer = OUT_DELAY;
     m.charge = null;
     m.passTarget = null;
     m.ball.owner = null;
     m.ball.shot = null;
     const taker = this.pickTaker(kind, team, spot);
-    this.current = { kind, team, spot, taker, timer: 0, ready: false };
+    const toGoal = Math.hypot(m.oppGoalX(team) - spot.x, spot.z);
+    const shooting = kind === 'freekick' && toGoal < RULES.freeKickShotRange && Math.abs(spot.z) < toGoal * 0.8;
+    this.current = { kind, team, spot, taker, timer: 0, ready: false, shooting };
     m.events.push({ type: 'out', kind, team });
   }
 
   private pickTaker(kind: RestartKind, team: 0 | 1, spot: THREE.Vector3): Player {
-    const squad = this.m.teams[team];
+    const m = this.m;
+    const squad = m.teams[team];
     if (kind === 'goalkick') return squad[0];
+    const field = squad.filter((p) => !p.isKeeper);
+    const top = (score: (p: Player) => number) => field.sort((a, b) => score(b) - score(a))[0];
+    if (kind === 'penalty') return top((p) => p.profile.stats.finishing + p.profile.stats.composure);
+    if (kind === 'freekick' || kind === 'indirect') {
+      // 자기 박스 근처 프리킥은 키퍼가 길게 차고, 슛 거리면 감아차기가 좋은 선수
+      if (m.inOwnBox(squad[0], spot.x, spot.z)) return squad[0];
+      const toGoal = Math.hypot(m.oppGoalX(team) - spot.x, spot.z);
+      if (kind === 'freekick' && toGoal < RULES.freeKickShotRange) return top((p) => p.profile.stats.curve + p.profile.stats.longShots);
+    }
     // 코너킥은 미드필더(킥이 좋은 선수), 스로인은 가장 가까운 필드 플레이어
     if (kind === 'corner') {
       const mid = squad.filter((p) => p.role === 'MID').sort((a, b) =>
@@ -128,10 +160,11 @@ export class SetPieces {
     this.holdBall(sp);
     const t = sp.taker;
     const userTakes = m.isUserControlled(t);
+    if (sp.kind === 'penalty' && sp.team !== 0) this.userDive = cmd.move.z;
 
     if (userTakes) {
-      // 방향키로 조준 (제자리에서 몸만 돌린다)
-      if (cmd.move.lengthSq() > 0.01) {
+      // 방향키로 조준 (제자리에서 몸만 돌린다). PK는 뗄 때 누른 방향으로 바로 찬다
+      if (cmd.move.lengthSq() > 0.01 && sp.kind !== 'penalty') {
         const target = Math.atan2(cmd.move.x, cmd.move.z);
         const cur = Math.atan2(t.facing.x, t.facing.z);
         let d = target - cur;
@@ -140,21 +173,26 @@ export class SetPieces {
         t.facing.set(Math.sin(a), 0, Math.cos(a));
       }
       if (sp.timer < 0.4) return; // 준비 직후 오입력 방지
+      const kinds: KickKind[] = sp.kind === 'penalty' ? ['shoot'] : sp.kind === 'freekick' ? ['shoot', 'pass', 'lob', 'through'] : ['pass', 'lob', 'through', 'shoot'];
       if (!m.charge) {
-        for (const kind of ['pass', 'lob', 'through', 'shoot'] as KickKind[]) {
+        for (const kind of kinds) {
           if (cmd[kind].pressed) {
-            m.charge = { kind, value: 0, finesse: false, chip: false };
+            m.charge = { kind, value: 0, finesse: cmd.finesse.held, chip: false };
             break;
           }
         }
       }
       if (m.charge) {
         const btn = cmd[m.charge.kind];
-        m.charge.value = Math.min(1, m.charge.value + dt / PASS.chargeTime);
+        const shot = m.charge.kind === 'shoot' && (sp.kind === 'freekick' || sp.kind === 'penalty');
+        m.charge.value = Math.min(1, m.charge.value + dt / (shot ? 1.0 : PASS.chargeTime));
+        if (cmd.finesse.held) m.charge.finesse = true;
         if (btn.released || !btn.held) {
-          const { kind, value } = m.charge;
+          const { kind, value, finesse } = m.charge;
           m.charge = null;
-          this.take(kind === 'pass' ? 'short' : 'long', value, t.facing.clone());
+          if (sp.kind === 'penalty') this.take('shot', value, penaltyAim(sp.spot, t.attackDir, cmd.move.z));
+          else if (shot) this.take('shot', value, t.facing.clone(), finesse);
+          else this.take(kind === 'pass' ? 'short' : 'long', value, t.facing.clone());
         }
       }
     } else if (sp.timer > AI_TAKE_DELAY) {
@@ -184,10 +222,18 @@ export class SetPieces {
     const inward = new THREE.Vector3(-spot.x, 0, -spot.z).normalize();
     if (kind === 'throwin') inward.set(a * 0.5, 0, -Math.sign(spot.z)).normalize();
     if (kind === 'goalkick') inward.set(a, 0, 0);
-    taker.pos.copy(spot).addScaledVector(inward, kind === 'throwin' ? -0.25 : -0.6);
+    if (kind === 'freekick' || kind === 'indirect' || kind === 'penalty') {
+      inward.set(m.oppGoalX(team) - spot.x, 0, -spot.z).normalize();
+      if (!sp.shooting && kind !== 'penalty') inward.set(a, 0, 0);
+    }
+    taker.pos.copy(spot).addScaledVector(inward, kind === 'throwin' ? -0.25 : kind === 'penalty' ? -1.6 : -0.6);
     taker.facing.copy(inward);
 
-    if (kind === 'corner') {
+    if (kind === 'penalty') {
+      this.setupPenalty(sp);
+    } else if (kind === 'freekick' || kind === 'indirect') {
+      this.setupFreeKick(sp);
+    } else if (kind === 'corner') {
       // 공격: 박스 안 지정 위치 / 수비: 가까운 상대를 마크, 남는 선수는 니어 포스트
       const end = Math.sign(spot.x);
       const side = Math.sign(spot.z);
@@ -250,6 +296,69 @@ export class SetPieces {
     m.events.push({ type: 'restart', kind, team });
   }
 
+  /** PK: 키커와 키퍼만 박스 안, 나머지는 박스 밖 아크 뒤로 */
+  private setupPenalty(sp: SetPiece): void {
+    const m = this.m;
+    const a = m.teams[sp.team][0].attackDir;
+    const gx = m.oppGoalX(sp.team);
+    const keeper = m.teams[1 - sp.team][0];
+    keeper.pos.set(gx - a * 0.3, 0, 0);
+    keeper.faceTowards(sp.spot.x, sp.spot.z);
+    const others = m.players.filter((p) => p !== sp.taker && p !== keeper && !p.isKeeper);
+    const edge = gx - a * (PITCH.boxDepth + 1.5);
+    // 박스 밖 + 아크 밖에서 두 줄로 선다
+    others.forEach((p, i) => {
+      const z = (i - (others.length - 1) / 2) * 2.1;
+      p.pos.set(edge - a * (i % 2) * 1.5 - a * (Math.abs(z) < 7 ? 2 : 0), 0, z);
+    });
+    const ownKeeper = m.teams[sp.team][0];
+    ownKeeper.pos.set(m.ownGoalX(sp.team) + a * 6, 0, 0);
+  }
+
+  /** 프리킥: 상대는 9.15m 밖. 슛 거리면 니어 포스트 쪽에 벽을 세운다 */
+  private setupFreeKick(sp: SetPiece): void {
+    const m = this.m;
+    const { spot, team, taker } = sp;
+    const def = m.teams[1 - team];
+    const att = m.teams[team];
+    const gx = m.oppGoalX(team);
+    const toGoal = Math.hypot(gx - spot.x, spot.z);
+    const wall: Player[] = [];
+    if (sp.shooting) {
+      const count = toGoal < 20 ? 5 : toGoal < 25 ? 4 : 3;
+      const field = def.filter((p) => !p.isKeeper).sort((x, y) => x.pos.distanceTo(spot) - y.pos.distanceTo(spot));
+      wall.push(...field.slice(0, count));
+      // 공과 니어 포스트 안쪽을 잇는 선 위 9.15m
+      const nearZ = (Math.sign(spot.z) || 1) * GOAL.width / 4;
+      const line = new THREE.Vector3(gx - spot.x, 0, nearZ - spot.z).normalize();
+      const side = new THREE.Vector3(-line.z, 0, line.x);
+      const centre = spot.clone().addScaledVector(line, RULES.wallDistance);
+      wall.forEach((p, i) => {
+        p.pos.copy(centre).addScaledVector(side, (i - (count - 1) / 2) * 0.6);
+        p.faceTowards(spot.x, spot.z);
+      });
+      const keeper = def[0];
+      keeper.pos.set(gx - (att[0].attackDir) * 0.6, 0, -(Math.sign(spot.z) || 1) * 0.9);
+    }
+    // 나머지 상대는 공에서 9.15m 밖으로
+    for (const p of def) {
+      if (p.isKeeper || wall.includes(p)) continue;
+      tmp.copy(p.pos).sub(spot).setY(0);
+      const d = tmp.length();
+      const min = RULES.wallDistance + 0.5;
+      if (d >= min) continue;
+      if (d < 0.1) tmp.set(-att[0].attackDir, 0, 0);
+      p.pos.copy(spot).addScaledVector(tmp.normalize(), min);
+      p.pos.x = THREE.MathUtils.clamp(p.pos.x, -PITCH.halfL + 0.5, PITCH.halfL - 0.5);
+      p.pos.z = THREE.MathUtils.clamp(p.pos.z, -PITCH.halfW + 0.5, PITCH.halfW - 0.5);
+    }
+    // 같은 팀이 공 위에 겹쳐 서지 않게
+    for (const p of att) {
+      if (p === taker || p.isKeeper || p.pos.distanceTo(spot) > 2) continue;
+      p.pos.addScaledVector(tmp.set(p.pos.x - spot.x, 0, p.pos.z - spot.z).normalize(), 3);
+    }
+  }
+
   /** 공을 키커 손(스로인) 또는 지정 위치(코너/골킥)에 고정 */
   private holdBall(sp: SetPiece): void {
     const b = this.m.ball.body;
@@ -267,6 +376,22 @@ export class SetPieces {
     const m = this.m;
     const t = sp.taker;
     const mates = m.teams[sp.team].filter((p) => p !== t && !p.isKeeper);
+    const rand = () => m.random.next();
+    if (sp.kind === 'penalty') {
+      // 구석을 노리되 침착성이 낮으면 가운데로 몰린다
+      const side = rand() < 0.5 ? -1 : 1;
+      const aim = side * (0.35 + 0.65 * Math.sqrt(rand()) * (0.6 + 0.4 * (t.profile.stats.composure / 99)));
+      this.take('shot', 0.45 + rand() * 0.3, penaltyAim(sp.spot, t.attackDir, aim));
+      return;
+    }
+    if (sp.shooting) {
+      // 직접 프리킥: 벽을 넘겨 먼 쪽 구석으로 감아 찬다
+      const far = -(Math.sign(sp.spot.z) || (rand() < 0.5 ? 1 : -1)) * (GOAL.width / 2 - 0.7);
+      const dir = tmp.set(m.oppGoalX(sp.team) - t.pos.x, 0, far - t.pos.z).normalize().clone();
+      t.facing.copy(dir);
+      this.take('shot', 0.55 + rand() * 0.2, dir, true);
+      return;
+    }
     if (sp.kind === 'corner') {
       // 박스 안 동료에게 크로스
       const target = mates[0];
@@ -282,13 +407,23 @@ export class SetPieces {
     this.take(dist > 16 ? 'long' : 'short', 0.5, tmp.set(target.pos.x - t.pos.x, 0, target.pos.z - t.pos.z).normalize().clone());
   }
 
-  private take(style: 'short' | 'long', charge: number, dir: THREE.Vector3): void {
+  private take(style: 'short' | 'long' | 'shot', charge: number, dir: THREE.Vector3, finesse = false): void {
     const m = this.m;
     const sp = this.current!;
     const t = sp.taker;
     t.basePose = null;
     m.phase = 'playing';
-    if (sp.kind === 'throwin') {
+    m.rules.exemptNext = NO_OFFSIDE.includes(sp.kind);
+    if (style === 'shot') {
+      m.shoot(t, charge, finesse, dir);
+      if (sp.kind === 'penalty') {
+        // 키퍼는 차는 순간 한쪽을 골라 몸을 던진다 (사용자 키퍼면 누르고 있던 방향)
+        const keeper = m.teams[1 - sp.team][0];
+        const z = shotLineZ(sp.spot, m.ball.velocity, t.attackDir);
+        const side = sp.team === 1 && m.userControl ? sideFromInput(this.userDive) : keeperGuess(() => m.random.next(), keeper, z);
+        diveKeeper(keeper, side);
+      }
+    } else if (sp.kind === 'throwin') {
       const r = m.kicks.throwIn(t, dir, style === 'long', charge, m.assistFor(t, 'pass'));
       m.applyThrow(t, r.vel, r.receiver);
     } else {

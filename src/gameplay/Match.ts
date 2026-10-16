@@ -16,8 +16,10 @@ import { TEAMS } from '../data/Teams';
 import { FORMATION_433 } from '../data/Formation';
 import { SetPieces, type RestartKind } from './SetPieces';
 import { Keepers } from './Keepers';
+import { Rules, type Card } from './Rules';
+import { Shootout } from './Shootout';
 
-export type Phase = 'kickoff' | 'playing' | 'out' | 'setpiece' | 'goal' | 'fulltime';
+export type Phase = 'kickoff' | 'playing' | 'out' | 'setpiece' | 'goal' | 'halftime' | 'shootout' | 'fulltime';
 
 export type MatchEvent =
   | { type: 'kick'; speed: number }
@@ -29,7 +31,14 @@ export type MatchEvent =
   | { type: 'smother'; keeper: Player; caught: boolean }
   | { type: 'cross'; keeper: Player; caught: boolean }
   | { type: 'goal'; team: 0 | 1; scorer: Player | null; ownGoal: boolean }
-  | { type: 'whistle'; kind: 'kickoff' | 'fulltime' }
+  | { type: 'whistle'; kind: 'kickoff' | 'halftime' | 'fulltime' }
+  | { type: 'foul'; by: Player; on: Player; penalty: boolean }
+  | { type: 'advantage'; team: 0 | 1 }
+  | { type: 'card'; player: Player; card: Card; second: boolean }
+  | { type: 'offside'; player: Player }
+  | { type: 'stoppage'; minutes: number }
+  | { type: 'penaltyKick'; team: 0 | 1; scored: boolean; kicker: Player }
+  | { type: 'shootoutEnd'; score: [number, number] }
   | { type: 'tackle'; success: boolean }
   | { type: 'out'; kind: RestartKind; team: 0 | 1 }
   | { type: 'restart'; kind: RestartKind; team: 0 | 1 };
@@ -82,6 +91,8 @@ export interface MatchOptions {
   goalVisuals?: boolean;
   /** AI 대 AI 검증에서도 실제 경기 루프를 그대로 사용한다. */
   userControl?: boolean;
+  /** 무승부면 승부차기 (기본: 설정값) */
+  shootout?: boolean;
 }
 
 export class Match {
@@ -96,7 +107,17 @@ export class Match {
   readonly kicks: Kicks;
   readonly setPieces: SetPieces;
   readonly keepers: Keepers;
+  readonly rules: Rules;
+  readonly shootout: Shootout;
   keeperRush = false;
+  /** 전반 1, 후반 2 */
+  half: 1 | 2 = 1;
+  /** 이번 하프에서 흐른 시간 (실제 초) */
+  halfClock = 0;
+  /** 하프 종료 때 알린 추가 시간 (분, 90분 환산). 알리기 전에는 0 */
+  stoppage = 0;
+  /** 퇴장 선수를 경기 재시작 때 되돌리기 위한 원래 명단 */
+  private readonly roster: Player[] = [];
 
   phase: Phase = 'kickoff';
   phaseTimer = 0;
@@ -135,6 +156,9 @@ export class Match {
     this.kicks = new Kicks(this);
     this.setPieces = new SetPieces(this);
     this.keepers = new Keepers(this, physics);
+    this.rules = new Rules(this);
+    this.shootout = new Shootout(this);
+    this.roster.push(...this.players);
     this.setupBallCollisions();
     this.startKickoff(0);
   }
@@ -147,7 +171,21 @@ export class Match {
   }
 
   ownGoalX(team: 0 | 1): number {
-    return (team === 0 ? -1 : 1) * PITCH.halfL;
+    return -this.teams[team][0].attackDir * PITCH.halfL;
+  }
+
+  get userControl(): boolean {
+    return this.options.userControl !== false;
+  }
+
+  /** 한 하프의 길이 (실제 초) */
+  get halfLength(): number {
+    return this.duration / 2;
+  }
+
+  /** 90분 환산 경기 시간 (분). 추가 시간에는 45·90을 넘어간다 */
+  get matchMinutes(): number {
+    return (this.half - 1) * 45 + (this.halfClock / this.halfLength) * 45;
   }
 
   oppGoalX(team: 0 | 1): number {
@@ -155,7 +193,8 @@ export class Match {
   }
 
   isUserControlled(p: Player): boolean {
-    return this.options.userControl !== false && p === this.controlled && this.phase !== 'goal' && this.phase !== 'fulltime';
+    return this.options.userControl !== false && p === this.controlled && this.phase !== 'goal' && this.phase !== 'fulltime' &&
+      this.phase !== 'halftime' && this.phase !== 'shootout';
   }
 
   inOwnBox(p: Player, x: number, z: number): boolean {
@@ -181,6 +220,7 @@ export class Match {
     this.queued = null;
     this.passTarget = null;
     this.setPieces.current = null;
+    this.rules.clearPlay();
     for (const p of this.players) {
       const a = p.attackDir;
       p.vel.set(0, 0, 0);
@@ -218,19 +258,31 @@ export class Match {
         break;
       case 'playing':
       case 'out':
-      case 'setpiece':
+      case 'setpiece': {
         // 경기 시간은 공이 나가 있을 때도 흐른다
         this.clock += dt;
+        this.halfClock += dt;
         if (this.phase === 'playing') this.updatePlaying(dt, cmd);
         else this.setPieces.update(dt, cmd);
-        if (this.clock >= this.duration && this.phase === 'playing') {
-          this.phase = 'fulltime';
-          this.phaseTimer = 999;
-          this.events.push({ type: 'whistle', kind: 'fulltime' });
-          for (const p of this.players) {
-            if (this.score[p.team] > this.score[1 - p.team]) p.basePose = 'celebrate';
-          }
+        if (!this.stoppage && this.halfClock >= this.halfLength) {
+          this.stoppage = this.rules.stoppageMinutes(this.half);
+          this.events.push({ type: 'stoppage', minutes: this.stoppage });
         }
+        // 추가 시간이 끝나도 슛이 날아가는 중이면 결과를 본다
+        const end = this.halfLength * (1 + this.stoppage / 45);
+        if (this.stoppage && this.halfClock >= end && this.phase === 'playing' && !this.ball.shot) this.endHalf();
+        break;
+      }
+      case 'halftime':
+        for (const p of this.players) {
+          p.steer(tmp.set(0, 0, 0), false, false, dt);
+          p.update(dt);
+        }
+        this.stepWorld(dt);
+        if (this.phaseTimer <= 0) this.startSecondHalf();
+        break;
+      case 'shootout':
+        this.shootout.update(dt, cmd);
         break;
       case 'goal':
         for (const p of this.players) {
@@ -263,6 +315,67 @@ export class Match {
     for (const g of this.goals) g.update(dt);
   }
 
+  private endHalf(): void {
+    this.charge = null;
+    this.queued = null;
+    this.rules.clearPlay();
+    if (this.half === 1) {
+      this.phase = 'halftime';
+      this.phaseTimer = MATCH.halftimeDelay;
+      this.events.push({ type: 'whistle', kind: 'halftime' });
+      return;
+    }
+    this.events.push({ type: 'whistle', kind: 'fulltime' });
+    const shootout = this.options.shootout ?? settings.shootout;
+    if (shootout && this.score[0] === this.score[1]) {
+      this.shootout.start();
+      return;
+    }
+    this.finish();
+  }
+
+  /** 경기 종료 (승부차기 후 포함) */
+  finish(): void {
+    this.phase = 'fulltime';
+    this.phaseTimer = 999;
+    const [a, b] = this.shootout.active ? this.shootout.score : this.score;
+    for (const p of this.players) {
+      p.basePose = null;
+      if ((p.team === 0 ? a > b : b > a)) p.basePose = 'celebrate';
+    }
+  }
+
+  /** 후반: 진영을 바꾸고 전반에 받은 팀이 킥오프 */
+  startSecondHalf(): void {
+    this.half = 2;
+    this.halfClock = 0;
+    this.stoppage = 0;
+    this.rules.newHalf();
+    this.setSides(-1);
+    this.startKickoff(1);
+  }
+
+  /** 홈팀 공격 방향 (+1 = +X). 원정팀은 반대 */
+  private setSides(home: 1 | -1): void {
+    for (const p of this.roster) p.attackDir = (p.team === 0 ? home : -home) as 1 | -1;
+  }
+
+  /** 퇴장: 경기에서 빼고 화면에서도 숨긴다 */
+  sendOff(p: Player): void {
+    p.sentOff = true;
+    const remove = (list: Player[]) => {
+      const i = list.indexOf(p);
+      if (i >= 0) list.splice(i, 1);
+    };
+    remove(this.players);
+    remove(this.teams[p.team]);
+    p.model.root.visible = false;
+    p.vel.set(0, 0, 0);
+    if (this.ball.owner === p) this.ball.owner = null;
+    if (this.passTarget === p) this.passTarget = null;
+    if (this.controlled === p) this.switchToNearest();
+  }
+
   private updatePlaying(dt: number, cmd: UserCommand): void {
     const holder = this.ball.owner ?? this.ball.lastTouch;
     if (holder) this.stats.possession[holder.team] += dt;
@@ -276,11 +389,16 @@ export class Match {
     for (const p of this.players) p.update(dt);
     this.separatePlayers();
     this.resolveTackles();
+    if (this.phase !== 'playing') return; // 반칙 휘슬
+    this.rules.update(dt);
+    if (this.phase !== 'playing') return; // 어드밴티지 무효 → 프리킥
     this.carryBall(dt);
     this.stepWorld(dt);
     this.deflectOffBodies();
     this.checkAerial();
+    if (this.phase !== 'playing') return; // 오프사이드
     this.checkPossession();
+    if (this.phase !== 'playing') return;
     this.checkGoal();
     if (this.phase === 'playing') this.setPieces.checkOut();
   }
@@ -351,6 +469,7 @@ export class Match {
 
   private aerialTouch(p: Player): void {
     this.aerialLock = 0.3;
+    if (this.rules.touch(p)) return;
     const bp = this.ball.position;
     const volley = bp.y < 1.35;
     const assist = this.assistFor(p, 'shot');
@@ -396,6 +515,7 @@ export class Match {
       r = this.kicks.header(p, mode, aim, this.assistFor(p, mode === 'pass' ? 'pass' : 'shot'));
       p.facing.set(r.vel.x, 0, r.vel.z).normalize();
       p.playAction('header', 0.5);
+      if (mode !== 'clear') this.rules.recordKick(p);
       this.ball.kick(r.vel, r.spin, p);
       p.kickCooldown = PLAYER.kickCooldown;
       this.events.push({ type: 'kick', speed: r.vel.length() * 0.6 });
@@ -427,6 +547,8 @@ export class Match {
   /** 스로인 적용 */
   applyThrow(p: Player, vel: CANNON.Vec3, receiver: Player | null): void {
     p.playAction('hold', 0.35);
+    this.rules.recordKick(p);
+    this.rules.recordPass(p);
     this.ball.kick(vel, cspin.set(0, 0, 0), p);
     this.events.push({ type: 'kick', speed: vel.length() * 0.5 });
     this.ball.shot = null;
@@ -646,6 +768,7 @@ export class Match {
   pass(p: Player, dir: THREE.Vector3, kind: PassKind = 'short', charge = 0.5): void {
     const r = this.kicks.pass(p, dir, kind, charge, this.assistFor(p, 'pass'));
     this.kickBall(p, r.vel, r.spin);
+    this.rules.recordPass(p);
     this.ball.shot = null;
     this.passTarget = r.receiver;
     this.stats.passes[p.team]++;
@@ -665,6 +788,7 @@ export class Match {
     if (this.ball.position.y > 0.5 && p.isKeeper) {
       this.ball.body.position.set(p.pos.x + p.facing.x * 0.6, 0.9, p.pos.z + p.facing.z * 0.6);
     }
+    this.rules.recordKick(p);
     this.ball.kick(vel, spin, p);
     p.kickCooldown = PLAYER.kickCooldown;
     p.basePose = null;
@@ -739,6 +863,15 @@ export class Match {
         p.tackleResolved = true;
         p.tackleTimer = Math.min(p.tackleTimer, 0.08);
         this.events.push({ type: 'tackle', success });
+        const foul = this.rules.judgeTackle(p, o, success, o.facing.dot(p.tackleDir));
+        if (foul) {
+          o.stunned = 0.55;
+          o.basePose = null;
+          if (o.team === 0) this.charge = null;
+          this.rules.call(foul, !success);
+          if (this.phase !== 'playing') return;
+          continue;
+        }
         if (success) {
           this.stats.tackles[p.team]++;
           o.stunned = 0.55;
@@ -758,6 +891,7 @@ export class Match {
         }
       } else if (!o) {
         // 굴러가는 공을 태클로 걷어냄
+        if (this.rules.touch(p)) return;
         p.tackleResolved = true;
         p.tackleTimer = Math.min(p.tackleTimer, 0.08);
         cv.set(p.tackleDir.x * 7, 0.8, p.tackleDir.z * 7);
@@ -777,7 +911,7 @@ export class Match {
     let bestD = Infinity;
     for (const p of this.players) {
       if (p.kickCooldown > 0 || p.stunned > 0 || p.tackleTimer > 0) continue;
-      const keeperHands = p.isKeeper && this.inOwnBox(p, bp.x, bp.z);
+      const keeperHands = p.isKeeper && this.inOwnBox(p, bp.x, bp.z) && this.rules.keeperMayHandle(p);
       if (keeperHands) {
         if (p.busy || bp.y > 0.95) continue;
         // 키퍼는 슛을 선방 판정으로만 막는다
@@ -824,6 +958,9 @@ export class Match {
 
   gainPossession(best: Player): void {
     const bp = this.ball.position;
+    // 백패스는 발로만 받는다 (판정 전에 확인: touch가 백패스 상태를 지운다)
+    const hands = best.isKeeper && this.rules.keeperMayHandle(best);
+    if (this.rules.touch(best)) return;
     this.ball.owner = best;
     this.ball.lastTouch = best;
     this.ball.shot = null;
@@ -837,7 +974,7 @@ export class Match {
     if (best === this.controlled && this.lastMove.lengthSq() > 0.01) best.facing.copy(this.lastMove).setY(0).normalize();
     if (best.isKeeper) {
       this.keepers.onCatch(best);
-      if (this.inOwnBox(best, bp.x, bp.z)) {
+      if (hands && this.inOwnBox(best, bp.x, bp.z)) {
         best.basePose = 'hold';
         this.ball.body.position.y = Math.max(bp.y, 0.6);
       }
@@ -925,8 +1062,10 @@ export class Match {
     const bp = this.ball.position;
     if (Math.abs(bp.x) < PITCH.halfL + BALL.radius) return;
     if (Math.abs(bp.z) > GOAL.width / 2 || bp.y > GOAL.height) return;
-    // +X 골대에 들어가면 홈팀(0) 득점
-    const team: 0 | 1 = bp.x > 0 ? 0 : 1;
+    // 공이 들어간 골대 쪽으로 공격하는 팀의 득점 (후반에는 진영이 바뀐다)
+    const team: 0 | 1 = Math.sign(bp.x) === this.teams[0][0].attackDir ? 0 : 1;
+    this.rules.addStoppage(0.5);
+    this.rules.clearPlay();
     this.score[team]++;
     const scorer = this.ball.lastTouch;
     const ownGoal = !!scorer && scorer.team !== team;
@@ -976,7 +1115,25 @@ export class Match {
     this.clock = 0;
     this.elapsed = 0;
     this.lastScorer = null;
-    for (const p of this.players) p.stamina = 1;
+    this.half = 1;
+    this.halfClock = 0;
+    this.stoppage = 0;
+    this.rules.reset();
+    this.shootout.reset();
+    // 퇴장 선수 복귀
+    this.players.length = 0;
+    this.players.push(...this.roster);
+    for (const team of [0, 1] as const) {
+      this.teams[team].length = 0;
+      this.teams[team].push(...this.roster.filter((p) => p.team === team));
+    }
+    for (const p of this.roster) {
+      p.stamina = 1;
+      p.yellows = 0;
+      p.sentOff = false;
+      p.model.root.visible = true;
+    }
+    this.setSides(1);
     this.startKickoff(0);
   }
 }

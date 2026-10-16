@@ -18,12 +18,13 @@ function passTrials(assist: AssistLevel, moving: boolean, moveAssist: MoveAssist
     const passer = match.forward(0);
     const receiver = match.teams[0].find((p) => p.slot.label === 'CM')!;
     passer.actionLock = receiver.actionLock = 0;
-    passer.pos.set(-6, 0, 0);
-    receiver.pos.set(6, 0, 0);
+    // 자기 진영 안에서 주고받는다 (상대 진영이면 세워 둔 선수들 때문에 오프사이드)
+    passer.pos.set(-18, 0, 0);
+    receiver.pos.set(-6, 0, 0);
     passer.facing.set(1, 0, 0);
     receiver.facing.set(-1, 0, 0);
     match.controlled = passer;
-    match.ball.reset(-5.65, 0);
+    match.ball.reset(-17.65, 0);
     match.ball.owner = passer;
     // 보조 입력은 동료 방향에서 45° 벗어나고, 수동은 11.65m에 맞는 방향/게이지다.
     const aim = new THREE.Vector3(1, 0, assist === 'assisted' ? 1 : 0).normalize();

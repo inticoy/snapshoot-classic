@@ -25,7 +25,7 @@ export class Keepers {
     for (const { player, body } of this.bodies) {
       this.states.set(player, { threatTime: 0, holdTime: 0, smotherRolled: false, blockUntil: 0 });
       body.addEventListener('collide', (e: { body: CANNON.Body; contact: CANNON.ContactEquation }) => {
-        if (e.body !== m.ball.body || m.phase !== 'playing' || m.ball.owner?.team === player.team) return;
+        if (e.body !== m.ball.body || (m.phase !== 'playing' && m.phase !== 'shootout') || m.ball.owner?.team === player.team) return;
         const state = this.states.get(player)!;
         if (m.elapsed < state.blockUntil) return;
         const speed = Math.abs(e.contact.getImpactVelocityAlongNormal());
@@ -52,7 +52,8 @@ export class Keepers {
   onCatch(k: Player): void { this.states.get(k)!.holdTime = 0; }
 
   syncBodies(dt: number): void {
-    for (const b of this.bodies) b.sync(dt, this.m.phase === 'playing' && this.m.ball.owner?.team !== b.player.team);
+    const live = this.m.phase === 'playing' || this.m.phase === 'shootout';
+    for (const b of this.bodies) b.sync(dt, live && this.m.ball.owner?.team !== b.player.team);
   }
 
   update(dt: number): void {
@@ -172,6 +173,8 @@ export class Keepers {
 
   private tryCross(k: Player): boolean {
     const m = this.m, bp = m.ball.position;
+    // 동료가 발로 준 공(백패스)은 손으로 잡을 수 없다
+    if (!m.rules.keeperMayHandle(k)) return false;
     if (!m.inOwnBox(k, k.pos.x, k.pos.z) || !m.inOwnBox(k, bp.x, bp.z) || k.kickCooldown > 0 || m.ball.velocity.y > 1 ||
         bp.y < 1.2 || bp.y > KEEPER.crossReach || Math.hypot(bp.x - k.pos.x, bp.z - k.pos.z) > KEEPER.reach) return false;
     const handling = n(k.profile.stats.handling ?? 60);
@@ -186,6 +189,7 @@ export class Keepers {
 
   private trySmother(k: Player): void {
     const m = this.m, state = this.states.get(k)!;
+    if (!m.rules.keeperMayHandle(k)) return;
     if (k.diveTimer <= 0 || k.diveKind !== 'smother' || state.smotherRolled || m.ball.shot ||
         m.ball.owner?.team === k.team || m.ball.position.y > 0.8 || !m.inOwnBox(k, m.ball.position.x, m.ball.position.z)) return;
     const gap = Math.hypot(m.ball.position.x - k.pos.x, m.ball.position.z - k.pos.z);

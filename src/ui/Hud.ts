@@ -32,8 +32,14 @@ const SETPIECE_HINTS: Record<string, [string, string][]> = {
   throwin: [['←→', '조준'], ['S', '짧은 스로인'], ['A', '롱 스로인']],
   corner: [['←→', '조준'], ['A', '크로스'], ['S', '짧은 패스']],
   goalkick: [['←→', '조준'], ['A', '롱킥'], ['S', '짧은 패스']],
+  freekick: [['←→', '조준'], ['D', '슛'], ['Z+D', '감아차기'], ['S', '패스'], ['A', '롱킥']],
+  indirect: [['←→', '조준'], ['S', '패스'], ['A', '롱킥']],
+  penalty: [['↑↓', '구석 선택'], ['D', '슛 (꾹 = 세기)']],
+  keeper: [['↑↓', '차는 순간 다이빙 방향']],
 };
-const SETPIECE_TITLE: Record<string, string> = { throwin: '스로인', corner: '코너킥', goalkick: '골킥' };
+const SETPIECE_TITLE: Record<string, string> = {
+  throwin: '스로인', corner: '코너킥', goalkick: '골킥', freekick: '프리킥', indirect: '간접 프리킥', penalty: '페널티킥', keeper: '페널티 방어',
+};
 
 const KIND_LABEL = { shoot: 'SHOT', pass: 'PASS', through: 'THROUGH', lob: 'LOB' } as const;
 
@@ -61,6 +67,12 @@ export class Hud {
   private readonly nbRight = $('nb-right');
   private readonly goalWord = $('goal-word');
   private readonly lowerThird = $('lower-third');
+  private readonly added = $('added');
+  private readonly pkTally = $('pk-tally');
+  private readonly cardPop = $('card-pop');
+  private cardTimer = 0;
+  private lastReds = '';
+  private lastPk = '';
   private readonly proj = new THREE.Vector3();
 
   private tickerTimer = 0;
@@ -90,8 +102,27 @@ export class Hud {
   /** 스코어보드 아래 짧은 알림 (선방, 골대 등) */
   tick(text: string, seconds = 1.6): void {
     this.ticker.textContent = text;
+    this.ticker.classList.remove('flagged');
     this.ticker.classList.add('show');
     this.tickerTimer = seconds;
+  }
+
+  /** 카드: 선수 이름과 함께 잠깐 띄운다 */
+  card(p: Player, card: 'yellow' | 'red', second: boolean): void {
+    this.cardPop.className = `card-pop show ${card}`;
+    (this.cardPop.lastElementChild as HTMLElement).textContent =
+      `${p.profile.number}  ${p.profile.short}  ·  ${card === 'yellow' ? '경고' : second ? '경고 누적 퇴장' : '퇴장'}`;
+    this.cardTimer = 2.6;
+  }
+
+  /** 오프사이드: 부심 깃발 (공격 팀 쪽 터치라인) */
+  flag(): void {
+    this.ticker.classList.add('flagged');
+  }
+
+  stoppage(minutes: number): void {
+    this.added.textContent = `+${minutes}`;
+    this.added.classList.add('show');
   }
 
   goal(team: 0 | 1, title: string, sub: string, score: [number, number]): void {
@@ -115,15 +146,37 @@ export class Hud {
       this.scoreA.textContent = String(match.score[1]);
       this.lastScore = score;
     }
-    // 실제 경기 시간을 90분으로 환산 (mm:ss)
-    const t = Math.min(90 * 60, (match.clock / match.duration) * 90 * 60);
+    // 실제 경기 시간을 90분으로 환산 (mm:ss). 추가 시간에는 45:00·90:00을 넘어 계속 흐른다
+    const t = match.matchMinutes * 60;
+    if (!match.stoppage) this.added.classList.remove('show');
+    const reds = `${match.rules.reds[0]}-${match.rules.reds[1]}`;
+    if (reds !== this.lastReds) {
+      this.lastReds = reds;
+      $('reds-h').innerHTML = '<i></i>'.repeat(match.rules.reds[0]);
+      $('reds-a').innerHTML = '<i></i>'.repeat(match.rules.reds[1]);
+    }
+    const so = match.shootout;
+    const pk = so.active ? so.results.map((r) => r.map((g) => (g ? '●' : '○')).join('')).join('|') : '';
+    if (pk !== this.lastPk) {
+      this.lastPk = pk;
+      this.pkTally.classList.toggle('show', so.active);
+      if (so.active) {
+        const [a, b] = so.score;
+        const row = (team: 0 | 1) => {
+          const r = so.results[team];
+          const cells = Array.from({ length: Math.max(5, r.length) }, (_, i) => `<i class="${i < r.length ? (r[i] ? 'in' : 'miss') : ''}"></i>`);
+          return `<div><b>${TEAMS[team].abbr}</b>${cells.join('')}<span>${team === 0 ? a : b}</span></div>`;
+        };
+        this.pkTally.innerHTML = `<small>승부차기</small>${row(0)}${row(1)}`;
+      }
+    }
     const mm = Math.floor(t / 60);
     const ss = Math.floor(t % 60);
     this.clock.textContent = `${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}`;
 
     this.timers(dt);
 
-    const live = match.phase !== 'goal' && match.phase !== 'fulltime';
+    const live = match.phase !== 'goal' && match.phase !== 'fulltime' && match.phase !== 'halftime';
     this.updateIndicator(match, camera, live);
     this.updateNameBars(match, live);
     this.updateHints(match, live);
@@ -134,6 +187,7 @@ export class Hud {
     if (this.tickerTimer > 0 && (this.tickerTimer -= dt) <= 0) this.ticker.classList.remove('show');
     if (this.goalWordTimer > 0 && (this.goalWordTimer -= dt) <= 0) this.goalWord.classList.remove('show');
     if (this.lowerThirdTimer > 0 && (this.lowerThirdTimer -= dt) <= 0) this.lowerThird.classList.remove('show');
+    if (this.cardTimer > 0 && (this.cardTimer -= dt) <= 0) this.cardPop.classList.remove('show');
   }
 
   private updateIndicator(match: Match, camera: THREE.Camera, live: boolean): void {
@@ -151,7 +205,8 @@ export class Hud {
       this.pi.style.opacity = String(0.55 + 0.45 * Math.min(1, p.stamina * 1.6));
     }
 
-    const charge = match.charge;
+    const sp = match.shootout.power;
+    const charge = match.charge ?? (sp !== null ? { kind: 'shoot' as const, value: sp, finesse: false, chip: false } : null);
     this.power.classList.toggle('show', !!charge && live);
     if (charge) {
       this.proj.set(p.pos.x, 0, p.pos.z).project(camera);
@@ -223,9 +278,13 @@ export class Hud {
     const owner = match.ball.owner;
     const sp = match.setPieces.current;
     const userSetPiece = match.phase === 'setpiece' && sp && sp.taker === match.controlled;
-    const mode = userSetPiece
-      ? sp!.kind
-      : owner && owner.team === 0 ? 'attack' : owner ? 'defence' : this.hintMode ?? 'attack';
+    const so = match.shootout;
+    const mode = match.phase === 'shootout' ? (so.turn === 0 ? 'penalty' : 'keeper')
+      : userSetPiece ? sp!.kind
+      : match.phase === 'setpiece' && sp?.kind === 'penalty' ? 'keeper'
+      : owner && owner.team === 0 ? 'attack' : owner ? 'defence'
+      // 공이 떠 있으면 직전 공격/수비 안내를 유지하되, 세트피스 안내는 차고 나면 내린다
+      : this.hintMode === 'defence' ? 'defence' : 'attack';
     if (mode === this.hintMode) return;
     this.hintMode = mode;
     const list = SETPIECE_HINTS[mode] ?? (mode === 'attack' ? ATTACK_HINTS : DEFENCE_HINTS);

@@ -83,10 +83,17 @@ it.each([7, 42, 2026])('AI 대 AI 5분: 시드 %i에서 정지·교착 없이 �
     }
     match.events.length = 0;
   }
-  console.info(`AI 5분 seed=${seed}: ${match.score.join(':')}, 슛 ${match.stats.shots.join('/')}, 패스 ${match.stats.passes.join('/')}, 재개 ${restarts}, 최장 대기 ${longestPause.toFixed(3)}초`);
+  console.info(`AI 5분 seed=${seed}: ${match.score.join(':')}, 슛 ${match.stats.shots.join('/')}, 패스 ${match.stats.passes.join('/')}, 재개 ${restarts}, 파울 ${match.rules.fouls.join('/')}, 오프사이드 ${match.rules.offsides.join('/')}, 카드 ${match.rules.yellows.join('/')}·${match.rules.reds.join('/')}, 최장 대기 ${longestPause.toFixed(3)}초`);
   expect(match.phase).toBe('fulltime');
+  // 전·후반 추가 시간(최대 3+5분 환산)과 마지막 슛 결과를 기다리는 시간까지
   expect(match.clock).toBeGreaterThanOrEqual(300);
-  expect(match.clock).toBeLessThan(304);
+  expect(match.clock).toBeLessThan(300 + (8 / 90) * 300 + 4);
+  expect(match.half).toBe(2);
+  // 90분 환산 파울·오프사이드가 과하지 않다
+  for (const team of [0, 1] as const) {
+    expect(match.rules.fouls[team]).toBeLessThanOrEqual(25);
+    expect(match.rules.offsides[team]).toBeLessThanOrEqual(25);
+  }
   expect(goals).toBeGreaterThan(0);
   expect(restarts).toBeGreaterThan(0);
   for (const team of [0, 1]) {

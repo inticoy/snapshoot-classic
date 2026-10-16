@@ -235,3 +235,40 @@ kbd {
   width: auto; height: 34px; padding: 0 14px; border-radius: 4px; font-size: 12px;
   right: calc(12px + env(safe-area-inset-right)); top: calc(10px + env(safe-area-inset-top)); bottom: auto;
 }
+
+/* ---------- 규칙: 퇴장·추가 시간·카드·승부차기 ---------- */
+.sb { display: flex; align-items: stretch; }
+.sb-reds { display: inline-flex; gap: 2px; }
+.sb-reds:empty { display: none; }
+.sb-reds i { width: 7px; height: 10px; border-radius: 1px; background: #e0242f; }
+.sb-added {
+  display: none; align-items: center; padding: 0 8px; margin-left: 4px; border-radius: 3px;
+  background: var(--accent); color: #111318; font: 700 15px/1 var(--num);
+}
+.sb-added.show { display: flex; }
+.ticker.flagged::before {
+  content: ''; display: inline-block; width: 10px; height: 8px; margin-right: 8px; vertical-align: 1px;
+  background: linear-gradient(135deg, #ffd400 50%, #e0242f 50%); box-shadow: -2px 0 0 #fff;
+}
+.card-pop {
+  position: absolute; left: 50%; bottom: 172px; transform: translate(-50%, 8px); opacity: 0;
+  display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-radius: 4px;
+  background: rgba(13, 15, 19, 0.88); font: 700 15px/1 var(--ui); color: #fff;
+  transition: opacity 0.18s, transform 0.18s; pointer-events: none;
+}
+.card-pop.show { opacity: 1; transform: translate(-50%, 0); }
+.card-pop i { width: 16px; height: 22px; border-radius: 2px; background: #ffd400; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4); }
+.card-pop.red i { background: #e0242f; }
+.sb-pk {
+  position: absolute; top: 56px; left: 50%; transform: translateX(-50%); display: none;
+  flex-direction: column; gap: 4px; padding: 8px 12px; border-radius: 4px; background: rgba(13, 15, 19, 0.82);
+}
+.sb-pk.show { display: flex; }
+.sb-pk small { font: 700 10px/1 var(--ui); letter-spacing: 0.12em; color: var(--muted); text-align: center; }
+.sb-pk div { display: flex; align-items: center; gap: 5px; font: 700 14px/1 var(--num); color: #fff; }
+.sb-pk b { width: 36px; letter-spacing: 0.04em; }
+.sb-pk i { width: 10px; height: 10px; border-radius: 50%; border: 1px solid rgba(255, 255, 255, 0.35); }
+.sb-pk i.in { background: #35cd21; border-color: #35cd21; }
+.sb-pk i.miss { background: #e0242f; border-color: #e0242f; }
+.sb-pk span { margin-left: 6px; min-width: 14px; text-align: right; color: var(--accent); }
+.touch-device .card-pop { bottom: auto; top: calc(56px + env(safe-area-inset-top)); font-size: 13px; }

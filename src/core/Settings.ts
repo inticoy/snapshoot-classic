@@ -35,12 +35,14 @@ interface SettingsData {
   moveAssist: MoveAssist;
   physicsPreset: PresetName;
   graphicsQuality: GraphicsQuality;
+  /** 무승부면 승부차기 */
+  shootout: boolean;
 }
 
 const KEY = 'snapshoot-classic:settings';
 
 function load(): SettingsData {
-  const fallback: SettingsData = { passAssist: 'assisted', shotAssist: 'assisted', moveAssist: 'high', physicsPreset: 'arcade', graphicsQuality: 'auto' };
+  const fallback: SettingsData = { passAssist: 'assisted', shotAssist: 'assisted', moveAssist: 'high', physicsPreset: 'arcade', graphicsQuality: 'auto', shootout: false };
   try {
     const raw = localStorage.getItem(KEY);
     if (!raw) return fallback;
@@ -51,6 +53,7 @@ function load(): SettingsData {
       moveAssist: MOVE_ORDER.includes(parsed.moveAssist!) ? parsed.moveAssist! : fallback.moveAssist,
       physicsPreset: parsed.physicsPreset === 'real' ? 'real' : 'arcade',
       graphicsQuality: GRAPHICS_ORDER.includes(parsed.graphicsQuality!) ? parsed.graphicsQuality! : 'auto',
+      shootout: parsed.shootout === true,
     };
   } catch {
     return fallback;
@@ -96,4 +99,9 @@ export function cycleGraphics(dir: 1 | -1): void {
 /** 터치 또는 적은 CPU 코어는 자동 품질에서 렌더링 비용을 줄인다. */
 export function graphicsQuality(touch: boolean, cores: number): 'low' | 'high' {
   return settings.graphicsQuality === 'auto' ? (touch || cores <= 4 ? 'low' : 'high') : settings.graphicsQuality;
+}
+
+export function toggleShootout(): void {
+  settings.shootout = !settings.shootout;
+  save();
 }

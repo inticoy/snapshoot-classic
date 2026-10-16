@@ -1,7 +1,7 @@
 import { TOUCH } from '../config';
 import { Input, type Action } from './Input';
 
-export type TouchMode = 'attack' | 'defence' | 'throwin' | 'corner' | 'goalkick';
+export type TouchMode = 'attack' | 'defence' | 'throwin' | 'corner' | 'goalkick' | 'freekick' | 'indirect' | 'penalty' | 'keeper';
 export type TouchSlot = 'shoot' | 'pass' | 'through' | 'lob' | 'sprint' | 'pause';
 
 export function touchBinding(mode: TouchMode, slot: TouchSlot): { label: string; action: Action } {
@@ -14,7 +14,7 @@ export function touchBinding(mode: TouchMode, slot: TouchSlot): { label: string;
     return { label: '슬라이딩', action: 'lob' };
   }
   if (slot === 'pass') return { label: mode === 'throwin' ? '짧은 스로인' : '패스', action: 'pass' };
-  if (slot === 'lob') return { label: mode === 'throwin' ? '롱 스로인' : mode === 'corner' ? '크로스' : mode === 'goalkick' ? '롱킥' : '로빙', action: 'lob' };
+  if (slot === 'lob') return { label: mode === 'throwin' ? '롱 스로인' : mode === 'corner' ? '크로스' : mode === 'goalkick' || mode === 'freekick' || mode === 'indirect' ? '롱킥' : '로빙', action: 'lob' };
   return { label: slot === 'shoot' ? '슛' : '스루', action: slot };
 }
 
@@ -24,6 +24,10 @@ interface Contact { x: number; y: number; slot?: TouchSlot; action?: Action; fli
 export function visibleSlots(mode: TouchMode): TouchSlot[] {
   if (mode === 'attack') return ['shoot', 'pass', 'sprint', 'pause'];
   if (mode === 'defence') return ['shoot', 'pass', 'through', 'sprint', 'pause'];
+  if (mode === 'freekick') return ['shoot', 'pass', 'lob', 'pause'];
+  // PK: 조이스틱 위/아래로 구석을 고르고 슛 / 상대 PK: 조이스틱으로 다이빙 방향만
+  if (mode === 'penalty') return ['shoot', 'pause'];
+  if (mode === 'keeper') return ['pause'];
   return ['pass', 'lob', 'pause'];
 }
 
@@ -32,6 +36,8 @@ export function swipeHint(mode: TouchMode, slot: TouchSlot): string {
   if (mode === 'attack' && slot === 'pass') return '↑스루 ↓로빙';
   if (mode === 'attack' && slot === 'shoot') return '↑칩 ↔감아';
   if (mode === 'defence' && slot === 'shoot') return '밀면 슬라이딩';
+  if (mode === 'freekick' && slot === 'shoot') return '↔감아';
+  if (mode === 'penalty' && slot === 'shoot') return '꾹 = 세기';
   return '';
 }
 
@@ -85,7 +91,7 @@ export class TouchInput {
       this.joystick = null;
       this.input.setMove(0, 0);
     } else {
-      if (start.slot === 'shoot' && this.mode === 'attack') {
+      if (start.slot === 'shoot' && (this.mode === 'attack' || this.mode === 'freekick')) {
         const dx = x - start.x, dy = y - start.y;
         if (-dy >= TOUCH.swipeDistance && -dy > Math.abs(dx)) this.input.pulse('modifier');
         else if (Math.abs(dx) >= TOUCH.swipeDistance && Math.abs(dx) >= Math.abs(dy)) this.input.pulse('finesse');

@@ -105,6 +105,28 @@ export const MATCH = {
   durationSeconds: 240, // 실제 4분 = 90분 표시
   goalCelebration: 3,
   kickoffDelay: 1.2,
+  /** 하프타임 휘슬 뒤 후반 킥오프까지 (사용자 경기에서는 하프타임 화면이 이 사이에 뜬다) */
+  halftimeDelay: 3,
+};
+
+/** 경기 규칙 (IFAB 경기 규칙을 게임에 맞게 단순화) */
+export const RULES = {
+  /** 프리킥 때 상대가 떨어져야 하는 거리 (m) */
+  wallDistance: 9.15,
+  /** 페널티 마크: 골라인에서 11m */
+  penaltySpot: 11,
+  /** 어드밴티지를 지켜보는 시간 (초) */
+  advantageTime: 2,
+  /** 오프사이드 판정 여유 (m). 눈으로 구분 안 되는 간발의 차는 온사이드 */
+  offsideMargin: 0.3,
+  /** 직접 프리킥 슛을 노리는 최대 거리 (m) */
+  freeKickShotRange: 30,
+  /** 추가 시간 (분, 90분 환산) 범위 */
+  stoppageMin: 1,
+  stoppageMax: [3, 5] as const,
+  /** 승부차기 한 번이 끝났다고 보는 시간 (초) */
+  shootoutKickTime: 3.2,
+  shootoutPause: 1.4,
 };
 
 export const TEAM_COLORS = [

@@ -150,6 +150,8 @@ export class TeamAI {
     } else if (p.role === 'FWD') {
       fx = teamHasBall ? ballF + (winger ? 16 : 22) : Math.max(0, ballF * 0.5 + 10);
     }
+    // 공격 중에는 오프사이드 라인(뒤에서 두 번째 수비수) 바로 앞에서 기다린다
+    if (teamHasBall) fx = Math.min(fx, Math.max(this.match.rules.offsideLine(p.team) - 0.8, ballF, 0));
     fx = THREE.MathUtils.clamp(fx, -PITCH.halfL + 4, PITCH.halfL - 5);
     let z = slot.z * a * (teamHasBall ? 1 : 0.8) + bp.z * 0.18;
     if (p.role === 'FWD' && !winger && teamHasBall) {
@@ -335,6 +337,8 @@ export class TeamAI {
     if (this.match.random.next() < chance) {
       const bp = this.match.ball.position;
       tmp.set(bp.x - p.pos.x, 0, bp.z - p.pos.z).normalize();
+      // 등 뒤에서는 반칙이라 따라붙기만 한다 (가끔 참지 못하고 들어간다)
+      if (carrier.facing.dot(tmp) > 0.5 && this.match.random.next() < 0.9) return;
       // 가까우면 주로 스탠딩 태클, 가끔 슬라이딩
       p.startTackle(tmp, d < 1.15 && this.match.random.next() < 0.7 ? 'stand' : 'slide');
     }

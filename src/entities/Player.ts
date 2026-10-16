@@ -57,16 +57,18 @@ export class Player {
     readonly slot: Slot,
     modelFactory: PlayerModelFactory = createPlayerModel,
   ) {
+    this.attackDir = team === 0 ? 1 : -1;
     const c = TEAM_COLORS[team];
     const colors = { shirt: role === 'GK' ? c.keeper : c.shirt, shorts: c.shorts, socks: role === 'GK' ? c.keeper : c.socks };
     // 캐릭터 에셋이 로드됐으면 스킨드 캐릭터, 아니면 절차적 모델로 대체
     this.model = modelFactory(colors, number, role === 'GK');
   }
 
-  /** 팀이 공격하는 방향 (+1 = +X) */
-  get attackDir(): 1 | -1 {
-    return this.team === 0 ? 1 : -1;
-  }
+  /** 팀이 공격하는 방향 (+1 = +X). 후반에 진영을 바꾸면 Match가 뒤집는다 */
+  attackDir: 1 | -1 = 1;
+  /** 이번 경기 경고 수와 퇴장 여부 */
+  yellows = 0;
+  sentOff = false;
 
   get isKeeper(): boolean {
     return this.role === 'GK';
