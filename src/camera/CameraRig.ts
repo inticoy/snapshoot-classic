@@ -5,7 +5,16 @@ import { visualRandom } from '../core/Random';
 // TV 중계 (FIFA 기본 카메라 느낌): 관중석 높은 곳에서 망원(좁은 화각)으로 당겨 찍는다.
 // 원근 왜곡이 적고 선수가 크게 보인다. 카메라는 터치라인 밖에 고정, 좌우로만 공을 따라간다.
 // CAMERA(config.ts)는 '넓은 중계' 설정.
-const TELE_CAMERA = { fov: 24, height: 20, backFromTouchline: 22, endMargin: 9, followX: 0.9 };
+const TELE_CAMERA = {
+  fov: 24, // 경기장 중앙을 볼 때 화각 (기준 거리에서)
+  height: 20,
+  backFromTouchline: 22,
+  endMargin: 9,
+  followX: 0.9,
+  followZ: 0.25, // 공이 먼 쪽/가까운 쪽으로 갈 때 카메라도 조금 따라 움직인다
+  minFov: 14,
+  maxFov: 40,
+};
 
 export type CameraMode = 'tele' | 'broadcast' | 'pro';
 
@@ -63,7 +72,7 @@ export class CameraRig {
       // 관중석 고정 위치에서 좌우로 따라가며 공을 바라본다 (망원)
       const fx = THREE.MathUtils.clamp(ball.x * TELE_CAMERA.followX + focus.x * 0.1, -PITCH.halfL + TELE_CAMERA.endMargin, PITCH.halfL - TELE_CAMERA.endMargin);
       const fz = ball.z * 0.85 + focus.z * 0.15;
-      this.desiredPos.set(fx, TELE_CAMERA.height, PITCH.halfW + TELE_CAMERA.backFromTouchline);
+      this.desiredPos.set(fx, TELE_CAMERA.height, PITCH.halfW + TELE_CAMERA.backFromTouchline + fz * TELE_CAMERA.followZ);
       this.desiredLook.set(ball.x * 0.9 + focus.x * 0.1, 0, fz);
     } else if (this.mode === 'broadcast') {
       // 공과 조종 선수 사이를 따라가되, 경기장 끝에서는 멈춘다
@@ -88,6 +97,24 @@ export class CameraRig {
       this.shake *= Math.exp(-6 * dt);
     }
     this.camera.lookAt(this.look);
+    if (this.mode === 'tele') this.zoomToKeepFraming();
+  }
+
+  /**
+   * TV 중계처럼 공과의 거리에 따라 줌을 조절해 화면에 보이는 범위를 일정하게 유지한다.
+   * (공이 가까운 터치라인으로 와도 갑자기 확대되지 않게)
+   */
+  private zoomToKeepFraming(): void {
+    const dist = this.camera.position.distanceTo(this.look);
+    const ref = Math.hypot(TELE_CAMERA.height, PITCH.halfW + TELE_CAMERA.backFromTouchline); // 중앙을 볼 때 거리
+    const span = 2 * ref * Math.tan(THREE.MathUtils.degToRad(TELE_CAMERA.fov / 2)); // 유지할 세로 범위
+    let fov = THREE.MathUtils.radToDeg(2 * Math.atan(span / 2 / dist));
+    if (this.camera.aspect < 1) fov *= 1.45;
+    fov = THREE.MathUtils.clamp(fov, TELE_CAMERA.minFov, TELE_CAMERA.maxFov * (this.camera.aspect < 1 ? 1.45 : 1));
+    if (Math.abs(fov - this.camera.fov) > 0.01) {
+      this.camera.fov = fov;
+      this.camera.updateProjectionMatrix();
+    }
   }
 
   resize(aspect: number): void {
