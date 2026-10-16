@@ -27,6 +27,7 @@ export type Phase = 'kickoff' | 'playing' | 'out' | 'setpiece' | 'goal' | 'halft
 export type MatchEvent =
   | { type: 'kick'; speed: number }
   | { type: 'touch'; speed: number }
+  | { type: 'heavyTouch'; player: Player }
   | { type: 'bounce'; speed: number }
   | { type: 'post'; speed: number }
   | { type: 'net'; speed: number }
@@ -653,6 +654,11 @@ export class Match {
     if (cmd.pass.pressed && !attacking && !teamHasBall) this.switchToNearest();
 
     const move = cmd.move.clone();
+    // 추격 보정이 입력을 바꾸더라도 다음 터치는 사용자가 꺾으려던 방향으로 보낸다.
+    this.dribbleIntent.copy(cmd.move).setY(0);
+    this.dribbleIntentOwner = p;
+    if (this.dribbleIntent.lengthSq() > 0.01) this.dribbleIntent.normalize();
+    else this.dribbleIntent.set(0, 0, 0);
     let autoSprint = false;
     // 패스 받기 보조 (FIFA식):
     //  - 전환 직후 잠깐은 AI가 받으러 가는 움직임 유지 (자동 전환 이동 보조)
@@ -695,13 +701,7 @@ export class Match {
       const d = tmp.length();
       if (this.trapping) {
         if (d > 0.25) move.copy(tmp.multiplyScalar(Math.min(1, d / 1.5) / d));
-      } else if (d > 0.35) {
-        // 공이 발에서 떨어져 있으면 먼저 공 쪽으로 휘어 가서 닿은 뒤 새 방향으로 꺾는다
-        // 1m 이상 떨어지면 완전히 공을 쫓는다 (입력 방향은 닿은 뒤 꺾는 방향이 된다)
-        const pull = Math.min(1, (d - 0.35) / 0.65);
-        const len = move.length();
-        move.normalize().lerp(tmp.normalize(), pull).normalize().multiplyScalar(len);
-      }
+      } else this.guideDribble(p, move);
     }
     if (!p.busy) p.steer(move, cmd.sprint || autoSprint, hasBall, dt, speedScale);
     // 압박/견제 중에는 상대를 바라본다 (뒷걸음질)
@@ -909,8 +909,28 @@ export class Match {
 
   /** 소유 중인 공 다루기. touches면 터치 드리블, 아니면 발 앞에 붙여 다닌다 (킥오프 대기 등) */
   private touchGap = 0;
+  private readonly dribbleIntent = new THREE.Vector3();
+  private dribbleIntentOwner: Player | null = null;
   /** 사용자가 공을 가진 채 입력을 뗐다: 앞으로 치지 않고 발로 세운다 */
   private trapping = false;
+
+  /** 사용자와 AI 모두 원래 의도를 보관하고 발이 닿지 않는 공만 쫓는다. */
+  guideDribble(p: Player, move: THREE.Vector3): void {
+    if (this.options.dribbleTouches === false) return;
+    this.dribbleIntent.copy(move).setY(0);
+    this.dribbleIntentOwner = p;
+    if (this.dribbleIntent.lengthSq() > 0.01) this.dribbleIntent.normalize();
+    else this.dribbleIntent.set(0, 0, 0);
+    this.footPoint(p, tmp2);
+    const bp = this.ball.position;
+    tmp.set(bp.x - tmp2.x, 0, bp.z - tmp2.z);
+    const d = tmp.length();
+    if (d <= DRIBBLE.reach) return;
+    const pull = THREE.MathUtils.lerp(DRIBBLE.pullMin, 1,
+      Math.min(1, (d - DRIBBLE.reach) / (DRIBBLE.pullFullDistance - DRIBBLE.reach)));
+    const len = move.length();
+    move.normalize().lerp(tmp.normalize(), pull).normalize().multiplyScalar(len);
+  }
 
   private carryBall(dt: number, touches = false): void {
     const o = this.ball.owner;
@@ -942,7 +962,7 @@ export class Match {
 
   /**
    * 터치 드리블: 공은 굴러가고(구름 감속), 선수가 따라가 발이 닿을 때 다시 툭 찬다.
-   *  - 공이 몸 앞 가까이 오거나, 몸 방향과 공 방향이 어긋나면(방향 전환) 터치
+   *  - 공이 몸 앞 가까이 오거나, 의도 방향과 공 방향이 어긋나면(방향 전환) 터치
    *  - 질주 터치는 길게 치고 나가고, 드리블·볼 컨트롤이 좋을수록 짧고 정확하다
    *  - 멈추면 발바닥으로 세워 발 앞에 둔다
    *  - 공이 너무 멀어지면(헤비 터치) 소유를 잃는다
@@ -955,6 +975,7 @@ export class Match {
     const dist = Math.hypot(rx, rz);
     if (dist > DRIBBLE.leash) {
       this.ball.owner = null; // 헤비 터치: 이제 누구 공도 아니다
+      this.events.push({ type: 'heavyTouch', player: o });
       return;
     }
     const ahead = rx * fx + rz * fz;
@@ -968,8 +989,12 @@ export class Match {
     }
     const st = o.profile.stats;
     const ctrl = n(st.dribbling) * 0.6 + n(st.ballControl) * 0.4;
+    // 몸이 돌기 전의 사용자 입력·AI 목표 방향을 쓴다. 소유자가 바뀌면 이전 의도를 버린다.
+    const intent = this.dribbleIntentOwner === o ? this.dribbleIntent : o.facing;
+    const intentAngle = intent.lengthSq() > 0.01 ? Math.atan2(intent.z, intent.x) : Math.atan2(fz, fx);
+    const ballAngle = v > 0.3 ? Math.atan2(vz, vx) : Math.atan2(fz, fx);
+    const angle = Math.atan2(Math.sin(intentAngle - ballAngle), Math.cos(intentAngle - ballAngle));
     const moving = speed > 0.6 && !(this.trapping && this.isUserControlled(o));
-    const along = v > 0.3 ? (vx * fx + vz * fz) / v : 1;
     this.touchGap -= dt;
     // 발끝 기준 거리: 몸 옆이나 앞으로 굴러간 공은 따라가서 발이 닿아야 건드린다
     this.footPoint(o, tmp2);
@@ -977,27 +1002,30 @@ export class Match {
     const inReach = footDist < DRIBBLE.reach;
     const close = ahead > -0.2 && ahead < DRIBBLE.touchLead + speed * 0.05;
     // 방향을 꺾는 터치는 공이 발 바로 앞에 있을 때만
-    const turning = along < Math.cos(DRIBBLE.turnAngle) && footDist < DRIBBLE.turnReach;
+    const turning = Math.abs(angle) > DRIBBLE.turnAngle && footDist < DRIBBLE.turnReach;
     if (moving && inReach && this.touchGap <= 0 && (close || turning)) {
       const knock = (o.sprinting ? DRIBBLE.knockSprint : DRIBBLE.knockWalk) * (1.25 - 0.6 * ctrl) * (0.85 + 0.3 * this.random.next());
-      const u = speed + knock;
-      // 옆으로 벗어난 공은 몸 앞쪽으로 끌어오며 찬다
-      // side > 0: 공이 몸 왼쪽(+X 쪽)에 있다 → 오른쪽 벡터(-fz, fx) 방향으로 당긴다
-      const side = rx * fz - rz * fx;
-      vx = fx * u - fz * side * 2;
-      vz = fz * u + fx * side * 2;
+      const skill = (n(st.dribbling) + n(st.agility)) / 2;
+      const limit = THREE.MathUtils.lerp(DRIBBLE.turnMin, DRIBBLE.turnMax, skill);
+      const turn = THREE.MathUtils.clamp(angle, -limit, limit);
+      const direction = ballAngle + turn;
+      const u = (speed + knock) * Math.max(DRIBBLE.turnMinSpeedFactor, 1 - DRIBBLE.turnSlowdown * Math.abs(turn) / (Math.PI / 2));
+      vx = Math.cos(direction) * u;
+      vz = Math.sin(direction) * u;
+      const facingAngle = Math.atan2(fz, fx);
+      const bodyTurn = Math.atan2(Math.sin(direction - facingAngle), Math.cos(direction - facingAngle));
+      const facing = facingAngle + bodyTurn * DRIBBLE.turnFacing;
+      o.facing.set(Math.cos(facing), 0, Math.sin(facing));
       this.touchGap = DRIBBLE.touchGap;
       this.dribbleTouch++;
       this.events.push({ type: 'touch', speed: u });
-    } else if (!moving && footDist < DRIBBLE.reach) {
-      // 멈춤: 발 앞 자리로 부드럽게 세운다 (굴러오던 공을 발바닥으로 받는 것도 터치)
-      if (v > 1 && this.touchGap <= 0) {
+    } else if (!moving && inReach && this.touchGap <= 0) {
+      // 발바닥으로 한 번 세운다. 매 스텝 목표점으로 끌면 터치 없이 공이 꺾이게 된다.
+      if (v > 1) {
         this.events.push({ type: 'touch', speed: v });
         this.touchGap = DRIBBLE.touchGap;
       }
-      this.footPoint(o, tmp).addScaledVector(o.facing, 0.12);
-      vx = (tmp.x - bp.x) * 6;
-      vz = (tmp.z - bp.z) * 6;
+      vx = vz = 0;
     }
     body.velocity.set(vx, Math.min(bv.y, 0), vz);
     body.angularVelocity.set(vz / BALL.radius, 0, -vx / BALL.radius);

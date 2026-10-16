@@ -91,3 +91,113 @@ it('공이 너무 멀어지면 소유를 잃는다', () => {
   expect(match.ball.owner).not.toBe(p);
   expect(DRIBBLE.leash).toBeGreaterThan(2);
 });
+
+const up = new THREE.Vector3(0, 0, -1);
+const right = new THREE.Vector3(1, 0, 0);
+const down = new THREE.Vector3(0, 0, 1);
+
+/** 출발·터치 위상은 같게 두고 전환 때의 능력치만 바꿔 회전 반응을 비교한다. */
+function turnTime(seed: number, direction: THREE.Vector3, seconds: number, skill?: number, tolerance = Math.PI / 6) {
+  const { match, p, run } = scene(seed);
+  p.facing.copy(up);
+  match.ball.reset(p.pos.x, p.pos.z - 0.4);
+  match.ball.owner = match.ball.lastTouch = p;
+  run(1, up);
+  const original = p.profile.stats;
+  if (skill !== undefined) p.profile.stats = { ...original, dribbling: skill, agility: skill };
+  let elapsed = 0, reached = Infinity;
+  let previous = match.ball.velocity.clone();
+  let turnsWithoutTouch = 0;
+  match.events.length = 0;
+  try {
+    run(seconds, direction, false, () => {
+      elapsed += PHYSICS.step;
+      const v = match.ball.velocity;
+      const speed = Math.hypot(v.x, v.z);
+      const delta = Math.atan2(v.z, v.x) - Math.atan2(previous.z, previous.x);
+      if (speed > 1 && Math.hypot(previous.x, previous.z) > 1 &&
+          Math.abs(Math.atan2(Math.sin(delta), Math.cos(delta))) > 0.2 &&
+          !match.events.some((e) => e.type === 'touch')) turnsWithoutTouch++;
+      previous = v.clone();
+      if (speed > 1 && (v.x * direction.x + v.z * direction.z) / speed >= Math.cos(tolerance)) {
+        reached = Math.min(reached, elapsed);
+      }
+      // 중간에 놓쳤다가 다시 주운 경우도 성공으로 세지 않는다.
+      expect(match.ball.owner).toBe(p);
+      match.events.length = 0;
+    });
+    expect(turnsWithoutTouch).toBe(0);
+    const v = match.ball.velocity;
+    expect((v.x * direction.x + v.z * direction.z) / Math.hypot(v.x, v.z)).toBeGreaterThanOrEqual(Math.cos(tolerance));
+  } finally {
+    p.profile.stats = original;
+  }
+  return reached;
+}
+
+it.each([1, 7, 42])('↑ 1초 뒤 → 90° 전환: 1초 안에 공이 ±30°로 꺾인다 (seed=%i)', (seed) => {
+  const time = turnTime(seed, right, 1);
+  console.info(`90° seed=${seed}: ${time.toFixed(3)}초`);
+  expect(time).toBeLessThanOrEqual(1);
+});
+
+it.each([1, 7, 42])('↑ 1초 뒤 ↓ 180° 전환: 2초 안에 소유를 유지하며 돌아선다 (seed=%i)', (seed) => {
+  const time = turnTime(seed, down, 2);
+  console.info(`180° seed=${seed}: ${time.toFixed(3)}초`);
+  expect(time).toBeLessThanOrEqual(2);
+});
+
+it.each([1, 7, 42])('높은 드리블·민첩성은 낮은 능력치보다 90° 전환을 빨리 마친다 (seed=%i)', (seed) => {
+  const low = turnTime(seed, right, 2, 40, Math.PI / 12);
+  const high = turnTime(seed, right, 2, 99, Math.PI / 12);
+  console.info(`능력치 seed=${seed}: 낮음 ${low.toFixed(3)}초, 높음 ${high.toFixed(3)}초`);
+  expect(Number.isFinite(low)).toBe(true);
+  expect(high).toBeLessThan(low);
+});
+
+it('굴러가는 공을 멈춰 세우는 터치는 한 번만 발생한다', () => {
+  const { match, p, run } = scene(9);
+  match.ball.body.velocity.set(3, 0, 0);
+  let touches = 0;
+  run(0.1, new THREE.Vector3(), false, () => {
+    touches += match.events.filter((e) => e.type === 'touch').length;
+    match.events.length = 0;
+  });
+  expect(touches).toBe(1);
+  expect(match.ball.owner).toBe(p);
+  expect(match.ball.speed()).toBeLessThan(0.3);
+});
+
+it.each([40, 99])('한 터치의 회전 한도는 능력치 %i에서 60°~120°이고 180°는 나눠 접는다', (skill) => {
+  const { match, p, run } = scene(11);
+  const original = p.profile.stats;
+  p.profile.stats = { ...original, dribbling: skill, agility: skill };
+  p.vel.set(5, 0, 0);
+  match.ball.body.velocity.set(5, 0, 0);
+  try {
+    match.events.length = 0;
+    run(PHYSICS.step, new THREE.Vector3(-1, 0, 0));
+    const angle = Math.abs(Math.atan2(match.ball.velocity.z, match.ball.velocity.x));
+    expect(angle).toBeCloseTo(skill === 40 ? Math.PI / 3 : Math.PI * 2 / 3, 5);
+    expect(match.events.filter((e) => e.type === 'touch')).toHaveLength(1);
+    expect(match.ball.owner).toBe(p);
+  } finally {
+    p.profile.stats = original;
+  }
+});
+
+it('90°로 접는 터치는 직진 터치보다 느리고 몸도 새 방향으로 일부 튼다', () => {
+  const touch = (direction: THREE.Vector3) => {
+    const { match, p, run } = scene(12);
+    p.vel.set(5, 0, 0);
+    match.ball.body.velocity.set(5, 0, 0);
+    run(PHYSICS.step, direction);
+    return { speed: Math.hypot(match.ball.velocity.x, match.ball.velocity.z), facing: p.facing.clone() };
+  };
+  const straight = touch(new THREE.Vector3(1, 0, 0));
+  const turn = touch(down);
+  expect(turn.speed / straight.speed).toBeGreaterThan(0.5);
+  expect(turn.speed / straight.speed).toBeLessThan(0.7);
+  expect(turn.facing.z).toBeGreaterThan(0.5);
+  expect(turn.facing.x).toBeGreaterThan(0.5);
+});

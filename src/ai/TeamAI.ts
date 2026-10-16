@@ -59,6 +59,7 @@ export class TeamAI {
     const arrive = hasBall ? 1 : Math.min(1, d / 2.5);
     if (d > 0.25) tmp.multiplyScalar(arrive / d);
     else tmp.set(0, 0, 0);
+    if (hasBall) this.match.guideDribble(p, tmp);
     const speedScale = p.team === 1 ? AI.speedFactor : 1;
     p.steer(tmp, intent.sprint && d > 3, hasBall, dt, speedScale);
     if (d < 0.5 && intent.look) p.faceTowards(intent.look.x, intent.look.z);

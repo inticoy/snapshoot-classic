@@ -61,7 +61,11 @@ describe('킥 동작 타이밍', () => {
     while (match.kicking(p) && t < 1) {
       match.update(PHYSICS.step, cmd);
       t += PHYSICS.step;
-      if (match.kicking(p)) expect(match.ball.owner).toBe(p);
+      if (match.kicking(p)) {
+        expect(match.ball.owner).toBe(p);
+        expect(Math.hypot(match.ball.position.x - p.pos.x, match.ball.position.z - p.pos.z)).toBeLessThan(0.8);
+        expect(match.events.some((e) => e.type === 'touch')).toBe(false);
+      }
     }
     expect(t).toBeGreaterThan(0.05);
     expect(t).toBeLessThanOrEqual(MOTION_SELECT.windup + PHYSICS.step * 2);
@@ -75,23 +79,19 @@ describe('킥 동작 타이밍', () => {
     for (const seed of [7, 42]) {
       const { match } = simulation(seed, { kickMotion: true, userControl: false });
       const cmd = command();
+      let heavyTouches = 0;
       for (let i = 0; i < 330 / PHYSICS.step && match.phase !== 'fulltime'; i++) {
         match.update(PHYSICS.step, cmd);
+        heavyTouches += match.events.filter((e) => e.type === 'heavyTouch').length;
         match.events.length = 0;
       }
+      console.info(`킥 동작 AI 4분 seed=${seed}: 패스 ${match.stats.passes.join('/')}, 슛 ${match.stats.shots.join('/')}, 헤비 터치 ${heavyTouches}회`);
       expect(match.phase).toBe('fulltime');
       expect(match.stats.passes[0] + match.stats.passes[1]).toBeGreaterThan(80);
+      expect(match.stats.shots[0] + match.stats.shots[1]).toBeGreaterThan(0);
+      expect(heavyTouches).toBeLessThanOrEqual(40);
       shots += match.stats.shots[0] + match.stats.shots[1];
     }
     expect(shots).toBeGreaterThan(0);
-  });
-    const cmd = command();
-    for (let i = 0; i < 330 / PHYSICS.step && match.phase !== 'fulltime'; i++) {
-      match.update(PHYSICS.step, cmd);
-      match.events.length = 0;
-    }
-    expect(match.phase).toBe('fulltime');
-    expect(match.stats.passes[0] + match.stats.passes[1]).toBeGreaterThan(80);
-    expect(match.stats.shots[0] + match.stats.shots[1]).toBeGreaterThan(0);
   });
 });

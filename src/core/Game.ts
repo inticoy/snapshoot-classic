@@ -425,6 +425,9 @@ export class Game {
         console.debug('[event]', e.type, JSON.stringify(e, (k, v) => (k && v && typeof v === 'object' && 'profile' in v ? v.profile.short : v)));
       }
       switch (e.type) {
+        case 'touch':
+          this.sound.play('kick', Math.min(0.25, 0.08 + e.speed / 60), 1.25);
+          break;
         case 'kick':
           this.sound.play('kick', Math.min(1, 0.35 + e.speed / 30), 0.9 + visualRandom.next() * 0.2);
           break;
