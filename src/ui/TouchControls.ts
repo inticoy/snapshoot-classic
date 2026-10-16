@@ -143,7 +143,8 @@ export class TouchControls {
     element.addEventListener('lostpointercapture', cancel);
   }
 
-  private reset(): void {
+  /** R 리셋도 누른 포인터를 해제해 이전 시나리오의 입력을 넘기지 않는다. */
+  reset(): void {
     this.touch.reset();
     this.activePointers.clear();
     this.root.querySelectorAll('.held').forEach((el) => el.classList.remove('held'));

@@ -95,3 +95,83 @@ describe('킥 동작 타이밍', () => {
     expect(shots).toBeGreaterThan(0);
   });
 });
+
+// GLB 부모의 로컬 +Z가 월드 위다. 저장 데이터뿐 아니라 재생 트랙까지 검사해 축 누락 재발을 막는다.
+describe('구운 엉덩이 위치', () => {
+  it('슬라이딩 핵심 순간·무릎 세리머니·다이빙에서 엉덩이가 내려간다', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { MotionClips } = await import('../src/anim/MotionLibrary');
+    const { vi } = await import('vitest');
+    const data = JSON.parse(readFileSync('public/assets/motions.json', 'utf8')) as {
+      fps: number; clips: Record<string, { hips: number[] }>;
+    };
+    vi.stubGlobal('fetch', async () => ({ ok: true, json: async () => data }));
+    try {
+      const library = (await MotionClips.load('/assets/motions.json'))!;
+      for (const [id, ceiling] of [
+        ['grf_sliding_sprint_000', 0.45], ['mc_celebrate_1', 0.6], ['mc_dive_1', 0.6],
+        ['grf_sliding_sprint_000~m', 0.45], ['mc_dive_1~m', 0.6],
+      ] as const) {
+        const hips = data.clips[id].hips;
+        const heights = hips.filter((_, i) => i % 3 === 2);
+        expect(Math.min(...heights), id).toBeLessThan(ceiling);
+        expect(heights[0] - Math.min(...heights), id).toBeGreaterThan(0.15);
+        if (id.startsWith('grf_sliding')) {
+          const key = MOTION_CATALOG.find((e) => e.id === id)!.key;
+          const frame = Math.min(heights.length - 1, Math.round(key * data.fps));
+          // 30fps 양자화 오차를 포함한 핵심 순간 전후 한 프레임을 검사한다.
+          expect(Math.min(...heights.slice(Math.max(0, frame - 1), frame + 2)), `${id} key=${key}`).toBeLessThan(0.45);
+        }
+        const track = library.clip(id)!.tracks.find((t) => t.name === 'DEF-hips.position')!;
+        expect(Array.from(track.values)).toEqual(hips.map(Math.fround));
+        expect(track.times.length).toBe(hips.length / 3);
+      }
+      for (const [id, c] of Object.entries(data.clips)) {
+        expect(c.hips.length % 3, id).toBe(0);
+        expect(c.hips.every(Number.isFinite), id).toBe(true);
+        expect(library.clip(id)!.duration, id).toBeCloseTo((c.hips.length / 3 - 1) / data.fps, 5);
+      }
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});
+
+it('실제 GLB 부모 변환으로도 낮아지고 월드 수평 이동은 제자리에 남는다', async () => {
+  const { readFileSync } = await import('node:fs');
+  const { GLTFLoader } = await import('three/examples/jsm/loaders/GLTFLoader.js');
+  const { MeshoptDecoder } = await import('three/examples/jsm/libs/meshopt_decoder.module.js');
+  const { clone } = await import('three/examples/jsm/utils/SkeletonUtils.js');
+  const { MotionClips } = await import('../src/anim/MotionLibrary');
+  const { vi } = await import('vitest');
+  const glb = readFileSync('public/assets/models/player.glb');
+  const gltf = await new Promise<{ scene: THREE.Group }>((resolve, reject) => {
+    new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).parse(glb.buffer.slice(glb.byteOffset, glb.byteOffset + glb.byteLength), '', resolve as never, reject);
+  });
+  const data = JSON.parse(readFileSync('public/assets/motions.json', 'utf8'));
+  vi.stubGlobal('fetch', async () => ({ ok: true, json: async () => data }));
+  try {
+    const library = (await MotionClips.load('/assets/motions.json'))!;
+    for (const [id, ceiling] of [['grf_sliding_sprint_000', 0.45], ['mc_celebrate_1', 0.6], ['mc_dive_1', 0.6]] as const) {
+      const model = clone(gltf.scene);
+      const hips = model.getObjectByName('DEF-hips')!;
+      const mixer = new THREE.AnimationMixer(model);
+      const action = mixer.clipAction(library.clip(id)!);
+      action.setLoop(THREE.LoopOnce, 1);
+      action.clampWhenFinished = true;
+      action.play();
+      const positions: THREE.Vector3[] = [];
+      for (let f = 0; f < data.clips[id].hips.length / 3; f++) {
+        mixer.setTime(f / data.fps);
+        positions.push(hips.getWorldPosition(new THREE.Vector3()));
+      }
+      const min = Math.min(...positions.map((p) => p.y));
+      console.info(`${id}: 실제 GLB 엉덩이 최저 ${min.toFixed(3)}m`);
+      expect(min, id).toBeLessThan(ceiling);
+      expect(Math.max(...positions.map((p) => p.x)) - Math.min(...positions.map((p) => p.x)), id).toBeLessThan(0.003);
+      expect(Math.max(...positions.map((p) => p.z)) - Math.min(...positions.map((p) => p.z)), id).toBeLessThan(0.003);
+      expect(model.getObjectByName('DEF-toeL')).toBeDefined();
+      mixer.stopAllAction();
+    }
+  } finally { vi.unstubAllGlobals(); }
+});

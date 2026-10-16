@@ -262,6 +262,14 @@ export class Player {
     this.animTimer = duration;
   }
 
+  /** 연습 재시작에서 직전 킥·세리머니의 시각 타이머까지 비운다. */
+  resetAnimation(): void {
+    this.animTimer = this.visualTime = 0;
+    this.celebrating = false;
+    this.model.resetAnimation?.();
+    this.model.play('idle');
+  }
+
   syncVisual(dt: number, distance = 0): void {
     this.model.root.position.set(this.pos.x, 0, this.pos.z);
     this.model.root.rotation.y = Math.atan2(this.facing.x, this.facing.z);

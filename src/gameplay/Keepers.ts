@@ -25,7 +25,7 @@ export class Keepers {
     for (const { player, body } of this.bodies) {
       this.states.set(player, { threatTime: 0, holdTime: 0, smotherRolled: false, blockUntil: 0 });
       body.addEventListener('collide', (e: { body: CANNON.Body; contact: CANNON.ContactEquation }) => {
-        if (e.body !== m.ball.body || (m.phase !== 'playing' && m.phase !== 'shootout') || m.ball.owner?.team === player.team) return;
+        if (!m.players.includes(player) || e.body !== m.ball.body || (m.phase !== 'playing' && m.phase !== 'shootout') || m.ball.owner?.team === player.team) return;
         const state = this.states.get(player)!;
         if (m.elapsed < state.blockUntil) return;
         const speed = Math.abs(e.contact.getImpactVelocityAlongNormal());
@@ -53,11 +53,11 @@ export class Keepers {
 
   syncBodies(dt: number): void {
     const live = this.m.phase === 'playing' || this.m.phase === 'shootout';
-    for (const b of this.bodies) b.sync(dt, live && this.m.ball.owner?.team !== b.player.team);
+    for (const b of this.bodies) b.sync(dt, this.m.players.includes(b.player) && live && this.m.ball.owner?.team !== b.player.team);
   }
 
   update(dt: number): void {
-    for (const { player } of this.bodies) this.updateKeeper(player, dt);
+    for (const { player } of this.bodies) if (this.m.players.includes(player)) this.updateKeeper(player, dt);
   }
 
   private updateKeeper(k: Player, dt: number): void {
@@ -70,8 +70,11 @@ export class Keepers {
       k.faceTowards(k.pos.x + a, k.pos.z);
       if (state.holdTime > KEEPER.holdTime && !k.busy) {
         const target = m.teams[k.team].filter((p) => !p.isKeeper).sort((p, q) => m.openness(q) - m.openness(p))[0];
-        m.pass(k, target.pos.clone().sub(k.pos).setY(0).normalize());
-        k.basePose = null;
+        // 키퍼만 남긴 연습에서는 받을 동료가 없으므로 공을 잡은 채 R 리셋을 기다린다.
+        if (target) {
+          m.pass(k, target.pos.clone().sub(k.pos).setY(0).normalize());
+          k.basePose = null;
+        }
       }
       return;
     }

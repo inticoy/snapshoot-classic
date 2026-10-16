@@ -81,7 +81,7 @@ export class SetPieces {
 
   /** 반칙·오프사이드 휘슬 뒤 재개 (Rules가 호출) */
   award(kind: 'freekick' | 'indirect' | 'penalty', team: 0 | 1, spot: THREE.Vector3): void {
-    const a = this.m.teams[team][0].attackDir;
+    const a: 1 | -1 = this.m.ownGoalX(team) < 0 ? 1 : -1;
     if (kind === 'penalty') penaltySpot(a, spot);
     this.begin(kind, team, spot);
   }
@@ -96,6 +96,12 @@ export class SetPieces {
     m.passTarget = null;
     m.ball.owner = null;
     m.ball.shot = null;
+    // 개발 시나리오에는 재개를 맡을 팀 자체가 없을 수 있다. 판정은 남기고 리셋을 기다린다.
+    if (m.practice) {
+      this.current = null;
+      m.events.push({ type: 'out', kind, team });
+      return;
+    }
     const taker = this.pickTaker(kind, team, spot);
     const toGoal = Math.hypot(m.oppGoalX(team) - spot.x, spot.z);
     const shooting = kind === 'freekick' && toGoal < RULES.freeKickShotRange && Math.abs(spot.z) < toGoal * 0.8;

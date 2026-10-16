@@ -42,6 +42,11 @@ export interface CharacterModel {
   playMotion?(id: string, opts?: { startAt?: number; speed?: number; loop?: boolean; then?: { id: string; speed: number } }): boolean;
   /** 반복 중인 동작을 끝내고 이동 클립으로 돌아간다 */
   stopMotion?(): void;
+  /** 개발 텔레메트리는 실제 뼈의 월드 좌표를 읽는다. 절차적 모델에서는 미지원(null)이다. */
+  readonly currentMotionId?: string | null;
+  readonly hipsHeight?: number | null;
+  toePosition?(out: THREE.Vector3, side: 'L' | 'R'): THREE.Vector3 | null;
+  resetAnimation?(): void;
   /** 손 월드 위치 (카드·깃발을 쥐여 줄 때, 기본 오른손) */
   handPosition?(out: THREE.Vector3, side?: 'L' | 'R'): THREE.Vector3 | null;
 }

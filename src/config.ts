@@ -224,3 +224,16 @@ export const GRAPHICS = {
 // 공 주변 약 50m를 보여 주되 터치라인에서도 시야 크기를 유지한다.
 export const CAMERA = { fov: 42, height: 25, distance: 38, endMargin: 10 };
 export const VISUAL = { animationDistance: 32, animationHz: 30, shadowDistance: 24 };
+
+/** 플레이그라운드도 경기와 같은 고정 스텝을 쓰고, 시간창은 시뮬레이션 초로 센다. */
+export const PLAYGROUND = {
+  seed: 318,
+  historySeconds: 5,
+  touchWindow: 1,
+  inputDeadzone: 0.1,
+  turnThreshold: Math.PI / 6,
+  minBallSpeed: 0.1,
+  passDistance: 15,
+  duration: 24 * 60 * 60,
+  panelPeriod: 0.1,
+};

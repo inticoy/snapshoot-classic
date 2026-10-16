@@ -15,6 +15,7 @@ import { Sound } from '../audio/Sound';
 import { TEAMS } from '../data/Teams';
 import { RESTART_LABEL } from '../gameplay/SetPieces';
 import { visualRandom } from './Random';
+import type { Playground } from '../playground/Playground';
 
 type AppState = 'menu' | 'playing' | 'paused' | 'result';
 
@@ -34,6 +35,7 @@ export class Game {
   private readonly sound = new Sound();
   private readonly marker: THREE.Group;
   private readonly touch: TouchControls;
+  private readonly playground: Playground | null;
   private readonly sun = new THREE.DirectionalLight(0xfff3e0, 2.2);
 
   private state: AppState = 'menu';
@@ -54,7 +56,7 @@ export class Game {
     contain: { held: false, pressed: false, released: false },
   };
 
-  constructor(canvas: HTMLCanvasElement) {
+  constructor(canvas: HTMLCanvasElement, options: { playground?: typeof Playground } = {}) {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, GRAPHICS.high.pixelRatio));
     this.renderer.shadowMap.enabled = true;
@@ -68,7 +70,7 @@ export class Game {
     this.stadium = new Stadium(this.physics);
     this.scene.add(this.stadium.group);
 
-    this.match = new Match(this.physics);
+    this.match = new Match(this.physics, { practice: !!options.playground });
     for (const g of this.match.goals) this.scene.add(g.group);
     for (const p of this.match.players) this.scene.add(p.model.root);
     for (const o of this.match.officials.all) this.scene.add(o.model.root, o.item);
@@ -97,6 +99,15 @@ export class Game {
     });
     this.applyGraphics(this.touch.detected);
     this.openMainMenu();
+    this.playground = options.playground ? new options.playground(this.match, () => {
+      this.menu.close();
+      this.state = 'playing';
+      this.accumulator = 0;
+      this.match.cancelUserCharge();
+      this.input.clearVirtual();
+      this.input.endFrame();
+      this.touch.reset();
+    }) : null;
   }
 
   run(): void {
@@ -317,6 +328,7 @@ export class Game {
   }
 
   private async startMatch(): Promise<void> {
+    if (this.playground) { this.playground.reset(); return; }
     this.menu.close();
     this.state = 'playing';
     this.hud.show(true);
@@ -369,6 +381,15 @@ export class Game {
         while (this.accumulator >= PHYSICS.step && steps < 12) {
           this.buildCommand();
           this.match.update(PHYSICS.step, this.cmd);
+          if (this.playground) {
+            // 텔레메트리의 뼈 높이도 같은 스텝의 애니메이션에서 읽는다.
+            for (const p of this.match.players) {
+              const distance = Math.hypot(p.pos.x - this.match.ball.position.x, p.pos.z - this.match.ball.position.z);
+              p.syncVisual(PHYSICS.step, distance);
+            }
+            this.playground.step(PHYSICS.step, this.cmd);
+            this.handleEvents();
+          }
           this.input.endFrame();
           this.accumulator -= PHYSICS.step;
           steps++;
@@ -381,9 +402,9 @@ export class Game {
     const live = this.state === 'playing';
     for (const p of this.match.players) {
       const distance = Math.hypot(p.pos.x - this.match.ball.position.x, p.pos.z - this.match.ball.position.z);
-      p.syncVisual(live ? dt : 0, live ? distance : 0);
+      p.syncVisual(live && !this.playground ? dt : 0, live ? distance : 0);
     }
-    this.match.officials.syncVisual(live ? dt : 0);
+    if (!this.playground) this.match.officials.syncVisual(live ? dt : 0);
     this.match.ball.syncVisual();
     this.stadium.update(dt);
     this.updateMarker(dt);

@@ -1,0 +1,28 @@
+body.playground #hud { display: none !important; }
+#playground {
+  position: fixed; top: max(8px, env(safe-area-inset-top)); left: max(8px, env(safe-area-inset-left));
+  width: min(370px, calc(100vw - 16px)); z-index: 4; color: #edf5fa;
+  background: #101b2df2; border: 1px solid #5f7894; border-radius: 10px;
+  font: 12px/1.5 system-ui, sans-serif; pointer-events: auto; touch-action: pan-y;
+}
+#playground summary { padding: 8px 10px; cursor: pointer; font-weight: 700; }
+#playground summary span { float: right; font-size: 11px; font-weight: 400; color: #aec4da; }
+#playground .pg-body { padding: 0 10px 10px; max-height: calc(80dvh - 46px); overflow-y: auto; overscroll-behavior: contain; }
+#playground nav, #playground .pg-exports { display: flex; flex-wrap: wrap; gap: 4px; }
+#playground button { color: inherit; background: #243a52; border: 1px solid #6c839b; border-radius: 5px; padding: 6px 8px; font: inherit; cursor: pointer; min-height: 32px; }
+#playground button[aria-pressed="true"] { background: #176149; border-color: #5ce6b2; }
+#playground p { margin: 6px 0; overflow-wrap: anywhere; }
+#playground .pg-help { color: #b6cada; font-size: 11px; }
+#playground .pg-metrics > div { display: grid; grid-template-columns: 1fr 50px 24px 100px; gap: 4px; align-items: center; }
+#playground output { font-variant-numeric: tabular-nums; }
+#playground canvas { width: 100px; height: 24px; border-bottom: 1px solid #52647a; }
+#playground .pg-parameter { display: block; margin: 5px 0; }
+#playground .pg-parameter input { display: block; width: 100%; min-height: 24px; accent-color: #5ce6b2; touch-action: auto; }
+#playground textarea { width: 100%; height: 140px; font-size: 11px; user-select: text; }
+#playground .pg-exports { margin-top: 10px; }
+#playground :focus-visible { outline: 2px solid #5ce6b2; outline-offset: 2px; }
+@media (pointer: coarse) {
+  #playground { left: 50%; transform: translateX(-50%); width: min(350px, calc(100vw - 16px)); }
+  #playground .pg-body { max-height: 37dvh; }
+  #playground button { min-height: 36px; }
+}

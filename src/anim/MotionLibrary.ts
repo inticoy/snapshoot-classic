@@ -82,7 +82,7 @@ function hash(id: string, r: number): number {
 
 // ---------------------------------------------------------------- 키프레임 → AnimationClip
 
-interface MotionData { fps: number; bones: string[]; clips: Record<string, { hipsY: number[]; hipsXZ: [number, number]; q: string }> }
+interface MotionData { fps: number; bones: string[]; clips: Record<string, { hips: number[]; q: string }> }
 
 export class MotionClips {
   private constructor(private readonly data: MotionData, private readonly cache = new Map<string, THREE.AnimationClip>()) {}
@@ -107,7 +107,7 @@ export class MotionClips {
     const c = this.data.clips[id];
     if (!c) return null;
     const { fps, bones } = this.data;
-    const frames = c.hipsY.length;
+    const frames = c.hips.length / 3;
     const times = Array.from({ length: frames }, (_, i) => i / fps);
     // 16비트 정수 base64 → 쿼터니언 성분
     const raw = Uint8Array.from(atob(c.q), (ch) => ch.charCodeAt(0));
@@ -117,10 +117,8 @@ export class MotionClips {
       for (let f = 0; f < frames; f++) for (let k = 0; k < 4; k++) values[f * 4 + k] = q[(f * bones.length + b) * 4 + k] / 32767;
       return new THREE.QuaternionKeyframeTrack(`${bone}.quaternion`, times, values);
     });
-    // 엉덩이 높이만 움직인다 (수평 이동은 게임이 맡는다). x·z는 기본 자세 값
-    const hips = new Float32Array(frames * 3);
-    for (let f = 0; f < frames; f++) hips.set([c.hipsXZ[0], c.hipsY[f], c.hipsXZ[1]], f * 3);
-    tracks.push(new THREE.VectorKeyframeTrack('DEF-hips.position', times, hips));
+    // 부모 로컬 축과 월드 축이 다르므로 bakeClip에서 만든 세 축을 그대로 복원한다.
+    tracks.push(new THREE.VectorKeyframeTrack('DEF-hips.position', times, c.hips));
     const clip = new THREE.AnimationClip(id, (frames - 1) / fps, tracks);
     this.cache.set(id, clip);
     return clip;

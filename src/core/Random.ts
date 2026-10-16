@@ -6,6 +6,9 @@ export class Random {
     this.state = seed === undefined ? undefined : seed >>> 0;
   }
 
+  /** 같은 실험의 R 리셋에서만 시드를 되감는다. 일반 경기는 기존 난수 흐름을 유지한다. */
+  reset(seed: number): void { this.state = seed >>> 0; }
+
   next(): number {
     // 일반 플레이는 기존 분포를 유지하고, 시드가 주어진 시뮬레이션만 Mulberry32를 쓴다.
     if (this.state === undefined) return Math.random();

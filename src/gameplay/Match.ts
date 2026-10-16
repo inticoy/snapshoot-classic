@@ -25,8 +25,8 @@ import type { MotionKind } from '../anim/MotionLibrary';
 export type Phase = 'kickoff' | 'playing' | 'out' | 'setpiece' | 'goal' | 'halftime' | 'shootout' | 'fulltime';
 
 export type MatchEvent =
-  | { type: 'kick'; speed: number }
-  | { type: 'touch'; speed: number }
+  | { type: 'kick'; speed: number; player: Player }
+  | { type: 'touch'; speed: number; player: Player }
   | { type: 'heavyTouch'; player: Player }
   | { type: 'bounce'; speed: number }
   | { type: 'post'; speed: number }
@@ -90,6 +90,8 @@ const cspin = new CANNON.Vec3();
 
 
 export interface MatchOptions {
+  /** 고립된 개발 시나리오. 아웃·휘슬 뒤 재개 배치 없이 R 리셋을 기다린다. */
+  practice?: boolean;
   random?: Random;
   createPlayerModel?: PlayerModelFactory;
   /** Node 시뮬레이션에서는 골망 정점 갱신을 생략하되 충돌체는 그대로 둔다. */
@@ -187,12 +189,14 @@ export class Match {
   }
 
   ownGoalX(team: 0 | 1): number {
-    return -this.teams[team][0].attackDir * PITCH.halfL;
+    return -(this.teams[team][0] ?? this.roster.find((p) => p.team === team)!).attackDir * PITCH.halfL;
   }
 
   get userControl(): boolean {
     return this.options.userControl !== false;
   }
+
+  get practice(): boolean { return this.options.practice === true; }
 
   /** 한 하프의 길이 (실제 초) */
   get halfLength(): number {
@@ -264,6 +268,17 @@ export class Match {
     this.elapsed += dt;
     this.phaseTimer -= dt;
 
+    // 고립된 연습은 휘슬 뒤 새 인원을 배치하지 않는다. 동작·물리는 마저 진행해 접지 높이를 볼 수 있다.
+    if (this.practice && this.phase !== 'playing') {
+      for (const p of this.players) {
+        p.steer(tmp.set(0, 0, 0), false, false, dt);
+        p.update(dt);
+      }
+      this.stepWorld(dt);
+      for (const g of this.goals) g.update(dt);
+      return;
+    }
+
     switch (this.phase) {
       case 'kickoff':
         // 휘슬 전까지는 정지
@@ -331,7 +346,7 @@ export class Match {
     }
 
     for (const g of this.goals) g.update(dt);
-    this.officials.update(dt);
+    if (!this.practice) this.officials.update(dt);
   }
 
   /** 킥 동작 진행: 발이 닿는 순간 공이 아직 발 앞에 있으면 찬다 (그 사이 뺏기면 취소) */
@@ -584,7 +599,7 @@ export class Match {
       if (mode !== 'clear') this.rules.recordKick(p);
       this.ball.kick(r.vel, r.spin, p);
       p.kickCooldown = PLAYER.kickCooldown;
-      this.events.push({ type: 'kick', speed: r.vel.length() * 0.6 });
+      this.events.push({ type: 'kick', speed: r.vel.length() * 0.6, player: p });
     }
     if (mode === 'shot') {
       this.ball.newShot(p);
@@ -616,7 +631,7 @@ export class Match {
     this.rules.recordKick(p);
     this.rules.recordPass(p);
     this.ball.kick(vel, cspin.set(0, 0, 0), p);
-    this.events.push({ type: 'kick', speed: vel.length() * 0.5 });
+    this.events.push({ type: 'kick', speed: vel.length() * 0.5, player: p });
     this.ball.shot = null;
     this.passTarget = receiver;
     this.stats.passes[p.team]++;
@@ -882,7 +897,7 @@ export class Match {
     this.ball.kick(vel, spin, p);
     p.kickCooldown = PLAYER.kickCooldown;
     p.basePose = null;
-    this.events.push({ type: 'kick', speed: vel.length() });
+    this.events.push({ type: 'kick', speed: vel.length(), player: p });
   }
 
   /** 패스 길목에 상대가 있으면 1 */
@@ -929,7 +944,7 @@ export class Match {
     b.velocity.set(dir.x * u, Math.min(0, b.velocity.y), dir.z * u);
     b.angularVelocity.set(b.velocity.z / BALL.radius, 0, -b.velocity.x / BALL.radius);
     this.touchGap = DRIBBLE.touchGap;
-    this.events.push({ type: 'touch', speed: u });
+    this.events.push({ type: 'touch', speed: u, player: p });
   }
 
   /** 소유 중인 공 다루기. touches면 터치 드리블, 아니면 발 앞에 붙여 다닌다 (킥오프 대기 등) */
@@ -956,8 +971,9 @@ export class Match {
       p.faceTowards(bp.x, bp.z);
     }
     if (d <= DRIBBLE.reach) return;
+    // 실시간 조정으로 reach가 완전 추격 거리 이상이 되어도 보간 비중이 음수가 되지 않게 한다.
     const pull = THREE.MathUtils.lerp(DRIBBLE.pullMin, 1,
-      Math.min(1, (d - DRIBBLE.reach) / (DRIBBLE.pullFullDistance - DRIBBLE.reach)));
+      Math.min(1, (d - DRIBBLE.reach) / Math.max(1e-6, DRIBBLE.pullFullDistance - DRIBBLE.reach)));
     // 입력이 없거나(목표 도착) 작아도 굴러가는 공은 쫓는다
     const len = Math.max(move.length(), Math.min(1, d / 1.5));
     if (move.lengthSq() < 1e-6) move.copy(tmp.normalize()).multiplyScalar(len);
@@ -1067,11 +1083,11 @@ export class Match {
       o.facing.set(Math.cos(facing), 0, Math.sin(facing));
       this.touchGap = DRIBBLE.touchGap;
       this.dribbleTouch++;
-      this.events.push({ type: 'touch', speed: u });
+      this.events.push({ type: 'touch', speed: u, player: o });
     } else if (!moving && inReach && this.touchGap <= 0) {
       // 발바닥으로 한 번 세운다. 매 스텝 목표점으로 끌면 터치 없이 공이 꺾이게 된다.
       if (v > 1) {
-        this.events.push({ type: 'touch', speed: v });
+        this.events.push({ type: 'touch', speed: v, player: o });
         this.touchGap = DRIBBLE.touchGap;
       }
       vx = vz = 0;
@@ -1325,8 +1341,8 @@ export class Match {
     for (const p of this.teams[team]) if (p !== this.lastScorer && !p.isKeeper) p.basePose = null;
     if (!this.lastScorer) {
       // 자책골이면 득점 팀 공격수를 기준으로 세리머니
-      this.lastScorer = this.forward(team);
-      this.lastScorer.basePose = 'celebrate';
+      this.lastScorer = this.teams[team].length ? this.forward(team) : null;
+      if (this.lastScorer) this.lastScorer.basePose = 'celebrate';
     }
     this.events.push({ type: 'goal', team, scorer, ownGoal });
   }
@@ -1350,6 +1366,34 @@ export class Match {
         this.events.push({ type: 'bounce', speed: impact });
       }
     });
+  }
+
+  /** 인원만 줄이고 소유권·터치·태클·킥·물리는 본 경기 경로로 실행한다. */
+  startPractice(active: readonly Player[], controlled: Player, seed: number): void {
+    if (!this.practice) throw new Error('practice 옵션이 필요합니다');
+    this.restart();
+    this.random.reset(seed);
+    this.events.length = 0;
+    this.touchGap = this.dribbleTouch = this.aerialLock = this.receiveTimer = 0;
+    this.dribbleIntent.set(0, 0, 0);
+    this.lastMove.set(0, 0, 0);
+    this.dribbleIntentOwner = null;
+    for (const p of this.roster) {
+      p.vel.set(0, 0, 0);
+      p.actionLock = p.facingLock = p.tackleCooldown = 0;
+      p.tackleResolved = p.sprinting = false;
+      p.diveVel.set(0, 0, 0);
+      p.resetAnimation();
+      p.model.root.visible = active.includes(p);
+    }
+    this.players.splice(0, this.players.length, ...active);
+    for (const team of [0, 1] as const) this.teams[team].splice(0, this.teams[team].length, ...active.filter((p) => p.team === team));
+    this.controlled = controlled;
+    this.ball.reset();
+    this.phase = 'playing';
+    this.phaseTimer = 0;
+    this.ai.reset();
+    for (const o of this.officials.all) o.model.root.visible = o.item.visible = false;
   }
 
   restart(): void {

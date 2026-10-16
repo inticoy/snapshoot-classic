@@ -54,7 +54,7 @@ interface Entry {
 }
 
 const catalog: Entry[] = [];
-const clips: Record<string, { hipsY: number[]; hipsXZ: [number, number]; q: number[] }> = {};
+const clips: Record<string, { hips: number[]; q: number[] }> = {};
 let boneNames: string[] = [];
 
 const round = (v: number) => Math.round(v * 1000) / 1000;
@@ -75,9 +75,8 @@ function add(e: Omit<Entry, 'duration' | 'endYaw' | 'startYaw' | 'id'> & { name:
   const q: number[] = [];
   for (let f = 0; f < frames; f++) for (const t of tracks) for (let k = 0; k < 4; k++) q.push(round(t.values[f * 4 + k]));
   const hips = clip.tracks.find((t) => t.name === 'DEF-hips.position')!;
-  const hipsY: number[] = [];
-  for (let f = 0; f < frames; f++) hipsY.push(round(hips.values[f * 3 + 1]));
-  clips[id] = { hipsY, hipsXZ: [round(hips.values[0]), round(hips.values[2])], q };
+  // 부모 뼈는 Z-up이므로 로컬 Y만 남기면 실제 높이가 사라진다. 제자리 처리는 bakeClip의 월드 XZ에서 끝낸다.
+  clips[id] = { hips: Array.from(hips.values, round), q };
   const flip = (side: 'L' | 'R' | null) => (mirror && side ? (side === 'L' ? 'R' : 'L') : side);
   catalog.push({
     ...e, id, side: flip(e.side), ballAngle: round(mirror ? -e.ballAngle : e.ballAngle),
@@ -148,8 +147,9 @@ function diveMoment(src: PoseSource): { t: number; side: 'L' | 'R' } {
   return best;
 }
 const ROHR_DIVES: [string, string, [number, number], MotionKind][] = [
-  ['mc_dive_1', '15_Goalkeeper_Save_01.fbx', [4.6, 6.2], 'dive'],
-  ['mc_dive_3', '17_Goalkeeper_Save_03.fbx', [5.9, 7.8], 'dive'],
+  // Save 01은 수직 점프 선방이다. 낮게 눕는 다이빙에는 Save 03을 쓰고 원본 점프도 save로 보존한다.
+  ['mc_save_1', '15_Goalkeeper_Save_01.fbx', [4.6, 6.2], 'save'],
+  ['mc_dive_1', '17_Goalkeeper_Save_03.fbx', [5.9, 7.8], 'dive'],
   ['mc_save_2', '16_Goalkeeper_Save_02.fbx', [2.8, 4.0], 'save'],
 ];
 for (const [name, file, w, kind] of ROHR_DIVES) {
@@ -231,10 +231,10 @@ console.log(`GRF ${grfCount}개 (+좌우 반전)`);
 
 // ---------------------------------------------------------------- 저장
 // 쿼터니언 성분(-1..1)을 16비트 정수로 묶어 base64로 (JSON 숫자 대비 약 1/4)
-const packed: Record<string, { hipsY: number[]; hipsXZ: [number, number]; q: string }> = {};
+const packed: Record<string, { hips: number[]; q: string }> = {};
 for (const [id, c] of Object.entries(clips)) {
   const ints = Int16Array.from(c.q, (v) => Math.round(Math.max(-1, Math.min(1, v)) * 32767));
-  packed[id] = { hipsY: c.hipsY, hipsXZ: c.hipsXZ, q: Buffer.from(ints.buffer).toString('base64') };
+  packed[id] = { hips: c.hips, q: Buffer.from(ints.buffer).toString('base64') };
 }
 writeFileSync('public/assets/motions.json', JSON.stringify({ fps: FPS, bones: boneNames, clips: packed }));
 const ts = `// 자동 생성: scripts/bake-motions.ts — 직접 고치지 말 것

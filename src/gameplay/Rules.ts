@@ -193,7 +193,7 @@ export class Rules {
 
   /** 공격 방향 기준 좌표로 본 오프사이드 라인 (뒤에서 두 번째 상대) */
   offsideLine(team: 0 | 1): number {
-    const a = this.m.teams[team][0].attackDir;
+    const a = -Math.sign(this.m.ownGoalX(team));
     const xs = this.m.teams[1 - team].map((o) => o.pos.x * a).sort((x, y) => y - x);
     return xs[1] ?? xs[0] ?? 0;
   }

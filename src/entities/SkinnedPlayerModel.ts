@@ -171,6 +171,31 @@ export class SkinnedPlayerModel implements CharacterModel {
     if (this.motion) this.motion.loop = false, (this.motion.action.time = Math.max(this.motion.action.time, this.motion.action.getClip().duration - this.motion.fadeOut));
   }
 
+  get currentMotionId(): string | null { return this.motion?.action.getClip().name ?? null; }
+
+  get hipsHeight(): number | null {
+    const hips = this.bones.get('DEF-hips');
+    return hips ? hips.getWorldPosition(new THREE.Vector3()).y : null;
+  }
+
+  toePosition(out: THREE.Vector3, side: 'L' | 'R'): THREE.Vector3 | null {
+    const toe = this.bones.get(`DEF-toe${side}`);
+    return toe ? toe.getWorldPosition(out) : null;
+  }
+
+  resetAnimation(): void {
+    this.motion?.action.stop();
+    this.motion = null;
+    this.state = 'idle';
+    this.actionT = this.danceW = this.speed = 0;
+    this.sprint = false;
+    for (const key of Object.keys(this.overlay) as Overlay[]) this.overlay[key] = 0;
+    this.pivot.position.set(0, 0, 0);
+    this.pivot.rotation.set(0, 0, 0);
+    this.updateClipWeights(0);
+    this.mixer.update(0);
+  }
+
   get motionPlaying(): boolean {
     return !!this.motion;
   }

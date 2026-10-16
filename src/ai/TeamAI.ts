@@ -35,6 +35,16 @@ export class TeamAI {
     }
   }
 
+  /** 시나리오 재시작 때 이전 목표·회피 방향·반응 시간을 이어받지 않는다. */
+  reset(): void {
+    for (const [p, intent] of this.intents) {
+      intent.target.copy(p.pos);
+      intent.sprint = false;
+      intent.look = intent.dribbleDir = null;
+      this.timers.set(p, 0);
+    }
+  }
+
   update(dt: number): void {
     const m = this.match;
     for (const p of m.players) {
