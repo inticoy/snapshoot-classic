@@ -65,7 +65,9 @@ try {
   await page.waitForFunction(() => document.querySelector('#touch-controls').dataset.mode === 'attack');
   const cdp = await page.context().newCDPSession(page);
   const fingers = new Map();
-  const send = async (type) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: [...fingers.values()] });
+  // CDP: touchStart/touchMove는 현재 눌린 손가락 전체, touchEnd는 '뗀 손가락'을 넣는다
+  const send = async (type, released = []) =>
+    cdp.send('Input.dispatchTouchEvent', { type, touchPoints: type === 'touchEnd' ? released : [...fingers.values()] });
   fingers.set(1, { id: 1, x: 120, y: 235 });
   await send('touchStart');
   fingers.set(1, { id: 1, x: 172, y: 235 });
@@ -80,12 +82,13 @@ try {
   assert.equal(await page.evaluate(() => window.__game.game.input.isDown('shoot')), true);
   const beforeKicks = kicks.length;
   fingers.delete(2);
-  await send('touchEnd');
+  await send('touchEnd', [shot]);
   await page.waitForFunction((shots) => window.__game.match.stats.shots[0] === shots + 1, start.shots);
   assert.ok(kicks.length > beforeKicks, '슛 kick 이벤트');
   assert.ok(await page.evaluate(() => window.__game.game.input.moveAxis().x > 0.9));
+  const joystick = fingers.get(1);
   fingers.clear();
-  await send('touchEnd');
+  await send('touchEnd', [joystick]);
   assert.deepEqual(await page.evaluate(() => window.__game.game.input.moveAxis()), { x: 0, y: 0 });
   await page.screenshot({ path: `${output}/play.png` });
 

@@ -184,7 +184,7 @@ export class Game {
     this.hud.show(false);
     const lengthLabel = () => `${DURATIONS[this.durationIndex] / 60}분`;
     this.menu.open({
-      eyebrow: 'SNAPSHOOT CLASSIC · 5 VS 5',
+      eyebrow: 'SNAPSHOOT CLASSIC · 11 VS 11',
       title: 'KICK OFF',
       panel: () => matchupPanel(null, [`경기 시간 ${lengthLabel()}`, '중계 · 11대11 · 4-3-3', TEAMS[0].name + ' 홈']),
       items: [

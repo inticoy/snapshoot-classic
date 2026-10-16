@@ -2,7 +2,7 @@
   "id": "./",
   "name": "SnapShoot Classic",
   "short_name": "SnapShoot",
-  "description": "키보드로 즐기는 3D 5대5 축구 게임. 가상의 팀과 함께 패스하고 슛하며 골에 도전하세요.",
+  "description": "키보드·터치로 즐기는 3D 11대11 축구 게임. 가상의 팀과 함께 패스하고 슛하며 골에 도전하세요.",
   "lang": "ko",
   "start_url": "./",
   "scope": "./",

@@ -316,7 +316,9 @@ kbd {
   transition: transform 0.4s cubic-bezier(0.2, 0.9, 0.2, 1);
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
 }
-.lower-third.show { transform: none; }
+/* 밀어내기만으로는 모바일 배치(가운데)에서 다 숨지 않으므로 투명도로도 숨긴다 */
+.lower-third:not(.show) { opacity: 0; visibility: hidden; transition: transform 0.4s, opacity 0.25s, visibility 0s 0.4s; }
+.lower-third.show { transform: none; opacity: 1; visibility: visible; transition: transform 0.4s cubic-bezier(0.2, 0.9, 0.2, 1), opacity 0.2s; }
 .lt-strip { width: 8px; background: var(--home); }
 .lt-body { padding: 10px 16px; flex: 1; }
 .lt-title { font-weight: 900; font-style: italic; font-size: 34px; line-height: 1; letter-spacing: 0.04em; color: var(--accent); }
