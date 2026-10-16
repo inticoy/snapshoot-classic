@@ -90,7 +90,7 @@ it('양 팀 11명은 슬롯·고유 등번호·주발/약발·능력치가 있�
   expect(squadPanel().match(/class="pcard /g)).toHaveLength(22);
 });
 
-it.each([0, 1] as const)('팀 %i 킥오프에서 키커만 중앙에 있고 나머지는 자기 진영·상대는 서클 밖이다', (team) => {
+it.each([0, 1] as const)('팀 %i 킥오프에서 키커와 옆 선수만 중앙에 있고 나머지는 자기 진영·상대는 서클 밖이다', (team) => {
   const { match } = simulation();
   match.startKickoff(team);
   const taker = match.forward(team);
@@ -98,7 +98,7 @@ it.each([0, 1] as const)('팀 %i 킥오프에서 키커만 중앙에 있고 나�
   expect(match.ball.owner).toBe(taker);
   for (const p of match.players) {
     expect(p.pos.x * p.attackDir).toBeLessThanOrEqual(0);
-    if (p !== taker) expect(p.pos.length()).toBeGreaterThanOrEqual(9.15);
+    if (p !== taker && p !== match.kickoffPartner(team)) expect(p.pos.length()).toBeGreaterThanOrEqual(9.15);
     for (const q of match.players) if (q !== p) expect(p.pos.distanceTo(q.pos)).toBeGreaterThan(0.84);
   }
 });

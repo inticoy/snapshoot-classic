@@ -549,7 +549,7 @@ export class Game {
         case 'whistle':
           if (e.kind === 'kickoff') this.sound.whistle([0.45]);
           else if (e.kind === 'halftime') {
-            this.sound.whistle([0.3, 0.7]);
+            this.sound.whistle([0.35, 0.9]);
             this.hud.tick('전반 종료', 2.4);
             setTimeout(() => {
               if (this.match.phase === 'halftime' && this.state === 'playing') this.openHalftime();

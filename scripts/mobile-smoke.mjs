@@ -31,6 +31,8 @@ try {
   await page.screenshot({ path: `${output}/menu.png` });
   await page.getByRole('button', { name: '경기 시작', exact: true }).tap();
   await page.waitForFunction(() => window.__game.game.state === 'playing' && window.__game.match.phase === 'playing');
+  // 이동 점검이므로 킥오프 첫 패스 규칙은 건너뛴다 (킥오프는 tests/kickoff.test.ts)
+  await page.evaluate(() => { window.__game.match.kickoffTaker = null; });
   await page.locator('#touch-controls').waitFor({ state: 'visible' });
   assert.equal(await page.locator('#hints').isVisible(), false);
   const graphics = await page.evaluate(() => {

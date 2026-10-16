@@ -3,7 +3,7 @@ import * as CANNON from 'cannon-es';
 import { BALL, DRIBBLE, GOAL, KEEPER, MATCH, PASS, PHYSICS, PITCH, PLAYER, SHOT } from '../config';
 import { Ball } from '../entities/Ball';
 import { Goal } from '../entities/Goal';
-import { Random } from '../core/Random';
+import { Random, visualRandom } from '../core/Random';
 import { Player, type PlayerModelFactory } from '../entities/Player';
 import type { PhysicsWorld } from '../physics/PhysicsWorld';
 import { TeamAI } from '../ai/TeamAI';
@@ -16,11 +16,13 @@ import { TEAMS } from '../data/Teams';
 import { FORMATION_433 } from '../data/Formation';
 import { SetPieces, type RestartKind } from './SetPieces';
 import { Keepers } from './Keepers';
+import { selectMotion } from '../anim/MotionLibrary';
+import { MOTION_CATALOG } from '../data/MotionCatalog';
 import { SkillInput, SkillRunner, SKILLS } from './Skills';
 import { Rules, type Card } from './Rules';
 import { Shootout } from './Shootout';
 import { Officials } from './Officials';
-import { planKick } from './Motions';
+import { planKick, speedClass } from './Motions';
 import type { MotionKind } from '../anim/MotionLibrary';
 
 export type Phase = 'kickoff' | 'playing' | 'out' | 'setpiece' | 'goal' | 'halftime' | 'shootout' | 'fulltime';
@@ -97,6 +99,8 @@ const cspin = new CANNON.Vec3();
 
 
 export interface MatchOptions {
+  /** 실제 킥오프 규칙(첫 패스 전 드리블 금지, 상대 서클 밖). 기본 켜짐, 드리블 단위 테스트는 끈다 */
+  kickoffPass?: boolean;
   /** 고립된 개발 시나리오. 아웃·휘슬 뒤 재개 배치 없이 R 리셋을 기다린다. */
   practice?: boolean;
   random?: Random;
@@ -270,15 +274,53 @@ export class Match {
       const slot = p.slot;
       if (p.role === 'GK') p.pos.set(this.ownGoalX(p.team) + a * 0.8, 0, 0);
       else if (p === this.forward(team)) p.pos.set(-a * 0.6, 0, -0.3);
+      else if (p === this.kickoffPartner(team)) p.pos.set(-a * 0.4, 0, 1.6);
       else p.pos.set(a * Math.min(slot.fx, -PITCH.centerCircle - 1), 0, slot.z * a);
       p.facing.set(a, 0, 0);
     }
     const taker = this.forward(team);
+    // 실제 킥오프: 공 옆 2명, 첫 패스(또는 슛)로 시작. 그 전에는 드리블 금지·상대는 센터 서클 밖
+    this.kickoffTaker = this.options.kickoffPass === false ? null : taker;
+    this.kickoffClock = 0;
     this.ball.owner = taker;
     this.ball.lastTouch = taker;
     this.ball.body.position.set(taker.pos.x + taker.attackDir * 0.35, BALL.radius, 0);
     if (team === 0) this.controlled = taker;
     else this.controlled = this.forward(0);
+  }
+
+  /** 킥오프를 차기 전인 선수 (첫 킥 전까지 드리블 못 함). null이면 진행 중 */
+  kickoffTaker: Player | null = null;
+  private kickoffClock = 0;
+
+  /** 킥오프 때 공 옆에 서는 두 번째 선수: 공격수 다음으로 앞에 있는 필드 선수 */
+  kickoffPartner(team: 0 | 1): Player {
+    const f = this.forward(team);
+    return this.teams[team].filter((p) => p !== f && !p.isKeeper).sort((x, y) => y.slot.fx - x.slot.fx)[0];
+  }
+
+  /** 킥오프 전: 차는 선수는 제자리, AI 킥오프는 옆 선수에게 패스, 상대는 서클 밖 */
+  private updateKickoffRule(dt: number): void {
+    const t = this.kickoffTaker;
+    if (!t) return;
+    if (this.ball.owner !== t || this.phase !== 'playing') {
+      this.kickoffTaker = null;
+      return;
+    }
+    this.kickoffClock += dt;
+    t.vel.set(0, 0, 0);
+    if (!this.isUserControlled(t) && this.kickoffClock > 0.7 && !this.windups.has(t)) {
+      const mate = this.kickoffPartner(t.team);
+      this.pass(t, tmp.set(mate.pos.x - t.pos.x, 0, mate.pos.z - t.pos.z).normalize(), 'short', 0.3);
+    }
+    const r = PITCH.centerCircle + 0.3;
+    for (const p of this.teams[1 - t.team]) {
+      const d = Math.hypot(p.pos.x, p.pos.z);
+      if (d < r && d > 0.01) {
+        p.pos.x *= r / d;
+        p.pos.z *= r / d;
+      }
+    }
   }
 
   update(dt: number, cmd: UserCommand): void {
@@ -481,6 +523,7 @@ export class Match {
     this.keeperRush = this.options.userControl !== false && defending && cmd.through.held;
     if (this.isUserControlled(this.controlled)) this.handleUser(dt, cmd);
     this.ai.update(dt);
+    this.updateKickoffRule(dt);
     this.keepers.update(dt);
 
     this.skills.driveBodies(dt);
@@ -685,8 +728,29 @@ export class Match {
 
     // S (수비 시) = 선수 변경
     if (cmd.pass.pressed && !attacking && !teamHasBall) this.switchToNearest();
+    // Shift + 방향 (수비) = 그 화면 방향에 있는 동료로 전환 (오른쪽 스틱 전환)
+    const sm = cmd.skillMove;
+    const aimNow = !!cmd.skill?.held && !!sm && sm.lengthSq() > 0.25;
+    if (!attacking && !teamHasBall && aimNow && !this.switchAimHeld) this.switchToward(p, sm!);
+    this.switchAimHeld = aimNow;
 
     const move = cmd.move.clone();
+    // 치고 달리기: 질주 중 Shift 짧게(긴 녹온) / E 두 번(짧은 녹온) / E 세 번(아주 긴 녹온)
+    this.knockTimer = Math.max(0, this.knockTimer - dt);
+    if (cmd.sprint && !this.prevSprint) {
+      this.sprintTaps = this.elapsed - this.lastSprintTap < 0.3 ? this.sprintTaps + 1 : 1;
+      this.lastSprintTap = this.elapsed;
+    }
+    this.prevSprint = cmd.sprint;
+    if (cmd.skill?.pressed) this.shiftDownAt = this.elapsed;
+    if (hasBall && attacking && !this.charge && !this.skills.isActive(p) && this.kickoffTaker !== p) {
+      const shiftTap = cmd.skill?.released && cmd.sprint && this.elapsed - this.shiftDownAt < 0.25 && (cmd.skillMove?.lengthSq() ?? 0) < 0.01;
+      const eTaps = this.elapsed - this.lastSprintTap > 0.3 && this.sprintTaps >= 2 ? this.sprintTaps : 0;
+      if (shiftTap || eTaps) {
+        this.knockOn(p, shiftTap ? 5 : eTaps >= 3 ? 7 : 3.2, move);
+        this.sprintTaps = 0;
+      }
+    }
     // 개인기: 보조키를 누른 순간 몸 방향을 유지한다. Z 패스 게이지는 이동·조준 입력을 그대로 받는다
     if (cmd.skill && hasBall && attacking && !this.charge) {
       // 두 갈래로 읽는다: 새로 누른 키만(속임 동작처럼 탭 커맨드) / 달리던 키까지(스텝오버처럼 굴리는 커맨드). 둘 다 맞으면 긴 커맨드
@@ -725,7 +789,8 @@ export class Match {
       const dd = tmp.length();
       const hasInput = move.lengthSq() > 0.01;
       const towardBall = hasInput && dd > 0.3 && move.clone().normalize().dot(tmp.clone().normalize()) > 0.35;
-      if (!hasInput || towardBall || this.receiveTimer < MOVE_ASSIST_TIME[settings.moveAssist]) {
+      // 원터치를 미리 눌러 둔 동안 방향키는 조준이다 → 이동은 계속 공을 받으러 간다 (조준 방향으로 걸어가 공을 지나치지 않게)
+      if (!hasInput || towardBall || this.queued || this.receiveTimer < MOVE_ASSIST_TIME[settings.moveAssist]) {
         move.copy(dd > 0.25 ? tmp.normalize().multiplyScalar(Math.min(1, dd / 1.8)) : tmp.set(0, 0, 0));
         autoSprint = dd > 4 && (cmd.sprint || bp.y > 1.2);
         if (dd < 2) p.faceTowards(bp.x, bp.z);
@@ -757,6 +822,22 @@ export class Match {
         if (d > 0.25) move.copy(tmp.multiplyScalar(Math.min(1, d / 1.5) / d));
       } else this.guideDribble(p, move);
     }
+    // C 볼 지키기: 공을 가진 채 C 유지 → 느리게, 가까운 상대에게 등을 돌려 몸으로 공을 가린다
+    p.shielding = hasBall && attacking && cmd.contain.held && !this.charge && !this.skills.isActive(p);
+    if (p.shielding) {
+      speedScale = Math.min(speedScale, 0.55);
+      let near: Player | null = null, nd = 3;
+      for (const q of this.teams[1 - p.team]) {
+        const d = q.pos.distanceTo(p.pos);
+        if (d < nd) { nd = d; near = q; }
+      }
+      if (near) {
+        p.faceTowards(2 * p.pos.x - near.pos.x, 2 * p.pos.z - near.pos.z);
+        p.facingLock = Math.max(p.facingLock, 0.05);
+      }
+    }
+    // 킥오프를 차기 전에는 드리블할 수 없다 (패스·슛으로만 시작)
+    if (this.kickoffTaker === p) move.set(0, 0, 0);
     if (!p.busy) p.steer(move, cmd.sprint || autoSprint, hasBall, dt, speedScale);
     // 압박/견제 중에는 상대를 바라본다 (뒷걸음질)
     if ((pressing || containing) && !p.busy) {
@@ -804,6 +885,8 @@ export class Match {
     }
     if (this.queued) {
       this.queued.ttl -= dt;
+      // 공이 아직 나에게 오는 중이면 예약을 유지한다 (멀리서 미리 누른 원터치가 도착 직전에 사라지지 않게)
+      if (this.passTarget === p || this.ballComingTo(p)) this.queued.ttl = Math.max(this.queued.ttl, 0.2);
       if (this.queued.ttl <= 0 || oppHasBall) this.queued = null;
     }
     this.lastMove.copy(cmd.move);
@@ -822,6 +905,48 @@ export class Match {
   }
 
   private readonly lastMove = new THREE.Vector3();
+  private switchAimHeld = false;
+
+  /** 지금 선수에서 dir 쪽으로 가장 잘 맞는 동료(각도 우선, 가까울수록)로 전환 */
+  switchToward(from: Player, dir: THREE.Vector3): void {
+    const d = dir.clone().setY(0).normalize();
+    let best: Player | null = null, bestScore = Infinity;
+    for (const q of this.teams[from.team]) {
+      if (q === from || q.isKeeper || q.sentOff) continue;
+      tmp.set(q.pos.x - from.pos.x, 0, q.pos.z - from.pos.z);
+      const dist = tmp.length();
+      const ang = tmp.normalize().angleTo(d);
+      if (ang > 1.0) continue;
+      const score = ang * 12 + dist * 0.15;
+      if (score < bestScore) { bestScore = score; best = q; }
+    }
+    if (best) {
+      this.controlled = best;
+      this.receiveTimer = 0;
+    }
+  }
+  /** 녹온 뒤 공을 쫓는 동안 (소유 상실 거리를 늘린다) */
+  private knockTimer = 0;
+  private prevSprint = false;
+  private sprintTaps = 0;
+  private lastSprintTap = -9;
+  private shiftDownAt = -9;
+
+  /** 녹온: 공을 진행 방향으로 distance(m)만큼 길게 치고 질주로 쫓는다. 가속·속력이 좋을수록 더 길게 */
+  knockOn(p: Player, distance: number, move: THREE.Vector3): void {
+    const dir = move.lengthSq() > 0.01 ? move.clone().setY(0).normalize() : p.facing.clone();
+    const st = p.profile.stats;
+    const d = distance * (0.85 + 0.3 * n(st.sprintSpeed));
+    // 선수 속도 위에, 구름 감속(rollDecel)으로 d만큼 앞서 나갈 속도를 더한다 (질주하는 선수가 바로 따라잡지 않게)
+    const vp = Math.hypot(p.vel.x, p.vel.z);
+    const u = vp + Math.sqrt(2 * (DRIBBLE.rollDecel + DRIBBLE.rollDamping * (vp + 2)) * d);
+    this.ball.body.velocity.set(dir.x * u, 0, dir.z * u);
+    this.knockTimer = 3;
+    this.touchGap = 0.6;
+    p.facing.copy(dir);
+    this.events.push({ type: 'touch', speed: u, player: p });
+    this.events.push({ type: 'skill', id: 'knock_on', player: p });
+  }
   /** Shift를 누르기 직전의 이동 방향 (개인기 커맨드 입력 중 유지) */
   private readonly skillHeldMove = new THREE.Vector3();
 
@@ -1000,9 +1125,23 @@ export class Match {
       dir.set(tmp2.x - b.position.x, 0, tmp2.z - b.position.z);
       u = dir.length() / T + 0.5 * (DRIBBLE.rollDecel + DRIBBLE.rollDamping * speed) * T;
       dir.normalize();
+    } else if (this.isUserControlled(p)) {
+      // 사람이 멈춰서 받을 때: 그 자리에 죽이지 않고 발 앞으로 끌어와 세운다 (멀리서 잡힌 공이 발에서 떨어져 남지 않게)
+      this.footPoint(p, tmp2);
+      dir.set(tmp2.x - b.position.x, 0, tmp2.z - b.position.z);
+      const gap = dir.length();
+      if (gap > 0.2) {
+        u = gap / T + 0.5 * DRIBBLE.rollDecel * T;
+        dir.normalize();
+      }
     }
     b.velocity.set(dir.x * u, Math.min(0, b.velocity.y), dir.z * u);
     b.angularVelocity.set(b.velocity.z / BALL.radius, 0, -b.velocity.x / BALL.radius);
+    // 받는 동작 (화면용): 공 높이·속도에 맞는 트래핑 클립. 경기 판정에는 쓰지 않는다
+    if (!p.busy && !this.windups.has(p) && !this.queued) {
+      const trap = selectMotion(MOTION_CATALOG, { kind: 'trap', speed: speedClass(p), angle: 0, height: b.position.y, random: visualRandom.next() });
+      if (trap) p.playMotion(trap.entry, 0, 1.2);
+    }
     this.touchGap = DRIBBLE.touchGap;
     this.events.push({ type: 'touch', speed: u, player: p });
   }
@@ -1082,7 +1221,9 @@ export class Match {
     const fx = o.facing.x, fz = o.facing.z;
     const rx = bp.x - o.pos.x, rz = bp.z - o.pos.z;
     const dist = Math.hypot(rx, rz);
-    if (dist > DRIBBLE.leash) {
+    // 녹온: 발이 닿는 거리까지 따라잡으면 평소 드리블로 돌아간다
+    if (this.knockTimer > 0 && this.knockTimer < 2.6 && dist < DRIBBLE.reach) this.knockTimer = 0;
+    if (dist > (this.knockTimer > 0 ? 9 : DRIBBLE.leash)) {
       this.ball.owner = null; // 헤비 터치: 이제 누구 공도 아니다
       this.events.push({ type: 'heavyTouch', player: o });
       return;
@@ -1175,7 +1316,9 @@ export class Match {
             : n(ts.slidingTackle) * 0.8 + n(ts.defAwareness) * 0.2;
         const evade = n(os.dribbling) * 0.4 + n(os.balance) * 0.35 + n(os.strength) * 0.25;
         // 개인기 중에는 공이 몸에 감춰져 있어 빼앗기 어렵다
-        const chance = THREE.MathUtils.clamp(0.22 + 0.5 * tackleSkill - 0.28 * evade + 0.3 * Math.max(0, facingDot), 0.08, 0.92) * this.skills.shield(o);
+        const chance = THREE.MathUtils.clamp(0.22 + 0.5 * tackleSkill - 0.28 * evade + 0.3 * Math.max(0, facingDot), 0.08, 0.92) * this.skills.shield(o) *
+          // 볼 지키기: 몸싸움이 강할수록 빼앗기 어렵다
+          (o.shielding ? 0.75 - 0.35 * n(os.strength) : 1);
         const success = this.random.next() < chance;
         p.tackleResolved = true;
         p.tackleTimer = Math.min(p.tackleTimer, 0.08);
@@ -1435,6 +1578,7 @@ export class Match {
   startPractice(active: readonly Player[], controlled: Player, seed: number): void {
     if (!this.practice) throw new Error('practice 옵션이 필요합니다');
     this.restart();
+    this.kickoffTaker = null;
     this.practiceOpponent = null;
     this.practiceControlLocked = false;
     this.random.reset(seed);

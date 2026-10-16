@@ -100,22 +100,64 @@ export class Sound {
   }
 
   /** 짧은/긴 CC0 휘슬 샘플을 재개 사유에 맞춰 순서대로 낸다. */
+  /**
+   * 심판 휘슬 (합성): 구슬 휘슬처럼 약 3.1kHz 두 음 + 구슬 떨림(45Hz 진폭·주파수 흔들림) + 숨소리 잡음.
+   * pattern: 각 소리 길이(초). 킥오프 1번, 전반 종료 2번, 경기 종료 짧게 2번 + 길게 1번
+   */
   whistle(pattern: number[] = [0.35]): void {
-    if (!this.ctx || !this.master || this.muted) return;
-    let t = this.ctx.currentTime + 0.02;
+    const ctx = this.ctx;
+    if (!ctx || !this.master || this.muted) return;
+    let t = ctx.currentTime + 0.02;
+    const out = ctx.createGain();
+    out.gain.value = AUDIO_MIX.whistle * 0.35;
+    out.connect(this.master);
     for (const len of pattern) {
-      const buf = this.buffers.get(len < 0.4 ? 'whistle-short' : 'whistle-long');
-      if (buf) {
-        const src = this.ctx.createBufferSource();
-        const gain = this.ctx.createGain();
-        src.buffer = buf;
-        src.loop = len > buf.duration;
-        gain.gain.value = AUDIO_MIX.whistle * 0.5;
-        src.connect(gain).connect(this.master);
-        src.start(t);
-        src.stop(t + len);
+      const env = ctx.createGain();
+      env.gain.setValueAtTime(0, t);
+      env.gain.linearRampToValueAtTime(1, t + 0.015);
+      env.gain.setValueAtTime(1, t + len - 0.04);
+      env.gain.linearRampToValueAtTime(0, t + len);
+      env.connect(out);
+      // 구슬 떨림: 진폭과 주파수를 같이 흔든다
+      const rattle = ctx.createOscillator();
+      rattle.frequency.value = 42 + Math.random() * 8;
+      const rattleAmp = ctx.createGain();
+      rattleAmp.gain.value = 0.45;
+      const trem = ctx.createGain();
+      trem.gain.value = 0.55;
+      rattle.connect(rattleAmp).connect(trem.gain);
+      trem.connect(env);
+      for (const [f, g] of [[3100, 0.5], [3180, 0.35]] as const) {
+        const o = ctx.createOscillator();
+        o.type = 'sine';
+        o.frequency.value = f;
+        const wob = ctx.createGain();
+        wob.gain.value = 60;
+        rattle.connect(wob).connect(o.frequency);
+        const og = ctx.createGain();
+        og.gain.value = g;
+        o.connect(og).connect(trem);
+        o.start(t);
+        o.stop(t + len + 0.02);
       }
-      t += len + 0.12;
+      // 숨소리: 대역 통과 잡음
+      const noise = ctx.createBufferSource();
+      const nb = ctx.createBuffer(1, Math.ceil(ctx.sampleRate * (len + 0.05)), ctx.sampleRate);
+      const d = nb.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+      noise.buffer = nb;
+      const bp = ctx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.value = 3100;
+      bp.Q.value = 2;
+      const ng = ctx.createGain();
+      ng.gain.value = 0.12;
+      noise.connect(bp).connect(ng).connect(env);
+      noise.start(t);
+      noise.stop(t + len + 0.02);
+      rattle.start(t);
+      rattle.stop(t + len + 0.02);
+      t += len + 0.14;
     }
   }
 

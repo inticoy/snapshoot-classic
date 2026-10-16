@@ -22,6 +22,8 @@ export function simulation(seed = 0, options: MatchOptions = {}) {
     goalVisuals: false,
     // 기존 물리·조작 테스트는 즉시 킥 기준. 킥 동작은 tests/motion.test.ts에서 따로 검증한다
     kickMotion: false,
+    // 킥오프 직후 바로 드리블을 시험하는 테스트가 많다. 킥오프 규칙은 tests/kickoff.test.ts에서 따로
+    kickoffPass: false,
     ...options,
   });
   return { physics, match };

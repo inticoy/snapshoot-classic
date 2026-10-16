@@ -43,6 +43,8 @@ export class Player {
   keeperAdvancing = false;
   /** 개인기에 속아 몸을 잘못 실은 남은 시간과 그 방향 */
   wrongFoot = 0;
+  /** C 볼 지키기 중 (몸으로 공을 가림) */
+  shielding = false;
   readonly baitDir = new THREE.Vector3();
   /** 액션 중에는 이동 입력을 무시 */
   actionLock = 0;

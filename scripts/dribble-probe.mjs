@@ -20,6 +20,8 @@ if (scenario) {
   await page.waitForFunction(() => window.__game && document.querySelector('#overlay')?.textContent.includes('경기 시작'));
   await page.keyboard.press('Enter');
   await page.waitForFunction(() => window.__game.match.phase === 'playing');
+  // 이동 점검이므로 킥오프 첫 패스 규칙은 건너뛴다 (킥오프는 tests/kickoff.test.ts)
+  await page.evaluate(() => { window.__game.match.kickoffTaker = null; });
 }
 await page.evaluate(() => {
   const m = window.__game.match;
