@@ -4,9 +4,11 @@ import { PITCH, PLAYER, TEAM_COLORS } from '../config';
 import { PlayerModel, type AnimState, type CharacterModel } from './PlayerModel';
 import { SkinnedPlayerModel, hasCharacterAsset } from './SkinnedPlayerModel';
 import type { PlayerProfile } from '../data/Teams';
+import type { Role, Slot } from '../data/Formation';
+
+export type { Role };
 import { n, type OutfieldStats } from '../data/Stats';
 
-export type Role = 'GK' | 'DEF' | 'FWD';
 
 export class Player {
   readonly model: CharacterModel;
@@ -41,6 +43,8 @@ export class Player {
     readonly number: number,
     readonly name: string,
     readonly profile: PlayerProfile,
+    /** 포메이션상 기본 위치 */
+    readonly slot: Slot,
   ) {
     const c = TEAM_COLORS[team];
     const colors = { shirt: role === 'GK' ? c.keeper : c.shirt, shorts: c.shorts, socks: role === 'GK' ? c.keeper : c.socks };

@@ -33,8 +33,8 @@ export const BALL = {
   // 마그누스 효과: F = magnus * (ω × v)
   magnus: 0.0032,
   // 지면 구름 저항
-  rollingDecel: 0.9,
-  rollingDamping: 0.12,
+  rollingDecel: 1.4,
+  rollingDamping: 0.24,
 };
 
 export const PHYSICS = {

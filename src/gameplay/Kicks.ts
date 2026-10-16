@@ -222,7 +222,7 @@ export class Kicks {
     const vel = new CANNON.Vec3();
     if (aerial) {
       const T = kind === 'lob' ? 0.75 + D * 0.035 : 0.6 + D * 0.026;
-      const vh = (D / T) * (1 + D * 0.006) * powerScale * speedErr;
+      const vh = (D / T) * (1 + D * 0.0095) * powerScale * speedErr;
       vel.set(dir2.x * vh, 0.5 * G * T, dir2.z * vh);
     } else {
       // 받는 위치에서 6~9 m/s 정도로 도착하는 세기
@@ -234,6 +234,76 @@ export class Kicks {
     // 수동 패스는 공이 떨어질 곳에 가장 가까운 동료를 받는 선수로 본다
     const recv = receiver ?? this.nearestMateTo(p, tx, tz, 8);
     return { vel, spin: new CANNON.Vec3(), receiver: recv, weakFoot: foot.weak };
+  }
+
+  // ---------------------------------------------------------------- 공중볼
+
+  /**
+   * 헤더. shot = 골문으로, pass = 동료에게, clear = 걷어내기 (자기 골대 반대 방향 높고 멀리)
+   * 헤더 능력치가 정확도와 세기를 정한다.
+   */
+  header(p: Player, mode: 'shot' | 'pass' | 'clear', aim: THREE.Vector3, assist: AssistLevel): KickResult {
+    const s = p.profile.stats;
+    const bp = this.m.ball.position;
+    const inc = this.m.ball.velocity;
+    const acc = n(s.heading);
+    const incoming = Math.hypot(inc.x, inc.z);
+    const vel = new CANNON.Vec3();
+    let receiver: Player | null = null;
+
+    if (mode === 'shot') {
+      const goalX = this.m.oppGoalX(p.team);
+      const hw = GOAL.width / 2;
+      const dir = aim.lengthSq() > 0.01 ? aim.clone().setY(0).normalize() : null;
+      let tz: number;
+      if (dir && dir.x * p.attackDir > 0.1) {
+        const ray = bp.z + (dir.z / dir.x) * (goalX - bp.x);
+        tz = assist === 'manual' ? ray : THREE.MathUtils.clamp(ray, -hw + 0.4, hw - 0.4);
+      } else {
+        // 입력이 없으면 키퍼 반대쪽 구석
+        tz = (bp.z > 0 ? -1 : 1) * (hw - 0.6);
+      }
+      const toGoal = Math.hypot(goalX - bp.x, tz - bp.z);
+      tz += gauss() * (0.25 + toGoal * 0.035) * (1.7 - 1.2 * acc) * this.pressureFactor(p);
+      // 헤더는 바운드를 노려 아래로 찍는다
+      const ty = THREE.MathUtils.clamp(0.25 + Math.random() * 0.9 + gauss() * 0.4 * (1.4 - acc), 0.1, 3.2);
+      const speed = 10 + 8 * acc + incoming * 0.15 + 3 * n(s.strength);
+      const T = Math.hypot(goalX - bp.x, tz - bp.z) / speed;
+      const d = new THREE.Vector3(goalX - bp.x, 0, tz - bp.z).normalize();
+      vel.set(d.x * speed, (ty - bp.y + 0.5 * G * T * T) / T, d.z * speed);
+    } else if (mode === 'pass') {
+      const dir = aim.lengthSq() > 0.01 ? aim.clone().setY(0).normalize() : p.facing.clone();
+      receiver = assist === 'manual' ? null : this.pickReceiver(p, dir, 'short', assist === 'assisted' ? 1.2 : 0.6);
+      const target = receiver ? receiver.pos.clone() : new THREE.Vector3(bp.x, 0, bp.z).addScaledVector(dir, 10);
+      const D = Math.min(18, Math.hypot(target.x - bp.x, target.z - bp.z));
+      const d = new THREE.Vector3(target.x - bp.x, 0, target.z - bp.z)
+        .normalize()
+        .applyAxisAngle(new THREE.Vector3(0, 1, 0), gauss() * (0.04 + 0.1 * (1 - acc)));
+      // 살짝 띄워서 동료 발 앞에 떨어지게
+      const T = 0.5 + D * 0.04;
+      const vh = D / T;
+      vel.set(d.x * vh, (0.3 - bp.y + 0.5 * G * T * T) / T, d.z * vh);
+    } else {
+      // 걷어내기: 자기 골대 반대 방향 + 바깥쪽으로 높고 멀리
+      const away = new THREE.Vector3(p.attackDir, 0, Math.sign(bp.z || 1) * 0.6).normalize();
+      if (aim.lengthSq() > 0.01 && aim.x * p.attackDir > 0) away.lerp(aim.clone().setY(0).normalize(), 0.5).normalize();
+      const speed = 13 + 6 * acc + 2 * n(s.strength);
+      vel.set(away.x * speed, 6 + 2 * acc, away.z * speed);
+    }
+    return { vel, spin: new CANNON.Vec3(), receiver, weakFoot: false };
+  }
+
+  /** 발리: 공중에 뜬 공을 바로 차는 슛. 발리 슛 능력치가 낮으면 크게 빗나간다 */
+  volley(p: Player, charge: number, aim: THREE.Vector3, assist: AssistLevel): KickResult {
+    const r = this.shot(p, charge, false, aim, assist);
+    const v = n(p.profile.stats.volleys);
+    const err = gauss() * (0.03 + 0.1 * (1 - v));
+    const h = new THREE.Vector3(r.vel.x, 0, r.vel.z).applyAxisAngle(new THREE.Vector3(0, 1, 0), err);
+    r.vel.x = h.x;
+    r.vel.z = h.z;
+    // 발리는 뜨기 쉽다
+    r.vel.y += gauss() * 1.2 * (1.2 - v) + (1 - v) * 1.5;
+    return r;
   }
 
   /** 스로인: 머리 위에서 양손으로 던진다. long = 롱 스로인 (A/W) */

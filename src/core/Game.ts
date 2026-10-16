@@ -7,7 +7,7 @@ import { Match, type UserCommand } from '../gameplay/Match';
 import { CameraRig } from '../camera/CameraRig';
 import { Hud } from '../ui/Hud';
 import { Menu, assistPanel, controlsPanel, matchupPanel, playerDetailPanel, squadPanel, statsPanel, type MenuScreen } from '../ui/Menu';
-import { ASSIST_LABEL, cycleAssist, settings } from './Settings';
+import { ASSIST_LABEL, MOVE_ASSIST_LABEL, cycleAssist, cycleMoveAssist, settings } from './Settings';
 import { Sound } from '../audio/Sound';
 import { TEAMS } from '../data/Teams';
 import { RESTART_LABEL } from '../gameplay/SetPieces';
@@ -34,7 +34,7 @@ export class Game {
   private accumulator = 0;
   private last = performance.now();
   private durationIndex = 1;
-  private playerIndex = 2;
+  private playerIndex = 4;
   private readonly cmd: UserCommand = {
     move: new THREE.Vector3(),
     sprint: false,
@@ -97,7 +97,7 @@ export class Game {
   // ---------------------------------------------------------------- 메뉴
 
   private settingsItems(): MenuScreen['items'] {
-    const players = ([0, 1] as const).flatMap((t) => [0, 1, 2].map((i) => [t, i] as [0 | 1, number]));
+    const players = ([0, 1] as const).flatMap((t) => TEAMS[t].players.map((_, i) => [t, i] as [0 | 1, number]));
     const cur = () => players[this.playerIndex];
     const step = (d: number) => (this.playerIndex = (this.playerIndex + d + players.length) % players.length);
     return [
@@ -116,6 +116,14 @@ export class Game {
         onLeft: () => cycleAssist('shotAssist', -1),
         onRight: () => cycleAssist('shotAssist', 1),
         panel: () => assistPanel('shot'),
+      },
+      {
+        id: 'moveAssist',
+        label: '자동 전환 이동 보조',
+        value: () => MOVE_ASSIST_LABEL[settings.moveAssist],
+        onLeft: () => cycleMoveAssist(-1),
+        onRight: () => cycleMoveAssist(1),
+        panel: () => `<div class="card"><h3>AUTO SWITCHING MOVE ASSISTANCE</h3><p>패스로 받는 선수가 바뀐 직후, 얼마 동안 AI가 받으러 가는 움직임을 유지할지 정합니다 (FC의 같은 이름 설정).<br/><br/><b>높음</b> · 0.55초 · <b>낮음</b> · 0.25초 · <b>없음</b> · 바로 내 입력<br/><br/>어떤 설정이든 방향키가 공 쪽을 향하면 공을 가로챌 지점으로 가서 그 앞에서 멈추므로 공을 지나치지 않고, 입력 없이 두면 자동으로 받으러 갑니다. 받는 순간 누르고 있던 방향으로 첫 터치를 합니다.</p></div>`,
       },
       {
         id: 'player',
@@ -151,9 +159,9 @@ export class Game {
     this.hud.show(false);
     const lengthLabel = () => `${DURATIONS[this.durationIndex] / 60}분`;
     this.menu.open({
-      eyebrow: 'FOOTBALL GAME · 3 VS 3',
+      eyebrow: 'FOOTBALL GAME · 5 VS 5',
       title: 'KICK OFF',
-      panel: () => matchupPanel(null, [`경기 시간 ${lengthLabel()}`, '중계 · 3대3', TEAMS[0].name + ' 홈']),
+      panel: () => matchupPanel(null, [`경기 시간 ${lengthLabel()}`, '중계 · 5대5', TEAMS[0].name + ' 홈']),
       items: [
         { id: 'start', label: '경기 시작', onSelect: () => void this.startMatch() },
         {

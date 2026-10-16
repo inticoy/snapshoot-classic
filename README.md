@@ -1,6 +1,6 @@
 # Football Game (가칭)
 
-브라우저에서 키보드로 하는 3D 3대3 축구 게임. Three.js + cannon-es + Vite + TypeScript.
+브라우저에서 키보드로 하는 3D 5대5 축구 게임. Three.js + cannon-es + Vite + TypeScript.
 
 ## 실행
 

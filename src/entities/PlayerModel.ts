@@ -6,7 +6,7 @@ import * as THREE from 'three';
  * 나중에 Mixamo 캐릭터 + AnimationMixer로 교체할 때도 같은 상태 머신을 그대로 쓸 수 있다.
  */
 
-export type AnimState = 'idle' | 'run' | 'kick' | 'tackle' | 'dive' | 'celebrate' | 'hold';
+export type AnimState = 'idle' | 'run' | 'kick' | 'tackle' | 'dive' | 'celebrate' | 'hold' | 'header';
 
 type Joint =
   | 'hipL' | 'hipR' | 'kneeL' | 'kneeR'
@@ -23,7 +23,7 @@ const JOINTS: Joint[] = [
 
 // 상태 전환 속도 (클수록 빠르게 크로스페이드)
 const FADE_SPEED: Record<AnimState, number> = {
-  idle: 8, run: 10, kick: 22, tackle: 18, dive: 16, celebrate: 6, hold: 10,
+  idle: 8, run: 10, kick: 22, tackle: 18, dive: 16, celebrate: 6, hold: 10, header: 20,
 };
 
 /** 선수 모델 공통 인터페이스 (절차적 모델 / 스킨드 캐릭터) */
@@ -55,7 +55,7 @@ export class PlayerModel implements CharacterModel {
     THREE.Group
   >;
   private readonly weights: Record<AnimState, number> = {
-    idle: 1, run: 0, kick: 0, tackle: 0, dive: 0, celebrate: 0, hold: 0,
+    idle: 1, run: 0, kick: 0, tackle: 0, dive: 0, celebrate: 0, hold: 0, header: 0,
   };
   private state: AnimState = 'idle';
   private runPhase = Math.random() * Math.PI * 2;
@@ -170,7 +170,7 @@ export class PlayerModel implements CharacterModel {
 
   /** 상태 전환. 일회성 동작은 처음부터 다시 재생된다 */
   play(state: AnimState, opts: { side?: 1 | -1 } = {}): void {
-    if (state === 'kick' || state === 'tackle' || state === 'dive') {
+    if (state === 'kick' || state === 'tackle' || state === 'dive' || state === 'header') {
       this.actionT = 0;
       if (state === 'kick') this.kickSide = opts.side ?? 1;
       if (state === 'dive') this.diveSide = opts.side ?? 1;
@@ -294,6 +294,18 @@ export class PlayerModel implements CharacterModel {
           elbowL: -0.2, elbowR: -0.2,
           spine: -0.15,
           bodyDrop: -Math.abs(Math.sin(t * 6)) * 0.12,
+        };
+      }
+      case 'header': {
+        // 점프하며 이마로 받기
+        const t = Math.min(1, this.actionT / 0.5);
+        const jump = Math.sin(t * Math.PI);
+        return {
+          hipL: 0.3, hipR: 0.1, kneeL: 0.9 * jump, kneeR: 0.5 * jump,
+          shoulderL: 0.2, shoulderR: 0.2, armSpreadL: 0.9, armSpreadR: 0.9,
+          elbowL: -0.6, elbowR: -0.6,
+          spine: -0.25 + 0.6 * Math.min(1, t * 2),
+          bodyDrop: -0.45 * jump,
         };
       }
       case 'hold': {

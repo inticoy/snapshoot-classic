@@ -269,8 +269,8 @@ export function squadPanel(): string {
       <h3>SQUADS</h3>
       ${([0, 1] as const)
         .map(
-          (t) => `<div class="squad-row"><div class="squad-team">${TEAMS[t].name.toUpperCase()}</div><div class="squad-cards">${[0, 1, 2]
-            .map((i) => playerCard(t, i))
+          (t) => `<div class="squad-row"><div class="squad-team">${TEAMS[t].name.toUpperCase()}</div><div class="squad-cards">${TEAMS[t].players
+            .map((_, i) => playerCard(t, i))
             .join('')}</div></div>`,
         )
         .join('')}

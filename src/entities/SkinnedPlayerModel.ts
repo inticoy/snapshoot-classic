@@ -57,7 +57,7 @@ const CLIP_NAMES: Record<Clip, string> = {
 // 클립 원래 속도에 해당하는 이동 속도 (m/s) — 발 미끄러짐을 줄이기 위한 재생 속도 보정
 const CLIP_SPEED = { walk: 1.6, jog: 4.2, sprint: 7.2 };
 
-type Overlay = 'kick' | 'tackle' | 'dive' | 'hold';
+type Overlay = 'kick' | 'tackle' | 'dive' | 'hold' | 'header';
 
 const HAIR_TONES = [0x1d1510, 0x3a2516, 0x6b4a2a, 0xc9a25a, 0x111111];
 const SKIN_TONES = [0xf1c7a5, 0xd9a47e, 0xb07a52, 0x7d5236, 0xe8b894];
@@ -80,7 +80,7 @@ export class SkinnedPlayerModel implements CharacterModel {
   private actionT = 0;
   private kickSide: 1 | -1 = 1;
   private diveSide: 1 | -1 = 1;
-  private readonly overlay: Record<Overlay, number> = { kick: 0, tackle: 0, dive: 0, hold: 0 };
+  private readonly overlay: Record<Overlay, number> = { kick: 0, tackle: 0, dive: 0, hold: 0, header: 0 };
   private danceW = 0;
 
   constructor(colors: ModelColors, private readonly keeper: boolean) {
@@ -118,7 +118,7 @@ export class SkinnedPlayerModel implements CharacterModel {
   }
 
   play(state: AnimState, opts: { side?: 1 | -1 } = {}): void {
-    if (state === 'kick' || state === 'tackle' || state === 'dive') {
+    if (state === 'kick' || state === 'tackle' || state === 'dive' || state === 'header') {
       this.actionT = 0;
       if (state === 'kick') this.kickSide = opts.side ?? 1;
       if (state === 'dive') this.diveSide = opts.side ?? 1;
@@ -205,10 +205,10 @@ export class SkinnedPlayerModel implements CharacterModel {
   }
 
   private applyOverlays(): void {
-    const { kick, tackle, dive, hold } = this.overlay;
+    const { kick, tackle, dive, hold, header } = this.overlay;
     this.pivot.rotation.set(0, 0, 0);
     this.pivot.position.set(0, 0, 0);
-    if (kick + tackle + dive + hold < 0.002) return;
+    if (kick + tackle + dive + hold + header < 0.002) return;
     this.root.updateMatrixWorld(true);
 
     if (kick > 0.002) {
@@ -248,6 +248,21 @@ export class SkinnedPlayerModel implements CharacterModel {
       // 양팔을 머리 위로 뻗음
       this.rotateBone('DEF-upper_arm.L', Z_AXIS, 2.6 * k);
       this.rotateBone('DEF-upper_arm.R', Z_AXIS, -2.6 * k);
+    }
+
+    if (header > 0.002) {
+      // 점프 → 정점에서 이마로 받으며 상체를 숙임
+      const t = Math.min(1, this.actionT / 0.5);
+      const jump = Math.sin(t * Math.PI) * header;
+      this.pivot.position.y = 0.45 * jump;
+      const nod = (-0.25 + 0.6 * Math.min(1, t * 2)) * header;
+      this.rotateBone('DEF-spine.002', X_AXIS, nod * 0.6);
+      this.rotateBone('DEF-neck', X_AXIS, nod * 0.5);
+      this.rotateBone('DEF-thigh.L', X_AXIS, -0.3 * jump);
+      this.rotateBone('DEF-shin.L', X_AXIS, 0.9 * jump);
+      this.rotateBone('DEF-shin.R', X_AXIS, 0.5 * jump);
+      this.rotateBone('DEF-upper_arm.L', Z_AXIS, 0.9 * header);
+      this.rotateBone('DEF-upper_arm.R', Z_AXIS, -0.9 * header);
     }
 
     if (hold > 0.002) {

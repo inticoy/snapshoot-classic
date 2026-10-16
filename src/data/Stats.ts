@@ -13,6 +13,8 @@ export interface OutfieldStats {
   shotPower: number; // 슛 파워
   longShots: number; // 중거리 슛
   curve: number; // 커브
+  volleys: number; // 발리 슛
+  heading: number; // 헤더
   // 패스
   shortPassing: number; // 짧은 패스
   longPassing: number; // 긴 패스
@@ -31,6 +33,7 @@ export interface OutfieldStats {
   interceptions: number; // 가로채기
   // 피지컬
   strength: number; // 몸싸움
+  jumping: number; // 점프
   stamina: number; // 스태미너
 }
 
@@ -51,6 +54,8 @@ export const STAT_LABELS: Record<keyof OutfieldStats | keyof KeeperStats, string
   shotPower: '슛 파워',
   longShots: '중거리 슛',
   curve: '커브',
+  volleys: '발리 슛',
+  heading: '헤더',
   shortPassing: '짧은 패스',
   longPassing: '긴 패스',
   vision: '시야',
@@ -65,6 +70,7 @@ export const STAT_LABELS: Record<keyof OutfieldStats | keyof KeeperStats, string
   slidingTackle: '슬라이딩 태클',
   interceptions: '가로채기',
   strength: '몸싸움',
+  jumping: '점프',
   stamina: '스태미너',
   diving: 'GK 다이빙',
   handling: 'GK 핸들링',
@@ -94,28 +100,35 @@ export function faceStats(s: Stats, keeper: boolean): [string, number][] {
   }
   return [
     ['PAC', Math.round(avg(s.sprintSpeed, s.acceleration))],
-    ['SHO', Math.round(avg(s.finishing, s.shotPower, s.longShots, s.composure))],
+    ['SHO', Math.round(avg(s.finishing, s.shotPower, s.longShots, s.volleys, s.composure))],
     ['PAS', Math.round(avg(s.shortPassing, s.longPassing, s.vision, s.curve))],
     ['DRI', Math.round(avg(s.dribbling, s.ballControl, s.agility, s.balance, s.reactions))],
-    ['DEF', Math.round(avg(s.defAwareness, s.standingTackle, s.slidingTackle, s.interceptions))],
-    ['PHY', Math.round(avg(s.strength, s.stamina))],
+    ['DEF', Math.round(avg(s.defAwareness, s.standingTackle, s.slidingTackle, s.interceptions, s.heading))],
+    ['PHY', Math.round(avg(s.strength, s.stamina, s.jumping))],
   ];
 }
 
 /** 포지션별 가중치로 계산한 OVR */
-export function overall(s: Stats, pos: 'GK' | 'CB' | 'ST'): number {
+export function overall(s: Stats, pos: 'GK' | 'CB' | 'CM' | 'ST'): number {
   if (pos === 'GK' && s.diving !== undefined) {
     return Math.round(avg(s.diving, s.handling!, s.reflexes!, s.reflexes!, s.positioning!, s.positioning!, s.kicking! * 0.6 + 30));
   }
   if (pos === 'CB') {
     return Math.round(
-      s.defAwareness * 0.24 + s.standingTackle * 0.2 + s.slidingTackle * 0.12 + s.interceptions * 0.14 +
-        s.strength * 0.12 + s.shortPassing * 0.06 + s.sprintSpeed * 0.04 + s.reactions * 0.08,
+      s.defAwareness * 0.22 + s.standingTackle * 0.18 + s.slidingTackle * 0.1 + s.interceptions * 0.13 +
+        s.heading * 0.1 + s.strength * 0.1 + s.shortPassing * 0.05 + s.sprintSpeed * 0.04 + s.reactions * 0.08,
+    );
+  }
+  if (pos === 'CM') {
+    return Math.round(
+      s.shortPassing * 0.17 + s.longPassing * 0.13 + s.vision * 0.13 + s.ballControl * 0.14 + s.dribbling * 0.07 +
+        s.reactions * 0.08 + s.interceptions * 0.05 + s.standingTackle * 0.05 + s.longShots * 0.06 +
+        s.composure * 0.06 + s.stamina * 0.06,
     );
   }
   return Math.round(
-    s.finishing * 0.24 + s.shotPower * 0.08 + s.longShots * 0.04 + s.ballControl * 0.12 + s.dribbling * 0.1 +
-      s.sprintSpeed * 0.08 + s.acceleration * 0.06 + s.reactions * 0.1 + s.composure * 0.06 + s.shortPassing * 0.06 +
-      s.strength * 0.06,
+    s.finishing * 0.22 + s.shotPower * 0.08 + s.longShots * 0.04 + s.volleys * 0.02 + s.heading * 0.04 +
+      s.ballControl * 0.11 + s.dribbling * 0.09 + s.sprintSpeed * 0.08 + s.acceleration * 0.06 + s.reactions * 0.1 +
+      s.composure * 0.06 + s.shortPassing * 0.05 + s.strength * 0.05,
   );
 }

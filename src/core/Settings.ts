@@ -14,15 +14,25 @@ export const ASSIST_LABEL: Record<AssistLevel, string> = {
 
 const ORDER: AssistLevel[] = ['assisted', 'semi', 'manual'];
 
+/**
+ * 자동 전환 이동 보조 (FC: Auto Switching Move Assistance).
+ * 패스로 받는 선수가 바뀐 직후 얼마 동안 AI가 받으러 가는 움직임을 유지할지.
+ */
+export type MoveAssist = 'none' | 'low' | 'high';
+export const MOVE_ASSIST_LABEL: Record<MoveAssist, string> = { none: '없음', low: '낮음', high: '높음' };
+export const MOVE_ASSIST_TIME: Record<MoveAssist, number> = { none: 0, low: 0.25, high: 0.55 };
+const MOVE_ORDER: MoveAssist[] = ['none', 'low', 'high'];
+
 interface SettingsData {
   passAssist: AssistLevel;
   shotAssist: AssistLevel;
+  moveAssist: MoveAssist;
 }
 
 const KEY = 'football-game:settings';
 
 function load(): SettingsData {
-  const fallback: SettingsData = { passAssist: 'assisted', shotAssist: 'assisted' };
+  const fallback: SettingsData = { passAssist: 'assisted', shotAssist: 'assisted', moveAssist: 'high' };
   try {
     const raw = localStorage.getItem(KEY);
     if (!raw) return fallback;
@@ -30,6 +40,7 @@ function load(): SettingsData {
     return {
       passAssist: ORDER.includes(parsed.passAssist!) ? parsed.passAssist! : fallback.passAssist,
       shotAssist: ORDER.includes(parsed.shotAssist!) ? parsed.shotAssist! : fallback.shotAssist,
+      moveAssist: MOVE_ORDER.includes(parsed.moveAssist!) ? parsed.moveAssist! : fallback.moveAssist,
     };
   } catch {
     return fallback;
@@ -38,9 +49,19 @@ function load(): SettingsData {
 
 export const settings: SettingsData = load();
 
-export function cycleAssist(key: keyof SettingsData, dir: 1 | -1): void {
+export function cycleAssist(key: 'passAssist' | 'shotAssist', dir: 1 | -1): void {
   const i = ORDER.indexOf(settings[key]);
   settings[key] = ORDER[(i + dir + ORDER.length) % ORDER.length];
+  save();
+}
+
+export function cycleMoveAssist(dir: 1 | -1): void {
+  const i = MOVE_ORDER.indexOf(settings.moveAssist);
+  settings.moveAssist = MOVE_ORDER[(i + dir + MOVE_ORDER.length) % MOVE_ORDER.length];
+  save();
+}
+
+function save(): void {
   try {
     localStorage.setItem(KEY, JSON.stringify(settings));
   } catch {
