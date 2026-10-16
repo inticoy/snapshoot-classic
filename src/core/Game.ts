@@ -439,6 +439,7 @@ export class Game {
     this.cmd.tackle = this.input.button('tackle');
     this.cmd.finesse = this.input.button('finesse');
     this.cmd.contain = this.input.button('contain');
+    this.cmd.skill = this.input.button('skill');
   }
 
   private handleEvents(): void {

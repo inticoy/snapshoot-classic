@@ -181,7 +181,7 @@ function files(dir: string): string[] {
   }
   return out.sort();
 }
-const GRF_KIND: Record<string, MotionKind> = { shortpass: 'pass', highpass: 'lob', shot: 'shot', sliding: 'slide', trip: 'fall', trap: 'trap', ballcontrol: 'control' };
+const GRF_KIND: Record<string, MotionKind> = { shortpass: 'pass', highpass: 'lob', shot: 'shot', sliding: 'slide', trip: 'fall', trap: 'trap', ballcontrol: 'control', movement: 'turn' };
 const SPEED: Record<string, Entry['speed']> = { idle: 'idle', walk: 'walk', dribble: 'walk', sprint: 'sprint' };
 
 let grfCount = 0;
@@ -191,8 +191,10 @@ for (const file of files(join(ROOT, 'grf'))) {
   const anim: GrfAnim = parseGrf(readFileSync(file, 'utf8'));
   const type = anim.meta.get('type') ?? '';
   const getup = top === 'movement_special' && rel.includes('stand_up_from') && !rel.includes('holdball');
-  const kind: MotionKind | undefined = getup ? 'getup' : GRF_KIND[type];
-  if (!kind || !(getup || ['pass', 'highpass', 'shot', 'sliding', 'trip'].includes(top))) continue;
+  // 공을 가진 방향 전환(movement/dribble)은 개인기 몸 동작으로 쓴다
+  const dribbleTurn = top === 'movement' && rel.startsWith('movement/dribble/');
+  const kind: MotionKind | undefined = getup ? 'getup' : dribbleTurn ? 'turn' : GRF_KIND[type];
+  if (!kind || !(getup || dribbleTurn || ['pass', 'highpass', 'shot', 'sliding', 'trip', 'trap', 'ballcontrol'].includes(top))) continue;
   const src = grfSource(rel, anim);
   const speedDir = rel.split('/')[top === 'trip' ? 2 : 1];
   const speed = SPEED[speedDir] ?? 'walk';

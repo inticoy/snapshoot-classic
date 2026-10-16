@@ -41,6 +41,9 @@ export class Player {
   diveKind: 'save' | 'smother' = 'save';
   diveSide: 1 | -1 = 1;
   keeperAdvancing = false;
+  /** 개인기에 속아 몸을 잘못 실은 남은 시간과 그 방향 */
+  wrongFoot = 0;
+  readonly baitDir = new THREE.Vector3();
   /** 액션 중에는 이동 입력을 무시 */
   actionLock = 0;
   readonly tackleDir = new THREE.Vector3();
@@ -129,6 +132,11 @@ export class Player {
   steer(desired: THREE.Vector3, sprint: boolean, hasBall: boolean, dt: number, speedScale = 1): void {
     this.sprinting = sprint && desired.lengthSq() > 0.01;
     const target = desired.clone().multiplyScalar(this.maxSpeed(hasBall) * speedScale);
+    if (this.wrongFoot > 0) {
+      // 개인기에 속은 동안: 원래 가려던 방향 대신 속은 쪽으로 몸이 쏠리고, 다시 가속하기까지 느리다
+      this.wrongFoot = Math.max(0, this.wrongFoot - dt);
+      target.multiplyScalar(0.25).addScaledVector(this.baitDir, this.maxSpeed(false) * 0.55);
+    }
     const diff = target.sub(this.vel);
     // 가속력: 출발/방향 전환 시 가속
     const rate = desired.lengthSq() > 0.01 ? PLAYER.accel - 5 + 10 * this.stat('acceleration') : PLAYER.decel;

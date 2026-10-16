@@ -74,6 +74,7 @@ export function scriptCommand(input: Input): UserCommand {
     move: new THREE.Vector3(axis.y, 0, axis.x), sprint: input.isDown('sprint'),
     shoot: input.button('shoot'), pass: input.button('pass'), through: input.button('through'), lob: input.button('lob'),
     modifier: input.button('modifier'), finesse: input.button('finesse'), contain: input.button('contain'), tackle: input.button('tackle'),
+    skill: input.button('skill'),
   };
 }
 function serializedEvent(event: MatchEvent, t: number): ScriptResult['events'][number] {

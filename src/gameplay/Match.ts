@@ -16,6 +16,7 @@ import { TEAMS } from '../data/Teams';
 import { FORMATION_433 } from '../data/Formation';
 import { SetPieces, type RestartKind } from './SetPieces';
 import { Keepers } from './Keepers';
+import { SkillInput, SkillRunner, SKILLS } from './Skills';
 import { Rules, type Card } from './Rules';
 import { Shootout } from './Shootout';
 import { Officials } from './Officials';
@@ -46,6 +47,7 @@ export type MatchEvent =
   | { type: 'penaltyKick'; team: 0 | 1; scored: boolean; kicker: Player }
   | { type: 'shootoutEnd'; score: [number, number] }
   | { type: 'tackle'; success: boolean }
+  | { type: 'skill'; id: string; player: Player }
   | { type: 'out'; kind: RestartKind; team: 0 | 1 }
   | { type: 'restart'; kind: RestartKind; team: 0 | 1 };
 
@@ -63,6 +65,8 @@ export interface UserCommand {
   modifier: ButtonState; // Q
   finesse: ButtonState; // Z
   contain: ButtonState; // C
+  /** Shift: 개인기 (없으면 개인기 커맨드를 받지 않는다) */
+  skill?: ButtonState;
   tackle: ButtonState; // Space
 }
 
@@ -123,6 +127,8 @@ export class Match {
   readonly setPieces: SetPieces;
   readonly keepers: Keepers;
   readonly rules: Rules;
+  readonly skills: SkillRunner;
+  private readonly skillInput = new SkillInput();
   readonly shootout: Shootout;
   readonly officials: Officials;
   keeperRush = false;
@@ -178,6 +184,7 @@ export class Match {
     this.setPieces = new SetPieces(this);
     this.keepers = new Keepers(this, physics);
     this.rules = new Rules(this);
+    this.skills = new SkillRunner(this);
     this.shootout = new Shootout(this);
     this.officials = new Officials(this, options.createPlayerModel);
     this.roster.push(...this.players);
@@ -241,6 +248,8 @@ export class Match {
     this.phaseTimer = MATCH.kickoffDelay;
     this.ball.reset(0, 0);
     this.charge = null;
+    this.skills.clear();
+    this.skillInput.reset();
     this.queued = null;
     this.passTarget = null;
     this.setPieces.current = null;
@@ -470,6 +479,7 @@ export class Match {
     this.ai.update(dt);
     this.keepers.update(dt);
 
+    this.skills.driveBodies(dt);
     for (const p of this.players) p.update(dt);
     this.separatePlayers();
     this.resolveTackles();
@@ -673,8 +683,18 @@ export class Match {
     if (cmd.pass.pressed && !attacking && !teamHasBall) this.switchToNearest();
 
     const move = cmd.move.clone();
+    // 개인기: Shift(또는 Z) + 방향 커맨드. Shift를 누른 동안 방향키는 커맨드라서 이동은 직전 방향을 유지한다
+    if (cmd.skill && hasBall && attacking && !this.charge) {
+      const def = this.skillInput.update(dt, cmd.skill.held, cmd.finesse.held, cmd.move, p.facing, SKILLS);
+      if (cmd.skill.held) move.copy(this.skillHeldMove);
+      else this.skillHeldMove.copy(move);
+      if (def) this.skills.start(p, def);
+    } else {
+      this.skillInput.reset();
+      this.skillHeldMove.copy(move);
+    }
     // 추격 보정이 입력을 바꾸더라도 다음 터치는 사용자가 꺾으려던 방향으로 보낸다.
-    this.dribbleIntent.copy(cmd.move).setY(0);
+    this.dribbleIntent.copy(move).setY(0);
     this.dribbleIntentOwner = p;
     if (this.dribbleIntent.lengthSq() > 0.01) this.dribbleIntent.normalize();
     else this.dribbleIntent.set(0, 0, 0);
@@ -730,7 +750,10 @@ export class Match {
     }
 
     // 파워 게이지: D 슛 / S 패스 / W 스루 / A 로빙. Z = 감아차기, Q = 칩슛 / 로빙 스루
-    if (attacking && !this.charge && !this.windups.has(p)) {
+    // Z + C + D = 페이크 슛 (FC 온라인 키보드)
+    if (attacking && hasBall && !this.charge && cmd.finesse.held && cmd.contain.held && cmd.shoot.pressed) {
+      this.startSkill(p, 'fake_shot');
+    } else if (attacking && !this.charge && !this.windups.has(p) && !this.skills.isActive(p)) {
       for (const kind of KICK_KINDS) {
         if (cmd[kind].pressed && !(kind === 'through' && this.keeperRush)) {
           this.charge = { kind, value: 0, finesse: cmd.finesse.held, chip: cmd.modifier.held };
@@ -742,6 +765,14 @@ export class Match {
       const c = this.charge;
       // 패스를 누른 채 스루/로빙이 함께 눌리면 그 킥으로 바꾼다 (터치 스와이프)
       if (c.kind === 'pass') for (const k of ['through', 'lob'] as const) if (cmd[k].held) c.kind = k;
+      // 슛·로빙 게이지 중 S = 페이크 (차는 척만 하고 공을 세운다)
+      if ((c.kind === 'shoot' || c.kind === 'lob') && c.value > 0 && cmd.pass.pressed && this.ball.owner === p) {
+        this.charge = null;
+        this.startSkill(p, c.kind === 'shoot' ? 'fake_shot' : 'fake_pass');
+      }
+    }
+    if (this.charge) {
+      const c = this.charge;
       const btn = cmd[c.kind];
       c.value = Math.min(1, c.value + dt / (c.kind === 'shoot' ? SHOT.chargeTime : PASS.chargeTime));
       if (cmd.finesse.held) c.finesse = true;
@@ -774,6 +805,14 @@ export class Match {
   }
 
   private readonly lastMove = new THREE.Vector3();
+  /** Shift를 누르기 직전의 이동 방향 (개인기 커맨드 입력 중 유지) */
+  private readonly skillHeldMove = new THREE.Vector3();
+
+  /** id로 개인기 시작 (별이 모자라면 무시) */
+  startSkill(p: Player, id: string): boolean {
+    const def = SKILLS.find((s) => s.id === id);
+    return !!def && this.skills.start(p, def);
+  }
   /** 패스로 조작 선수가 바뀐 뒤 지난 시간 (자동 전환 이동 보조용) */
   private receiveTimer = 0;
 
@@ -994,6 +1033,7 @@ export class Match {
       this.ball.carry(cv, o.cannonVel, dt, 1.15);
       return;
     }
+    if (this.skills.driveBall(dt, this.isUserControlled(o) ? this.lastMove : null)) return;
     // 킥 동작 중에는 발 앞에 붙여 둔다 (차는 순간 위치가 흔들리지 않게)
     if (touches && !this.windups.has(o)) {
       this.touchDribble(o, dt);
@@ -1117,7 +1157,8 @@ export class Match {
             ? n(ts.standingTackle) * 0.6 + n(ts.defAwareness) * 0.4
             : n(ts.slidingTackle) * 0.8 + n(ts.defAwareness) * 0.2;
         const evade = n(os.dribbling) * 0.4 + n(os.balance) * 0.35 + n(os.strength) * 0.25;
-        const chance = THREE.MathUtils.clamp(0.22 + 0.5 * tackleSkill - 0.28 * evade + 0.3 * Math.max(0, facingDot), 0.08, 0.92);
+        // 개인기 중에는 공이 몸에 감춰져 있어 빼앗기 어렵다
+        const chance = THREE.MathUtils.clamp(0.22 + 0.5 * tackleSkill - 0.28 * evade + 0.3 * Math.max(0, facingDot), 0.08, 0.92) * this.skills.shield(o);
         const success = this.random.next() < chance;
         p.tackleResolved = true;
         p.tackleTimer = Math.min(p.tackleTimer, 0.08);

@@ -13,6 +13,7 @@ export type Action =
   | 'modifier'
   | 'finesse'
   | 'contain'
+  | 'skill'
   | 'tackle'
   | 'pause'
   | 'camera'
@@ -28,6 +29,7 @@ export const ACTION_KEYS: Record<Action, string[]> = {
   modifier: ['KeyQ'], // 공격: 칩슛/로빙 스루 보조키 / 수비: 동료 압박
   finesse: ['KeyZ'], // 공격: 감아차기 보조키
   contain: ['KeyC'], // 수비: 견제
+  skill: ['ShiftLeft', 'ShiftRight'], // 공격: 개인기 (Shift + 방향 커맨드)
   tackle: ['Space'], // 수비: 스탠딩 태클
   pause: ['Escape', 'KeyP'],
   camera: ['KeyV'],
