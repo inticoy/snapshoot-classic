@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 import { PITCH, PLAYER, TEAM_COLORS } from '../config';
-import { PlayerModel, type AnimState, type CharacterModel } from './PlayerModel';
+import { PlayerModel, type AnimState, type CharacterModel, type ModelColors } from './PlayerModel';
 import { SkinnedPlayerModel, hasCharacterAsset } from './SkinnedPlayerModel';
 import type { PlayerProfile } from '../data/Teams';
 import type { Role, Slot } from '../data/Formation';
@@ -9,6 +9,11 @@ import type { Role, Slot } from '../data/Formation';
 export type { Role };
 import { n, type OutfieldStats } from '../data/Stats';
 
+
+export type PlayerModelFactory = (colors: ModelColors, number: number, keeper: boolean) => CharacterModel;
+
+const createPlayerModel: PlayerModelFactory = (colors, number, keeper) =>
+  hasCharacterAsset() ? new SkinnedPlayerModel(colors, keeper) : new PlayerModel(colors, number);
 
 export class Player {
   readonly model: CharacterModel;
@@ -45,11 +50,12 @@ export class Player {
     readonly profile: PlayerProfile,
     /** 포메이션상 기본 위치 */
     readonly slot: Slot,
+    modelFactory: PlayerModelFactory = createPlayerModel,
   ) {
     const c = TEAM_COLORS[team];
     const colors = { shirt: role === 'GK' ? c.keeper : c.shirt, shorts: c.shorts, socks: role === 'GK' ? c.keeper : c.socks };
     // 캐릭터 에셋이 로드됐으면 스킨드 캐릭터, 아니면 절차적 모델로 대체
-    this.model = hasCharacterAsset() ? new SkinnedPlayerModel(colors, role === 'GK') : new PlayerModel(colors, number);
+    this.model = modelFactory(colors, number, role === 'GK');
   }
 
   /** 팀이 공격하는 방향 (+1 = +X) */

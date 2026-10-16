@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { PITCH } from '../config';
 import type { PhysicsWorld } from '../physics/PhysicsWorld';
+import { visualRandom } from '../core/Random';
 
 const AREA_L = PITCH.length + PITCH.runoffEnd * 2;
 const AREA_W = PITCH.width + PITCH.runoffSide * 2;
@@ -39,7 +40,7 @@ export class Stadium {
     // 잔디 노이즈
     const img = g.getImageData(0, 0, c.width, c.height);
     for (let i = 0; i < img.data.length; i += 4) {
-      const n = (Math.random() - 0.5) * 14;
+      const n = (visualRandom.next() - 0.5) * 14;
       img.data[i] += n;
       img.data[i + 1] += n * 1.2;
       img.data[i + 2] += n * 0.6;
@@ -160,8 +161,8 @@ export class Stadium {
         step.receiveShadow = true;
         stand.add(step);
         for (let x = -len / 2 + 0.4; x < len / 2 - 0.4; x += 0.62) {
-          if (Math.random() < 0.12) continue; // 빈 좌석
-          const local = new THREE.Vector3(x + (Math.random() - 0.5) * 0.15, 1.2 + r * rowRise + 0.42, -(gap + r * rowDepth));
+          if (visualRandom.next() < 0.12) continue; // 빈 좌석
+          const local = new THREE.Vector3(x + (visualRandom.next() - 0.5) * 0.15, 1.2 + r * rowRise + 0.42, -(gap + r * rowDepth));
           stand.updateMatrixWorld(true);
           people.push({ pos: local.applyMatrix4(stand.matrixWorld), rotY });
         }
@@ -197,10 +198,10 @@ export class Stadium {
       dummy.rotation.y = p.rotY;
       dummy.updateMatrix();
       this.crowd.setMatrixAt(i, dummy.matrix);
-      color.setHex(palette[Math.floor(Math.random() * palette.length)]);
-      color.offsetHSL(0, 0, (Math.random() - 0.5) * 0.1);
+      color.setHex(palette[Math.floor(visualRandom.next() * palette.length)]);
+      color.offsetHSL(0, 0, (visualRandom.next() - 0.5) * 0.1);
       this.crowd.setColorAt(i, color);
-      this.crowdBase.push({ pos: p.pos.clone(), phase: Math.random() * Math.PI * 2, rotY: p.rotY });
+      this.crowdBase.push({ pos: p.pos.clone(), phase: visualRandom.next() * Math.PI * 2, rotY: p.rotY });
     });
     this.group.add(this.crowd);
   }

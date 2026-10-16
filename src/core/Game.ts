@@ -12,6 +12,7 @@ import { PRESET_LABEL, activePhysics } from '../physics/presets';
 import { Sound } from '../audio/Sound';
 import { TEAMS } from '../data/Teams';
 import { RESTART_LABEL } from '../gameplay/SetPieces';
+import { visualRandom } from './Random';
 
 type AppState = 'menu' | 'playing' | 'paused' | 'result';
 
@@ -323,7 +324,7 @@ export class Game {
       if (import.meta.env.DEV && e.type !== 'bounce') console.debug('[event]', e.type, JSON.stringify({ ...e, scorer: undefined }));
       switch (e.type) {
         case 'kick':
-          this.sound.play('kick', Math.min(1, 0.35 + e.speed / 30), 0.9 + Math.random() * 0.2);
+          this.sound.play('kick', Math.min(1, 0.35 + e.speed / 30), 0.9 + visualRandom.next() * 0.2);
           break;
         case 'bounce':
           this.sound.play('bounce', Math.min(0.8, e.speed / 12));

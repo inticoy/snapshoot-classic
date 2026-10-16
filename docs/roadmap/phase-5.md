@@ -9,3 +9,6 @@
 ## 완료 조건
 - Playwright 근접 스크린샷으로 등번호·이름·얼굴 확인 이미지를 `docs/screenshots/`에 저장
 - 22명에서 성능 회귀 없음, `pnpm typecheck && pnpm test && pnpm build` 통과, 커밋 (푸시 금지)
+
+## 참고: 브라우저 검증
+Codex 샌드박스에서는 Chrome 실행이 막힌다(SIGABRT/EPERM). Playwright 스크립트는 `scripts/`에 작성만 하고, 실행이 막히면 재시도하지 말고 "미실행"으로 보고한다. 검증은 vitest 시뮬레이션 테스트로 대신한다. 브라우저 실행은 사람이 검토 단계에서 한다.

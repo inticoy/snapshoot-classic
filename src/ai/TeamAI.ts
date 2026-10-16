@@ -30,7 +30,7 @@ export class TeamAI {
   constructor(private readonly match: Match) {
     for (const p of match.players) {
       this.intents.set(p, { target: p.pos.clone(), sprint: false, look: null });
-      this.timers.set(p, Math.random() * AI.reaction);
+      this.timers.set(p, this.match.random.next() * AI.reaction);
     }
   }
 
@@ -152,7 +152,7 @@ export class TeamAI {
     fx = THREE.MathUtils.clamp(fx, -PITCH.halfL + 4, PITCH.halfL - 5);
     const width = teamHasBall ? 1.35 : 0.85;
     let z = slot.z * a * width + bp.z * 0.35;
-    if (p.role === 'FWD' && teamHasBall) z = -Math.sign(bp.z || 1) * 5 + Math.sin(performance.now() / 2500 + p.number) * 3;
+    if (p.role === 'FWD' && teamHasBall) z = -Math.sign(bp.z || 1) * 5 + Math.sin(this.match.elapsed / AI.runSwayPeriod + p.number) * 3;
     if (p.role === 'MID' && teamHasBall) z = bp.z * 0.5 - Math.sign(bp.z || 1) * 5;
     z = THREE.MathUtils.clamp(z, -PITCH.halfW + 2, PITCH.halfW - 2);
     return out.set(fx * a, 0, z);
@@ -207,11 +207,11 @@ export class TeamAI {
       const longShot = n(p.profile.stats.longShots);
       const chancePerDecision =
         toGoal < 12 ? 0.6 : toGoal < 18 ? (laneClear ? 0.4 : 0.15) : laneClear ? 0.06 + 0.12 * longShot : 0.02;
-      if (Math.random() < chancePerDecision) {
-        const finesse = toGoal > 12 && Math.random() < 0.35;
-        const corner = (Math.random() < 0.5 ? -1 : 1) * (GOAL.width / 2 - 0.7);
+      if (this.match.random.next() < chancePerDecision) {
+        const finesse = toGoal > 12 && this.match.random.next() < 0.35;
+        const corner = (this.match.random.next() < 0.5 ? -1 : 1) * (GOAL.width / 2 - 0.7);
         tmp.set(gx - p.pos.x, 0, corner - p.pos.z).normalize();
-        const charge = finesse ? 0.5 + Math.random() * 0.4 : 0.35 + Math.random() * 0.45;
+        const charge = finesse ? 0.5 + this.match.random.next() * 0.4 : 0.35 + this.match.random.next() * 0.45;
         m.shoot(p, charge, finesse, tmp);
         return;
       }
@@ -222,7 +222,7 @@ export class TeamAI {
       const target = m.teams[p.team].find(
         (q) => q !== p && !q.isKeeper && Math.abs(gx - q.pos.x) < PITCH.boxDepth && Math.abs(q.pos.z) < 5,
       );
-      if (target && Math.random() < 0.35) {
+      if (target && this.match.random.next() < 0.35) {
         tmp.copy(target.pos).sub(p.pos).setY(0).normalize();
         m.pass(p, tmp, 'lob', 0.55);
         return;
@@ -232,7 +232,7 @@ export class TeamAI {
     // 2) 압박받으면 패스
     if (pressure < 2.6) {
       const mate = this.bestPassTarget(p);
-      if (mate && Math.random() < 0.55) {
+      if (mate && this.match.random.next() < 0.55) {
         tmp.copy(mate.pos).sub(p.pos).setY(0).normalize();
         m.pass(p, tmp);
         return;
@@ -241,7 +241,7 @@ export class TeamAI {
 
     // 3) 앞에 있는 열린 동료에게 전진 패스. 공격수가 수비 뒷공간으로 뛰고 있으면 스루 패스
     const forward = this.bestPassTarget(p, true);
-    if (forward && Math.random() < 0.08 + 0.12 * n(p.profile.stats.vision)) {
+    if (forward && this.match.random.next() < 0.08 + 0.12 * n(p.profile.stats.vision)) {
       tmp.copy(forward.pos).sub(p.pos).setY(0).normalize();
       const running = forward.vel.x * a > 3 && forward.role === 'FWD';
       m.pass(p, tmp, running ? 'through' : 'short', 0.5);
@@ -324,11 +324,11 @@ export class TeamAI {
     const d = carrier.pos.distanceTo(p.pos);
     if (d > 1.5) return;
     const chance = 1 - Math.exp(-AI.tackleChancePerSec * AI.reaction);
-    if (Math.random() < chance) {
+    if (this.match.random.next() < chance) {
       const bp = this.match.ball.position;
       tmp.set(bp.x - p.pos.x, 0, bp.z - p.pos.z).normalize();
       // 가까우면 주로 스탠딩 태클, 가끔 슬라이딩
-      p.startTackle(tmp, d < 1.15 && Math.random() < 0.7 ? 'stand' : 'slide');
+      p.startTackle(tmp, d < 1.15 && this.match.random.next() < 0.7 ? 'stand' : 'slide');
     }
   }
 

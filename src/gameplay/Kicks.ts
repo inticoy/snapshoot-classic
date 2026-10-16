@@ -20,12 +20,6 @@ export interface KickResult {
 
 const g = () => activePhysics().gravity;
 
-export function gauss(): number {
-  const u = 1 - Math.random();
-  const v = Math.random();
-  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
-}
-
 /**
  * 슛 / 패스의 궤적 계산.
  *
@@ -105,7 +99,7 @@ export class Kicks {
     const foot = this.footFactor(p);
     const spread =
       (0.12 + 0.75 * charge * charge + toGoal * 0.012) * (1.7 - 1.2 * acc) * this.pressureFactor(p) * foot.factor;
-    targetZ += gauss() * spread;
+    targetZ += this.m.random.gauss() * spread;
 
     // 3) 속도 (슛 파워)
     const power = 0.86 + 0.24 * n(s.shotPower);
@@ -116,7 +110,7 @@ export class Kicks {
     // 80% 이상 차지하면 급격히 뜬다 (크로스바 위로 넘어갈 위험). 골 결정력이 높으면 덜 뜬다
     const sky = Math.max(0, charge - 0.8) * (11 - 4 * acc);
     const targetY = THREE.MathUtils.clamp(
-      (finesse ? 0.9 : 0.3) + 1.5 * charge * charge + sky + gauss() * spread * 0.35,
+      (finesse ? 0.9 : 0.3) + 1.5 * charge * charge + sky + this.m.random.gauss() * spread * 0.35,
       0.15,
       6,
     );
@@ -158,10 +152,10 @@ export class Kicks {
     }
     const foot = this.footFactor(p);
     const acc = n(s.finishing) * 0.6 + n(s.composure) * 0.4;
-    targetZ += gauss() * (0.25 + charge * 0.5) * (1.6 - 1.1 * acc) * foot.factor;
+    targetZ += this.m.random.gauss() * (0.25 + charge * 0.5) * (1.6 - 1.1 * acc) * foot.factor;
     const dist = Math.hypot(goalX - bp.x, targetZ - bp.z);
     const T = 1.0 + dist * 0.06;
-    const landY = 0.9 + charge * 1.6 + gauss() * 0.25 * (1.5 - acc);
+    const landY = 0.9 + charge * 1.6 + this.m.random.gauss() * 0.25 * (1.5 - acc);
     const vh = (dist / T) * (1 + dist * 0.008);
     const vy = (landY - bp.y + 0.5 * g() * T * T) / T;
     const d = new THREE.Vector3(goalX - bp.x, 0, targetZ - bp.z).normalize();
@@ -212,9 +206,9 @@ export class Kicks {
     const acc = long ? n(s.longPassing) * 0.8 + n(s.vision) * 0.2 : n(s.shortPassing) * 0.85 + n(s.vision) * 0.15;
     const foot = this.footFactor(p);
     const err = (0.012 + 0.05 * (1 - acc)) * (1 + D / 35) * this.pressureFactor(p) * foot.factor;
-    const angle = gauss() * err;
+    const angle = this.m.random.gauss() * err;
     const dir2 = new THREE.Vector3(tx - bp.x, 0, tz - bp.z).normalize().applyAxisAngle(new THREE.Vector3(0, 1, 0), angle);
-    const speedErr = 1 + gauss() * (0.03 + 0.08 * (1 - acc)) * foot.factor;
+    const speedErr = 1 + this.m.random.gauss() * (0.03 + 0.08 * (1 - acc)) * foot.factor;
 
     // 세기: 보조는 자동, 세미도 대부분 보정하되 게이지가 조금 반영됨, 수동은 이미 거리로 반영됨
     const powerScale =
@@ -265,9 +259,9 @@ export class Kicks {
         tz = (bp.z > 0 ? -1 : 1) * (hw - 0.6);
       }
       const toGoal = Math.hypot(goalX - bp.x, tz - bp.z);
-      tz += gauss() * (0.25 + toGoal * 0.035) * (1.7 - 1.2 * acc) * this.pressureFactor(p);
+      tz += this.m.random.gauss() * (0.25 + toGoal * 0.035) * (1.7 - 1.2 * acc) * this.pressureFactor(p);
       // 헤더는 바운드를 노려 아래로 찍는다
-      const ty = THREE.MathUtils.clamp(0.25 + Math.random() * 0.9 + gauss() * 0.4 * (1.4 - acc), 0.1, 3.2);
+      const ty = THREE.MathUtils.clamp(0.25 + this.m.random.next() * 0.9 + this.m.random.gauss() * 0.4 * (1.4 - acc), 0.1, 3.2);
       const speed = 10 + 8 * acc + incoming * 0.15 + 3 * n(s.strength);
       const T = Math.hypot(goalX - bp.x, tz - bp.z) / speed;
       const d = new THREE.Vector3(goalX - bp.x, 0, tz - bp.z).normalize();
@@ -279,7 +273,7 @@ export class Kicks {
       const D = Math.min(18, Math.hypot(target.x - bp.x, target.z - bp.z));
       const d = new THREE.Vector3(target.x - bp.x, 0, target.z - bp.z)
         .normalize()
-        .applyAxisAngle(new THREE.Vector3(0, 1, 0), gauss() * (0.04 + 0.1 * (1 - acc)));
+        .applyAxisAngle(new THREE.Vector3(0, 1, 0), this.m.random.gauss() * (0.04 + 0.1 * (1 - acc)));
       // 살짝 띄워서 동료 발 앞에 떨어지게
       const T = 0.5 + D * 0.04;
       const vh = D / T;
@@ -298,12 +292,12 @@ export class Kicks {
   volley(p: Player, charge: number, aim: THREE.Vector3, assist: AssistLevel): KickResult {
     const r = this.shot(p, charge, false, aim, assist);
     const v = n(p.profile.stats.volleys);
-    const err = gauss() * (0.03 + 0.1 * (1 - v));
+    const err = this.m.random.gauss() * (0.03 + 0.1 * (1 - v));
     const h = new THREE.Vector3(r.vel.x, 0, r.vel.z).applyAxisAngle(new THREE.Vector3(0, 1, 0), err);
     r.vel.x = h.x;
     r.vel.z = h.z;
     // 발리는 뜨기 쉽다
-    r.vel.y += gauss() * 1.2 * (1.2 - v) + (1 - v) * 1.5;
+    r.vel.y += this.m.random.gauss() * 1.2 * (1.2 - v) + (1 - v) * 1.5;
     return r;
   }
 
@@ -329,7 +323,7 @@ export class Kicks {
     const acc = n(p.profile.stats.shortPassing) * 0.5 + n(p.profile.stats.strength) * 0.5;
     const dir2 = new THREE.Vector3(tx - bp.x, 0, tz - bp.z)
       .normalize()
-      .applyAxisAngle(new THREE.Vector3(0, 1, 0), gauss() * (0.02 + 0.05 * (1 - acc)));
+      .applyAxisAngle(new THREE.Vector3(0, 1, 0), this.m.random.gauss() * (0.02 + 0.05 * (1 - acc)));
     const T = (long ? 0.55 : 0.45) + D * 0.03;
     const vh = (D / T) * (1 + D * 0.006);
     const vy = (0.4 - bp.y + 0.5 * g() * T * T) / T;

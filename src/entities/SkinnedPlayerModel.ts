@@ -3,6 +3,7 @@ import { GLTFLoader, type GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import type { AnimState, CharacterModel, ModelColors } from './PlayerModel';
+import { visualRandom } from '../core/Random';
 
 /**
  * 스킨드 캐릭터 (Quaternius Universal Animation Library, CC0).
@@ -108,7 +109,7 @@ export class SkinnedPlayerModel implements CharacterModel {
       action.play();
       action.setEffectiveWeight(key === 'idle' ? 1 : 0);
       // 클립마다 시작 위상을 다르게 해서 선수들이 똑같이 움직이지 않게
-      action.time = Math.random() * clip.duration;
+      action.time = visualRandom.next() * clip.duration;
       this.actions[key] = action;
     }
   }
@@ -282,8 +283,8 @@ function makeKitMaterial(colors: ModelColors): THREE.MeshStandardMaterial {
     uShirt: { value: new THREE.Color(colors.shirt) },
     uShorts: { value: new THREE.Color(colors.shorts) },
     uSocks: { value: new THREE.Color(colors.socks) },
-    uSkin: { value: new THREE.Color(colors.skin ?? SKIN_TONES[Math.floor(Math.random() * SKIN_TONES.length)]) },
-    uHair: { value: new THREE.Color(colors.hair ?? HAIR_TONES[Math.floor(Math.random() * HAIR_TONES.length)]) },
+    uSkin: { value: new THREE.Color(colors.skin ?? SKIN_TONES[Math.floor(visualRandom.next() * SKIN_TONES.length)]) },
+    uHair: { value: new THREE.Color(colors.hair ?? HAIR_TONES[Math.floor(visualRandom.next() * HAIR_TONES.length)]) },
     uBoots: { value: new THREE.Color(0x15171c) },
   };
   mat.onBeforeCompile = (shader) => {

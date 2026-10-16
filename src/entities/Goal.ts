@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 import { GOAL, PITCH } from '../config';
 import type { PhysicsWorld } from '../physics/PhysicsWorld';
+import { visualRandom } from '../core/Random';
 
 interface NetPanel {
   geometry: THREE.BufferGeometry;
@@ -24,11 +25,12 @@ export class Goal {
   private readonly impact = new THREE.Vector3();
   private rippleAmp = 0;
   private rippleT = 0;
-  private time = Math.random() * 10;
+  private time = visualRandom.next() * 10;
 
   constructor(
     readonly side: 1 | -1,
     physics: PhysicsWorld,
+    visuals = true,
   ) {
     const x0 = side * PITCH.halfL;
     const hw = GOAL.width / 2;
@@ -83,15 +85,17 @@ export class Goal {
     this.group.add(tube(new THREE.Vector3(xBottom, 0.02, -hw), new THREE.Vector3(xBottom, 0.02, hw), 0.025, frameMat));
 
     // --- 그물 (시각) ---
-    const P = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
-    const pTL = P(x0, h, -hw), pTR = P(x0, h, hw);
-    const pRL = P(xTop, h, -hw), pRR = P(xTop, h, hw);
-    const pBL = P(xBottom, 0, -hw), pBR = P(xBottom, 0, hw);
-    const pGL = P(x0, 0, -hw), pGR = P(x0, 0, hw);
-    this.addPanel(pTL, pTR, pRR, pRL, P(0, 1, 0)); // 지붕
-    this.addPanel(pRL, pRR, pBR, pBL, P(out * h, GOAL.depth - NET_TOP_DEPTH, 0)); // 뒷면
-    this.addSidePanel(pGL, pTL, pRL, pBL, P(0, 0, -1));
-    this.addSidePanel(pGR, pTR, pRR, pBR, P(0, 0, 1));
+    if (visuals) {
+      const P = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+      const pTL = P(x0, h, -hw), pTR = P(x0, h, hw);
+      const pRL = P(xTop, h, -hw), pRR = P(xTop, h, hw);
+      const pBL = P(xBottom, 0, -hw), pBR = P(xBottom, 0, hw);
+      const pGL = P(x0, 0, -hw), pGR = P(x0, 0, hw);
+      this.addPanel(pTL, pTR, pRR, pRL, P(0, 1, 0)); // 지붕
+      this.addPanel(pRL, pRR, pBR, pBL, P(out * h, GOAL.depth - NET_TOP_DEPTH, 0)); // 뒷면
+      this.addSidePanel(pGL, pTL, pRL, pBL, P(0, 0, -1));
+      this.addSidePanel(pGR, pTR, pRR, pBR, P(0, 0, 1));
+    }
 
     // --- 그물 (물리) ---
     const netMat = physics.materials.net;

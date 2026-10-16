@@ -11,8 +11,32 @@ Three.js + cannon-es + Vite + TypeScript.
 ```bash
 pnpm install
 pnpm dev        # http://localhost:5180
+pnpm typecheck  # 게임·테스트 타입 검사
+pnpm test       # 브라우저 없이 고정 시드 경기/물리 회귀 검증
 pnpm build      # dist/ 에 정적 파일 생성 (GitHub Pages 등에 그대로 배포 가능)
 ```
+
+## 자동 검증
+
+`pnpm typecheck && pnpm test && pnpm build`로 0단계 회귀 검증을 실행한다.
+배포 워크플로도 빌드 전에 타입 검사와 테스트를 실행하며, 실패하면 배포하지 않는다.
+
+테스트는 실제 `Match.update`와 cannon-es 물리를 사용한다. `Match` 생성 옵션으로
+선수 모델 팩토리(`createPlayerModel`)와 `new Random(seed)`를 주입할 수 있다.
+`goalVisuals: false`는 골망 시각 갱신만 생략하고 충돌체를 유지하며,
+`userControl: false`는 양 팀을 AI로 진행한다. 기본 옵션은 브라우저 게임 동작을 유지한다.
+재현하려면 같은 시드·입력·고정 스텝(`PHYSICS.step`)·보조 설정·물리 프리셋을 사용한다.
+보조 설정과 활성 물리 프리셋은 기존처럼 모듈 전역이므로 서로 다른 설정의 경기를
+같은 프로세스에서 동시에 검증할 때는 격리가 필요하다.
+
+브라우저 확인은 `pnpm dev` 실행 후 별도 터미널에서 `pnpm test:browser`를 실행한다.
+macOS에서는 Playwright 캐시의 Chrome for Testing 경로를 자동으로 찾으며,
+필요하면 `CHROMIUM_PATH`로 실행 파일을 지정한다. 메뉴 → 경기 시작 → 일시정지/재개 →
+D 키 슛 → 득점을 검사하고 `.artifacts/browser-smoke/`에 캡처를 남긴다.
+득점 검증에는 고정 시드와 골문 앞 선수 배치를 사용한다.
+`pnpm test:browser --update-og`로 실제 경기 화면의 공유 이미지도 다시 생성할 수 있다.
+
+수치와 브라우저 확인 상태는 [0단계 검증 기록](docs/roadmap/phase-0-validation.md)에 정리한다.
 
 ## 조작 (FC 온라인 키보드 기본 배치 기준)
 

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { visualRandom } from '../core/Random';
 
 /**
  * 프리미티브로 만든 절차적 휴머노이드.
@@ -58,8 +59,8 @@ export class PlayerModel implements CharacterModel {
     idle: 1, run: 0, kick: 0, tackle: 0, dive: 0, celebrate: 0, hold: 0, header: 0,
   };
   private state: AnimState = 'idle';
-  private runPhase = Math.random() * Math.PI * 2;
-  private time = Math.random() * 10;
+  private runPhase = visualRandom.next() * Math.PI * 2;
+  private time = visualRandom.next() * 10;
   private actionT = 0; // 일회성 동작(킥 등) 진행 시간
   private speed = 0;
   private sprint = false;
@@ -69,7 +70,7 @@ export class PlayerModel implements CharacterModel {
 
   constructor(colors: ModelColors, number: number) {
     const skin = new THREE.MeshStandardMaterial({
-      color: colors.skin ?? SKIN_TONES[Math.floor(Math.random() * SKIN_TONES.length)],
+      color: colors.skin ?? SKIN_TONES[Math.floor(visualRandom.next() * SKIN_TONES.length)],
       roughness: 0.7,
     });
     this.shirtMaterial = new THREE.MeshStandardMaterial({ color: colors.shirt, roughness: 0.6 });
@@ -77,7 +78,7 @@ export class PlayerModel implements CharacterModel {
     const socks = new THREE.MeshStandardMaterial({ color: colors.socks, roughness: 0.8 });
     const boots = new THREE.MeshStandardMaterial({ color: 0x151515, roughness: 0.4 });
     const hair = new THREE.MeshStandardMaterial({
-      color: colors.hair ?? HAIR_TONES[Math.floor(Math.random() * HAIR_TONES.length)],
+      color: colors.hair ?? HAIR_TONES[Math.floor(visualRandom.next() * HAIR_TONES.length)],
       roughness: 0.9,
     });
 

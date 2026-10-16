@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { PITCH } from '../config';
+import { visualRandom } from '../core/Random';
 
 export type CameraMode = 'broadcast' | 'pro';
 
@@ -67,8 +68,8 @@ export class CameraRig {
     this.look.lerp(this.desiredLook, 1 - Math.exp(-6 * dt));
     this.camera.position.copy(this.pos);
     if (this.shake > 0.001) {
-      this.camera.position.x += (Math.random() - 0.5) * this.shake;
-      this.camera.position.y += (Math.random() - 0.5) * this.shake;
+      this.camera.position.x += (visualRandom.next() - 0.5) * this.shake;
+      this.camera.position.y += (visualRandom.next() - 0.5) * this.shake;
       this.shake *= Math.exp(-6 * dt);
     }
     this.camera.lookAt(this.look);

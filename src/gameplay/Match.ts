@@ -3,10 +3,11 @@ import * as CANNON from 'cannon-es';
 import { BALL, GOAL, KEEPER, MATCH, PASS, PHYSICS, PITCH, PLAYER, SHOT } from '../config';
 import { Ball } from '../entities/Ball';
 import { Goal } from '../entities/Goal';
-import { Player } from '../entities/Player';
+import { Random } from '../core/Random';
+import { Player, type PlayerModelFactory } from '../entities/Player';
 import type { PhysicsWorld } from '../physics/PhysicsWorld';
 import { TeamAI } from '../ai/TeamAI';
-import { Kicks, gauss, type KickResult, type PassKind } from './Kicks';
+import { Kicks, type KickResult, type PassKind } from './Kicks';
 import { MOVE_ASSIST_TIME, settings, type AssistLevel } from '../core/Settings';
 import { n } from '../data/Stats';
 import { activePhysics } from '../physics/presets';
@@ -70,7 +71,17 @@ const cv = new CANNON.Vec3();
 const cspin = new CANNON.Vec3();
 
 
+export interface MatchOptions {
+  random?: Random;
+  createPlayerModel?: PlayerModelFactory;
+  /** Node 시뮬레이션에서는 골망 정점 갱신을 생략하되 충돌체는 그대로 둔다. */
+  goalVisuals?: boolean;
+  /** AI 대 AI 검증에서도 실제 경기 루프를 그대로 사용한다. */
+  userControl?: boolean;
+}
+
 export class Match {
+  readonly random: Random;
   readonly players: Player[] = [];
   readonly teams: [Player[], Player[]] = [[], []];
   readonly ball: Ball;
@@ -83,6 +94,8 @@ export class Match {
 
   phase: Phase = 'kickoff';
   phaseTimer = 0;
+  /** 벽시계 대신 고정 스텝 시간을 써서 AI 움직임도 재현한다. */
+  elapsed = 0;
   clock = 0; // 경기 진행 시간 (실제 초)
   controlled: Player;
   /** 슛/패스 파워 게이지 (0..1), 차지 중이 아니면 null */
@@ -98,15 +111,16 @@ export class Match {
   private keeperHold = 0;
   private dribbleTouch = 0;
 
-  constructor(private readonly physics: PhysicsWorld) {
+  constructor(private readonly physics: PhysicsWorld, private readonly options: MatchOptions = {}) {
+    this.random = options.random ?? new Random();
     this.ball = new Ball(physics);
     // goals[0] = 홈팀이 공격하는 +X 골대, goals[1] = -X 골대
-    this.goals = [new Goal(1, physics), new Goal(-1, physics)];
+    this.goals = [new Goal(1, physics, options.goalVisuals), new Goal(-1, physics, options.goalVisuals)];
 
     for (const team of [0, 1] as const) {
       FORMATION_5.forEach((slot, i) => {
         const profile = TEAMS[team].players[i];
-        const p = new Player(team, slot.role, profile.number, profile.short, profile, slot);
+        const p = new Player(team, slot.role, profile.number, profile.short, profile, slot, options.createPlayerModel);
         this.players.push(p);
         this.teams[team].push(p);
       });
@@ -135,7 +149,7 @@ export class Match {
   }
 
   isUserControlled(p: Player): boolean {
-    return p === this.controlled && this.phase !== 'goal' && this.phase !== 'fulltime';
+    return this.options.userControl !== false && p === this.controlled && this.phase !== 'goal' && this.phase !== 'fulltime';
   }
 
   inOwnBox(p: Player, x: number, z: number): boolean {
@@ -180,6 +194,7 @@ export class Match {
   }
 
   update(dt: number, cmd: UserCommand): void {
+    this.elapsed += dt;
     this.phaseTimer -= dt;
 
     switch (this.phase) {
@@ -318,7 +333,7 @@ export class Match {
       if (bp.y > reachH) continue;
       const d = Math.hypot(bp.x - p.pos.x, bp.z - p.pos.z);
       if (d > 1.0) continue;
-      const score = (1.0 - d) + 0.4 * n(st.jumping) + 0.3 * n(st.heading) + 0.2 * n(st.strength) + Math.random() * 0.25;
+      const score = (1.0 - d) + 0.4 * n(st.jumping) + 0.3 * n(st.heading) + 0.2 * n(st.strength) + this.random.next() * 0.25;
       if (score > bestScore) {
         bestScore = score;
         best = p;
@@ -701,7 +716,7 @@ export class Match {
             : n(ts.slidingTackle) * 0.8 + n(ts.defAwareness) * 0.2;
         const evade = n(os.dribbling) * 0.4 + n(os.balance) * 0.35 + n(os.strength) * 0.25;
         const chance = THREE.MathUtils.clamp(0.22 + 0.5 * tackleSkill - 0.28 * evade + 0.3 * Math.max(0, facingDot), 0.08, 0.92);
-        const success = Math.random() < chance;
+        const success = this.random.next() < chance;
         p.tackleResolved = true;
         p.tackleTimer = Math.min(p.tackleTimer, 0.08);
         this.events.push({ type: 'tackle', success });
@@ -715,7 +730,7 @@ export class Match {
             this.gainPossession(p);
           } else {
             this.ball.owner = null;
-            cv.set(p.tackleDir.x * 5 + gauss(), 0.6, p.tackleDir.z * 5 + gauss());
+            cv.set(p.tackleDir.x * 5 + this.random.gauss(), 0.6, p.tackleDir.z * 5 + this.random.gauss());
             this.ball.kick(cv, cspin.set(0, 0, 0), p);
             p.kickCooldown = 0.12;
           }
@@ -776,7 +791,7 @@ export class Match {
     if (!best) return;
     // 볼 컨트롤이 낮으면 빠른 공을 받을 때 터치가 길어진다 (헤비 터치)
     const rel = Math.hypot(bv.x - best.vel.x, bv.z - best.vel.z);
-    if (!best.isKeeper && rel > 9 && Math.random() < (1 - n(best.profile.stats.ballControl)) * 0.7) {
+    if (!best.isKeeper && rel > 9 && this.random.next() < (1 - n(best.profile.stats.ballControl)) * 0.7) {
       const push = 2.5 + rel * 0.15;
       cv.set(best.facing.x * push + bv.x * 0.15, 0.3, best.facing.z * push + bv.z * 0.15);
       this.ball.kick(cv, cspin.set(0, 0, 0), best);
@@ -998,13 +1013,13 @@ export class Match {
       0.15,
       0.95,
     );
-    if (Math.random() > chance) return; // 실점!
+    if (this.random.next() > chance) return; // 실점!
     this.stats.onTarget[shot.by.team]++;
 
     const a = k.attackDir;
     // GK 핸들링이 좋을수록 빠른 슛도 잡아낸다 (아니면 쳐낸다)
     const handling = n(gs.handling ?? 60);
-    if (speed < 13 + 7 * handling && Math.random() < 0.45 + 0.45 * handling) {
+    if (speed < 13 + 7 * handling && this.random.next() < 0.45 + 0.45 * handling) {
       // 캐치
       this.ball.owner = k;
       this.ball.lastTouch = k;
@@ -1016,7 +1031,7 @@ export class Match {
     } else {
       // 펀칭/쳐내기
       const bv = this.ball.velocity;
-      cv.set(a * (Math.abs(bv.x) * 0.3 + 3), Math.abs(bv.y) * 0.4 + 2.5, bv.z * 0.25 + gauss() * 5);
+      cv.set(a * (Math.abs(bv.x) * 0.3 + 3), Math.abs(bv.y) * 0.4 + 2.5, bv.z * 0.25 + this.random.gauss() * 5);
       this.ball.kick(cv, cspin.set(0, 0, 0), k);
       this.ball.shot = null;
       k.kickCooldown = 0.5;
@@ -1090,6 +1105,7 @@ export class Match {
     this.queued = null;
     this.pendingPass = null;
     this.clock = 0;
+    this.elapsed = 0;
     this.lastScorer = null;
     for (const p of this.players) p.stamina = 1;
     this.startKickoff(0);
