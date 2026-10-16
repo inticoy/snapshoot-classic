@@ -72,7 +72,10 @@ class HeadlessModel implements CharacterModel {
 }
 export function scriptCommand(input: Input): UserCommand {
   const axis = input.moveAxis();
+  input.updateSkillMask(input.isDown('skill') || input.isDown('finesse'));
+  const sa = input.skillAxis();
   return {
+    skillMove: new THREE.Vector3(sa.y, 0, sa.x),
     // 플레이그라운드의 전진은 +X, 오른쪽은 +Z다.
     move: new THREE.Vector3(axis.y, 0, axis.x), sprint: input.isDown('sprint'),
     shoot: input.button('shoot'), pass: input.button('pass'), through: input.button('through'), lob: input.button('lob'),

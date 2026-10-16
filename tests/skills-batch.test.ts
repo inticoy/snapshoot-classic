@@ -14,10 +14,12 @@ describe('1차 커맨드 전수 교차 검사', () => {
       const input = new SkillInput();
       const found: string[] = [];
       const facing = new THREE.Vector3(Math.sin(yaw), 0, Math.cos(yaw));
-      const right = new THREE.Vector3(-facing.z, 0, facing.x);
+      // 커맨드 기준은 바라보는 방향에 가장 가까운 화면 4방향 (인벤 DB의 방향별 열)
+      const snap = Math.abs(facing.x) >= Math.abs(facing.z) ? new THREE.Vector3(Math.sign(facing.x), 0, 0) : new THREE.Vector3(0, 0, Math.sign(facing.z));
+      const right = new THREE.Vector3(-snap.z, 0, snap.x);
       const tick = (dir: Dir | null, secs: number, modifier = true) => {
         const angle = dir ? directions.indexOf(dir) * Math.PI / 4 : 0;
-        const move = dir ? facing.clone().multiplyScalar(Math.cos(angle)).addScaledVector(right, Math.sin(angle)) : new THREE.Vector3();
+        const move = dir ? snap.clone().multiplyScalar(Math.cos(angle)).addScaledVector(right, Math.sin(angle)) : new THREE.Vector3();
         for (let t = 0; t < secs - 1e-9; t += dt) {
           const def = input.update(dt, modifier && !c.modifier, modifier && !!c.modifier, move, facing, SKILLS);
           if (def) found.push(def.id);

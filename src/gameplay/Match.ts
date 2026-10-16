@@ -67,6 +67,8 @@ export interface UserCommand {
   contain: ButtonState; // C
   /** Shift: 개인기 (없으면 개인기 커맨드를 받지 않는다) */
   skill?: ButtonState;
+  /** 개인기 커맨드용 방향 (보조키 전부터 누르던 방향키 제외). 없으면 move */
+  skillMove?: THREE.Vector3;
   tackle: ButtonState; // Space
 }
 
@@ -129,6 +131,7 @@ export class Match {
   readonly rules: Rules;
   readonly skills: SkillRunner;
   private readonly skillInput = new SkillInput();
+  private readonly skillInputHeld = new SkillInput(true);
   readonly shootout: Shootout;
   readonly officials: Officials;
   keeperRush = false;
@@ -250,6 +253,7 @@ export class Match {
     this.charge = null;
     this.skills.clear();
     this.skillInput.reset();
+    this.skillInputHeld.reset();
     this.queued = null;
     this.passTarget = null;
     this.setPieces.current = null;
@@ -685,13 +689,23 @@ export class Match {
     const move = cmd.move.clone();
     // 개인기: 보조키를 누른 순간 몸 방향을 유지한다. Z 패스 게이지는 이동·조준 입력을 그대로 받는다
     if (cmd.skill && hasBall && attacking && !this.charge) {
-      const def = this.skillInput.update(dt, cmd.skill.held, cmd.finesse.held, cmd.move, p.facing, SKILLS.filter((s) => s.stars <= p.profile.skill));
+      // 두 갈래로 읽는다: 새로 누른 키만(속임 동작처럼 탭 커맨드) / 달리던 키까지(스텝오버처럼 굴리는 커맨드). 둘 다 맞으면 긴 커맨드
+      const usable = SKILLS.filter((s) => s.stars <= p.profile.skill);
+      const a = this.skillInput.update(dt, cmd.skill.held, cmd.finesse.held, cmd.skillMove ?? cmd.move, p.facing, usable);
+      const b = this.skillInputHeld.update(dt, cmd.skill.held, cmd.finesse.held, cmd.move, p.facing, usable);
+      const len = (s: typeof a) => (s && s.trigger.kind !== 'fake' ? s.trigger.seq.length : 0);
+      const def = len(b) > len(a) ? b : a ?? b;
+      if (def) {
+        this.skillInput.reset();
+        this.skillInputHeld.reset();
+      }
       if (cmd.skill.held || (cmd.finesse.held && !KICK_KINDS.some((kind) => cmd[kind].held))) move.copy(this.skillHeldMove);
       else this.skillHeldMove.copy(move);
       if (def) this.skills.start(p, def);
       this.skills.hold(p, cmd.skill.held, cmd.move);
     } else {
       this.skillInput.reset();
+      this.skillInputHeld.reset();
       this.skillHeldMove.copy(move);
     }
     // 추격 보정이 입력을 바꾸더라도 다음 터치는 사용자가 꺾으려던 방향으로 보낸다.

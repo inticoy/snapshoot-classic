@@ -111,6 +111,9 @@ function matches(seq: Token[], steps: Step[], now: number, release: boolean): bo
  * 방향은 보조키를 누른 순간의 몸 방향 기준으로 고정한다 (도는 중에 기준이 바뀌지 않게).
  */
 export class SkillInput {
+  /** includeHeld: 보조키 전부터 누르던 방향(달리던 방향)을 첫 칸으로 넣는다 (스텝오버처럼 굴리는 커맨드용) */
+  constructor(private readonly includeHeld = false) {}
+
   private mode: 'shift' | 'z' | null = null;
   private readonly fwd = new THREE.Vector3(0, 0, 1);
   private steps: Step[] = [];
@@ -119,6 +122,8 @@ export class SkillInput {
   private changed = 0;
   /** 보조키를 누르기 직전 프레임에 누르고 있던 방향 */
   private before: Dir | null = null;
+  /** 보조키를 누른 시각 */
+  private started = 0;
 
   get active(): boolean { return this.mode !== null; }
 
@@ -136,10 +141,13 @@ export class SkillInput {
       const done = this.mode ? this.find(list, true) : null;
       this.reset();
       this.mode = mode;
-      this.fwd.copy(facing);
+      this.started = this.time;
+      // 기준 방향은 상하좌우(월드 ±X·±Z = 화면 4방향) 중 가장 가까운 쪽 — 인벤 DB처럼 '바라보는 방향별 커맨드'가 예측 가능하게
+      if (Math.abs(facing.x) >= Math.abs(facing.z)) this.fwd.set(Math.sign(facing.x) || 1, 0, 0);
+      else this.fwd.set(0, 0, Math.sign(facing.z));
       // 보조키를 누르기 전부터 누르고 있던 방향(달리던 방향)은 커맨드에 넣지 않는다. 한 번 떼고 다시 누르면 넣는다
       const now = dirOf(move, this.fwd);
-      this.last = mode && now === this.before ? now : null;
+      this.last = mode && now === this.before && !this.includeHeld ? now : null;
       if (done) return done;
     }
     if (!this.mode) {
@@ -152,7 +160,9 @@ export class SkillInput {
       if (prev && prev.t1 === null) prev.t1 = this.time;
       if (dir) {
         if (prev && this.time - this.changed > SKILL_INPUT.gap && prev.t1 !== null) this.steps = [];
-        this.steps.push({ dir, t0: this.time, t1: null });
+        // 보조키 전부터 누르던 키(달리던 방향)는 '짧게 누른 칸'이 아니다 → 시작을 아주 이전으로 둔다
+        const preHeld = this.includeHeld && this.steps.length === 0 && dir === this.before && this.time - this.started < 1e-6;
+        this.steps.push({ dir, t0: preHeld ? -Infinity : this.time, t1: null });
       }
       this.last = dir;
       this.changed = this.time;

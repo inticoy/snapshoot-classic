@@ -129,4 +129,32 @@ describe('실제 키 입력으로 개인기 실행 (플레이그라운드 스크
     const def = SKILLS.find((s) => s.id === 'fake_shot_run')!;
     expect(def.starScale).toBeGreaterThan(0);
   });
+
+  it('달리던 방향키를 누른 채 Shift + → 탭 → 속임 동작 (달리던 ↑는 커맨드에 섞이지 않는다)', () => {
+    const r = runScript(base([
+      { t: 0, keys: ['ArrowUp'] },
+      { t: 1, keys: ['ArrowUp', 'ShiftLeft'] },
+      { t: 1.05, keys: ['ArrowUp', 'ShiftLeft', 'ArrowRight'] },
+      { t: 1.12, keys: ['ArrowUp', 'ShiftLeft'] },
+      { t: 1.4, keys: ['ArrowUp'] },
+    ]));
+    expect(skillEvents(r)).toEqual(['feint_r']);
+  });
+
+  it('달리던 방향키를 누른 채 Z + ↓ → 드래그백', () => {
+    const r = runScript(base([{ t: 0, keys: ['ArrowUp'] }, { t: 1, keys: ['ArrowUp', 'KeyZ', 'ArrowDown'] }, { t: 1.3, keys: [] }], 2.2));
+    expect(skillEvents(r)).toEqual(['drag_back']);
+  });
+
+  it('달리면서 굴리는 커맨드: ↑ 누른 채 Shift, → 더하고 ↑ 떼기 = 스텝오버 (탭 속임 동작과 헷갈리지 않는다)', () => {
+    const r = runScript({ ...base([
+      { t: 0, keys: ['ArrowUp'] },
+      { t: 1, keys: ['ArrowUp', 'ShiftLeft'] },
+      { t: 1.06, keys: ['ArrowUp', 'ShiftLeft', 'ArrowRight'] },
+      { t: 1.12, keys: ['ShiftLeft', 'ArrowRight'] },
+      { t: 1.18, keys: ['ShiftLeft'] },
+      { t: 1.45, keys: ['ArrowUp'] },
+    ]), skill: 5 });
+    expect(skillEvents(r)).toEqual(['step_over_r']);
+  });
 });

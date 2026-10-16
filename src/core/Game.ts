@@ -5,6 +5,7 @@ import { TouchControls } from '../ui/TouchControls';
 import type { TouchMode } from './TouchInput';
 import { PhysicsWorld } from '../physics/PhysicsWorld';
 import { Stadium } from '../environment/Stadium';
+import { SKILLS } from '../gameplay/Skills';
 import { Match, type UserCommand } from '../gameplay/Match';
 import { CAMERA_LABEL, CameraRig } from '../camera/CameraRig';
 import { Hud } from '../ui/Hud';
@@ -432,6 +433,9 @@ export class Game {
     const f = this.rig.forward(new THREE.Vector3());
     const r = this.rig.right(new THREE.Vector3());
     this.cmd.move.set(0, 0, 0).addScaledVector(f, axis.y).addScaledVector(r, axis.x);
+    this.input.updateSkillMask(this.input.isDown('skill') || this.input.isDown('finesse'));
+    const sa = this.input.skillAxis();
+    (this.cmd.skillMove ??= new THREE.Vector3()).set(0, 0, 0).addScaledVector(f, sa.y).addScaledVector(r, sa.x);
     this.cmd.sprint = this.input.isDown('sprint');
     this.cmd.shoot = this.input.button('shoot');
     this.cmd.pass = this.input.button('pass');
@@ -513,6 +517,14 @@ export class Game {
         case 'card':
           this.hud.card(e.player, e.card, e.second);
           break;
+        case 'skill': {
+          // 사용자 개인기는 이름을 잠깐 띄워 실제로 나갔는지 보이게 한다
+          if (this.match.isUserControlled(e.player)) {
+            const def = SKILLS.find((d) => d.id === e.id);
+            if (def) this.hud.tick(`${'★'.repeat(def.stars)} ${def.name}`, 1.2);
+          }
+          break;
+        }
         case 'offside':
           this.sound.whistle([0.16, 0.16]);
           this.hud.tick(`오프사이드 · ${e.player.profile.short}`, 2.2);
