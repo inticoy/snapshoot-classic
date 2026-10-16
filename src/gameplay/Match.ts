@@ -1331,8 +1331,9 @@ export class Match {
         const dx = b.pos.x - a.pos.x, dz = b.pos.z - a.pos.z;
         const d = Math.hypot(dx, dz);
         if (d >= minD || d < 1e-5) continue;
-        // 슬라이딩/다이빙 중에는 몸이 겹쳐도 된다
-        if (a.tackleTimer > 0 || b.tackleTimer > 0 || a.diveTimer > 0 || b.diveTimer > 0) continue;
+        // 일반 경기는 슬라이딩/다이빙의 몸 접촉을 허용하지만 연습에서는 거리 측정이 가능해야 한다.
+        if ((!this.practice || a.isKeeper || b.isKeeper) &&
+          (a.tackleTimer > 0 || b.tackleTimer > 0 || a.diveTimer > 0 || b.diveTimer > 0)) continue;
         const push = (minD - d) / 2;
         const nx = dx / d, nz = dz / d;
         // 몸싸움/밸런스가 좋을수록, 공을 가진 선수일수록 덜 밀린다

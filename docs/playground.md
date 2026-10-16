@@ -43,9 +43,9 @@ pnpm test:playground
 
 스모크는 6개 인원 구성, 실제 방향키 전환, R, 슬라이더, JSON/CSV 다운로드, 슬라이딩 높이와 모바일 터치를 확인한다. Chrome for Testing은 `scripts/chrome-path.mjs`를 통해 Playwright 캐시에서 찾는다. 샌드박스에서 실행에 실패하면 미실행으로 보고하고 재시도하지 않는다.
 
-이번 환경의 Chrome은 실행 직후 SIGABRT로 종료되어 브라우저 스모크는 **미실행**이다. DOM 동작과 실제 Match/GLB의 수치는 Vitest로 검증했지만, WebGL 화면과 모바일 기기에서의 시각 확인은 남아 있다.
+이번 수정에서는 브라우저 스모크를 별도로 실행하지 않았다. WebGL 화면과 모바일 기기에서의 시각 확인은 남아 있다.
 
-최종 검증: `pnpm install`, `pnpm typecheck`, `pnpm test`, `pnpm build` 통과. 17개 테스트 파일, **201개 테스트 통과**. 기존 테스트 기대값은 변경하지 않았다. 빌드에는 기존 500KB 초과 청크 경고가 남아 있다. 커밋은 샌드박스의 `.git/index.lock` 생성 차단으로 만들지 못했으며 푸시는 수행하지 않았다.
+최종 검증: `pnpm install`, `pnpm typecheck`, `pnpm test`, `pnpm build` 통과. 21개 테스트 파일, **230개 테스트 통과**. 기존 테스트 기대값은 낮추지 않았다. 빌드에는 기존 500KB 초과 청크 경고가 남아 있다.
 
 ## JSON 스크립트 재생
 
@@ -61,7 +61,7 @@ npx vite-node scripts/playground-run.ts 'playground/scripts/*.json' /tmp/playgro
 
 출력을 지정하지 않으면 파일별 `summary`만 표준 출력에 남긴다. 여러 파일 또는 글롭에 출력 디렉터리를 주면 각 결과를 별도 JSON으로 저장한다. JSON의 `scenario`는 `free`, `duel`, `pressure`, `receive`, `slide`, `keeper` 중 하나다. `seed`는 정수, `duration`은 초, `sampleHz` 기본값은 30이다. `inputs`의 `keys`는 그 시각부터 유지할 **전체 키 목록**이고 `tap`은 한 120Hz 스텝만 누른다. 키 코드는 FC 온라인 배치에 따라 방향키, `KeyE`, `KeyS`, `KeyW`, `KeyA`, `KeyD`, `KeyQ`, `KeyZ`, `KeyC`, `Space` 등을 쓴다. `params`는 `DRIBBLE.touchPeriod`처럼 슬라이더 이름을 접두어와 함께 적는다. `opponent`는 `stand`, `follow`, `press`, `tackle`이며 기본은 `press`다. `control: "opponent"`는 duel, pressure, slide에서 상대 필드 선수를 조작한다. 화면에서 Tab으로도 조작 팀을 바꿀 수 있다.
 
-`summary.possession`은 조작 선수가 공을 소유한 스텝의 비율이다. `progress`는 월드 입력 방향별 투영 이동 거리(m), `alignment`는 해당 방향으로 속도가 30° 이내에 들어올 때까지의 누적 시간(s)이다. `nearestOpponent`는 상대와의 최단 거리(m), `firstWithin2m`는 첫 접근 시각(s)이다. 상대가 없는 시나리오는 각각 0과 `null`이다. `tackleAttempts`는 상대의 태클 동작 시작 횟수, `tackleSuccesses`는 성공 이벤트 수다. 이벤트의 선수 참조는 이름과 번호로 저장한다.
+`summary.possession`은 조작 선수가 공을 소유한 스텝의 비율이다. `progress`는 월드 입력 방향별 투영 이동 거리(m), `alignment`는 해당 방향으로 속도가 30° 이내에 들어올 때까지의 누적 시간(s)이다. `nearestOpponent`는 상대와의 최단 거리(m), `firstWithin2m`는 첫 접근 시각(s)이다. 상대가 없는 시나리오는 둘 다 `null`이다. `userTackles`와 `opponentTackles`는 각각 조작 선수와 상대의 태클 동작 시작 횟수이며, `tackleAttempts`는 두 값의 합계다. `tackleSuccesses`는 성공 이벤트 수, `skills`는 개인기 id별 실행 횟수다. 이벤트의 선수 참조는 이름과 번호로 저장한다.
 
 시드 318, 기본 파라미터, 각 예제의 입력으로 측정한 결과:
 
@@ -69,9 +69,9 @@ npx vite-node scripts/playground-run.ts 'playground/scripts/*.json' /tmp/playgro
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | 4방향 전환 | 100% | 29.28 | 43 | 0 | 0/0 | 상대 없음 |
 | 180° 반전 | 100% | 23.86 | 33 | 0 | 0/0 | 상대 없음 |
-| 1대1 돌파 | 100% | 36.42 | 30 | 0 | 1/0 | 0.02 |
-| 압박 탈출 | 28.3% | 30.35 | 8 | 1 | 3/1 | 0.02 |
-| 슬라이딩 태클 | 0% | 3.74 | 0 | 0 | 0/0 | 0.18 |
+| 1대1 돌파 | 14.7% | 32.66 | 5 | 1 | 1/1 | 0.71 |
+| 압박 탈출 | 30.0% | 26.67 | 5 | 1 | 3/1 | 0.69 |
+| 슬라이딩 태클 | 0% | 6.63 | 0 | 0 | 1/1 | 0.71 |
 | 패스 받기 첫 터치 | 67.7% | 18.62 | 22 | 0 | 0/0 | 상대 없음 |
 
 같은 `ArrowUp` 0–2초, `ArrowRight+KeyE` 2–4초, `ArrowUp+KeyE` 4–6초 입력으로 시나리오만 바꾼 비교:
@@ -79,7 +79,7 @@ npx vite-node scripts/playground-run.ts 'playground/scripts/*.json' /tmp/playgro
 | 시나리오 | 소유율 | 진행 거리 합(m) | 터치 | 소유 상실 | 태클 시도/성공 |
 | --- | ---: | ---: | ---: | ---: | ---: |
 | free | 100% | 36.88 | 28 | 0 | 0/0 |
-| duel (press) | 100% | 36.42 | 30 | 0 | 1/0 |
-| pressure (press) | 72.9% | 30.89 | 23 | 1 | 3/1 |
+| duel (press) | 14.7% | 32.66 | 5 | 1 | 1/1 |
+| pressure (press) | 38.3% | 30.35 | 7 | 1 | 3/1 |
 
-`duel`에서는 수비수가 접근해 태클을 시도하지만 이 입력과 시드에서는 성공하지 않는다. `pressure`는 세 수비수가 실제로 움직여 소유율과 진행 거리를 낮춘다. 이 수치는 한 시드의 재현 가능한 사례이며 여러 시드의 평균은 아니다.
+`duel`과 `pressure`에서는 수비수가 접근해 태클을 시도하고 한 번씩 성공한다. 연습 경기에서는 태클 동작 중에도 필드 선수끼리 분리해 몸 간격을 유지한다. 이 수치는 한 시드의 재현 가능한 사례이며 여러 시드의 평균은 아니다.

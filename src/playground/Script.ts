@@ -23,7 +23,7 @@ export interface PlaygroundScript {
 export interface ScriptResult {
   frames: { t: number; user: { pos: number[]; vel: number[]; facing: number[] }; ball: { pos: number[]; vel: number[] }; owner: string | null; footToBall: number; opponents: { pos: number[]; dist: number }[]; keys: string[] }[];
   events: { t: number; type: MatchEvent['type']; [key: string]: unknown }[];
-  summary: { possession: number; progress: Record<string, number>; alignment: Record<string, number>; touches: number; losses: number; nearestOpponent: number; firstWithin2m: number | null; tackleAttempts: number; tackleSuccesses: number };
+  summary: { possession: number; progress: Record<string, number>; alignment: Record<string, number>; touches: number; losses: number; nearestOpponent: number | null; firstWithin2m: number | null; tackleAttempts: number; userTackles: number; opponentTackles: number; tackleSuccesses: number; skills: Record<string, number> };
 }
 
 const allowedKeys = new Set([...Object.values(ACTION_KEYS).flat(), 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']);
@@ -92,7 +92,7 @@ export function runScript(source: PlaygroundScript): ScriptResult {
     const match = new Match(new PhysicsWorld(), { practice: true, random: new Random(script.seed), createPlayerModel: () => new HeadlessModel(), goalVisuals: false });
     new PlaygroundScenarios(match).reset(script.scenario, script.seed, script.opponent ?? 'press', script.control ?? 'user');
     const input = new Input({ addEventListener() {} } as unknown as Window);
-    const result: ScriptResult = { frames: [], events: [], summary: { possession: 0, progress: {}, alignment: {}, touches: 0, losses: 0, nearestOpponent: 0, firstWithin2m: null, tackleAttempts: 0, tackleSuccesses: 0 } };
+    const result: ScriptResult = { frames: [], events: [], summary: { possession: 0, progress: {}, alignment: {}, touches: 0, losses: 0, nearestOpponent: null, firstWithin2m: null, tackleAttempts: 0, userTackles: 0, opponentTackles: 0, tackleSuccesses: 0, skills: {} } };
     const user = match.controlled;
     const foes = match.players.filter((p) => p.team !== user.team && !p.isKeeper);
     const summary = result.summary;
@@ -133,13 +133,18 @@ export function runScript(source: PlaygroundScript): ScriptResult {
       if (previousOwner === user && match.ball.owner !== user && !match.events.some((e) => e.type === 'kick' && e.player === user)) summary.losses++;
       previousOwner = match.ball.owner;
       for (const p of match.players) {
-        if (previousTackle.get(p) === 0 && p.tackleTimer > 0 && p.team !== user.team) summary.tackleAttempts++;
+        if (previousTackle.get(p) === 0 && p.tackleTimer > 0) {
+          if (p === user) summary.userTackles++;
+          else if (p.team !== user.team) summary.opponentTackles++;
+          summary.tackleAttempts = summary.userTackles + summary.opponentTackles;
+        }
         previousTackle.set(p, p.tackleTimer);
       }
       for (const event of match.events) {
         result.events.push(serializedEvent(event, end));
         if (event.type === 'touch' && event.player === user) summary.touches++;
         if (event.type === 'tackle' && event.success) summary.tackleSuccesses++;
+        if (event.type === 'skill') summary.skills[event.id] = (summary.skills[event.id] ?? 0) + 1;
       }
       match.events.length = 0;
       for (const p of foes) {
@@ -151,7 +156,7 @@ export function runScript(source: PlaygroundScript): ScriptResult {
       input.endFrame();
     }
     summary.possession = Math.min(1, summary.possession / (steps * PHYSICS.step));
-    summary.nearestOpponent = Number.isFinite(nearest) ? nearest : 0;
+    summary.nearestOpponent = Number.isFinite(nearest) ? nearest : null;
     return result;
   } finally {
     for (const p of PLAYGROUND_PARAMETERS) setParameter(p.key, p.key === 'windup' ? snapshot.MOTION_SELECT.windup : snapshot.DRIBBLE[p.key]);

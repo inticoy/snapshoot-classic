@@ -78,9 +78,14 @@ export class TeamAI {
     if (!carrier) return;
     const peers = m.teams[1].filter((q) => !q.isKeeper);
     const index = peers.indexOf(p);
-    const offset = mode === 'follow' ? 2.5 : index === 0 ? 0.75 : 1.1;
+    const offset = mode === 'follow' ? 2.5 : AI.practiceStandOff;
     const side = index === 1 ? 0.9 : index === 2 ? -0.9 : 0;
-    tmp.set(carrier.pos.x + offset - p.pos.x, 0, carrier.pos.z + side - p.pos.z);
+    // 공이 놓인 쪽에서 압박하되 충돌 분리가 다시 밀어낼 만큼 몸을 붙이지 않는다.
+    tmp2.copy(m.ball.position).sub(carrier.pos).setY(0);
+    if (tmp2.lengthSq() < 1e-4) tmp2.copy(carrier.facing);
+    tmp2.normalize();
+    tmp.set(carrier.pos.x + tmp2.x * offset - tmp2.z * side - p.pos.x, 0,
+      carrier.pos.z + tmp2.z * offset + tmp2.x * side - p.pos.z);
     const distance = tmp.length();
     if (distance > 0.15) tmp.multiplyScalar(Math.min(1, distance / 1.2) / distance);
     else tmp.set(0, 0, 0);

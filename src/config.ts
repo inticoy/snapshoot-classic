@@ -200,6 +200,7 @@ export const TEAM_COLORS = [
 ] as const;
 
 export const AI = {
+  practiceStandOff: 1.1, // 공 쪽에서 멈추되 선수 충돌 반경보다 여유를 둔다 (m)
   runSwayPeriod: 2.5, // 공격수 좌우 움직임의 시간 척도 (시뮬레이션 초)
   reaction: 0.12, // 의사결정 주기
   tackleChancePerSec: 0.9,
