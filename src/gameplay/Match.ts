@@ -9,6 +9,7 @@ import { TeamAI } from '../ai/TeamAI';
 import { Kicks, gauss, type KickResult, type PassKind } from './Kicks';
 import { MOVE_ASSIST_TIME, settings, type AssistLevel } from '../core/Settings';
 import { n } from '../data/Stats';
+import { activePhysics } from '../physics/presets';
 import type { ButtonState } from '../core/Input';
 import { TEAMS } from '../data/Teams';
 import { FORMATION_5 } from '../data/Formation';
@@ -544,7 +545,8 @@ export class Match {
       if (reach <= t + t0) return new THREE.Vector3(x, 0, z);
       // 구름 저항 근사
       const h = Math.hypot(vx, vz);
-      const decel = Math.max(0, 1 - ((BALL.rollingDecel + BALL.rollingDamping * h) * 0.05) / Math.max(h, 0.01));
+      const P = activePhysics();
+      const decel = Math.max(0, 1 - ((P.rollDecel + P.rollDamping * h) * 0.05) / Math.max(h, 0.01));
       vx *= decel;
       vz *= decel;
       x += vx * 0.05;

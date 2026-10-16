@@ -1,3 +1,5 @@
+import { setActivePhysics, type PresetName } from '../physics/presets';
+
 /**
  * 조작 보조 설정 (FC 시리즈의 패스/슛 어시스트 옵션).
  *  보조: 방향과 세기를 게임이 맞춰 준다 (패스는 동료에게, 슛은 골문 안으로)
@@ -27,12 +29,13 @@ interface SettingsData {
   passAssist: AssistLevel;
   shotAssist: AssistLevel;
   moveAssist: MoveAssist;
+  physicsPreset: PresetName;
 }
 
 const KEY = 'snapshoot-classic:settings';
 
 function load(): SettingsData {
-  const fallback: SettingsData = { passAssist: 'assisted', shotAssist: 'assisted', moveAssist: 'high' };
+  const fallback: SettingsData = { passAssist: 'assisted', shotAssist: 'assisted', moveAssist: 'high', physicsPreset: 'arcade' };
   try {
     const raw = localStorage.getItem(KEY);
     if (!raw) return fallback;
@@ -41,6 +44,7 @@ function load(): SettingsData {
       passAssist: ORDER.includes(parsed.passAssist!) ? parsed.passAssist! : fallback.passAssist,
       shotAssist: ORDER.includes(parsed.shotAssist!) ? parsed.shotAssist! : fallback.shotAssist,
       moveAssist: MOVE_ORDER.includes(parsed.moveAssist!) ? parsed.moveAssist! : fallback.moveAssist,
+      physicsPreset: parsed.physicsPreset === 'real' ? 'real' : 'arcade',
     };
   } catch {
     return fallback;
@@ -48,6 +52,14 @@ function load(): SettingsData {
 }
 
 export const settings: SettingsData = load();
+setActivePhysics(settings.physicsPreset);
+
+export function togglePhysicsPreset(): PresetName {
+  settings.physicsPreset = settings.physicsPreset === 'arcade' ? 'real' : 'arcade';
+  setActivePhysics(settings.physicsPreset);
+  save();
+  return settings.physicsPreset;
+}
 
 export function cycleAssist(key: 'passAssist' | 'shotAssist', dir: 1 | -1): void {
   const i = ORDER.indexOf(settings[key]);

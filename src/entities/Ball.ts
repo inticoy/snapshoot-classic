@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { BALL } from '../config';
+import { activePhysics, crossSection, dragCoefficient, liftCoefficient } from '../physics/presets';
 import type { PhysicsWorld } from '../physics/PhysicsWorld';
 import type { Player } from './Player';
 
@@ -131,32 +132,40 @@ export class Ball {
 
   private applyAerodynamics(): void {
     if (this.owner) return;
+    const P = activePhysics();
     const v = this.body.velocity;
     const speed = v.length();
     if (speed < 0.01) return;
+    const q = 0.5 * P.airDensity * crossSection(BALL.radius); // ½ρA
 
-    // 공기 저항
-    this.body.force.x -= BALL.drag * speed * v.x;
-    this.body.force.y -= BALL.drag * speed * v.y;
-    this.body.force.z -= BALL.drag * speed * v.z;
+    // 공기 저항: F = ½ρA·Cd(v)·v², 진행 반대 방향 (drag crisis 포함)
+    const fd = q * dragCoefficient(P, speed) * speed;
+    this.body.force.x -= fd * v.x;
+    this.body.force.y -= fd * v.y;
+    this.body.force.z -= fd * v.z;
 
     if (!this.isGrounded) {
-      // 마그누스 효과: 회전하는 공이 휘어진다 (감아차기)
+      // 마그누스 양력: F = ½ρA·C_L·v², 방향 ω×v (감아차기)
       this.body.angularVelocity.cross(v, tmpV);
-      this.body.force.x += BALL.magnus * tmpV.x;
-      this.body.force.y += BALL.magnus * tmpV.y;
-      this.body.force.z += BALL.magnus * tmpV.z;
+      const wxv = tmpV.length();
+      if (wxv > 1e-6) {
+        const spinPerp = wxv / speed; // 진행 방향에 수직인 회전 성분
+        const fl = (q * liftCoefficient(P, BALL.radius, spinPerp, speed) * speed * speed) / wxv;
+        this.body.force.x += fl * tmpV.x;
+        this.body.force.y += fl * tmpV.y;
+        this.body.force.z += fl * tmpV.z;
+      }
     } else {
-      // 잔디 구름 저항
+      // 잔디 구름 저항: 감속 = rollDecel + rollDamping·v
       const h = Math.hypot(v.x, v.z);
       if (h > 0.01) {
-        const decel = BALL.rollingDecel + BALL.rollingDamping * h;
+        const decel = P.rollDecel + P.rollDamping * h;
         const f = (Math.min(decel, h * 60) * BALL.mass) / h;
         this.body.force.x -= v.x * f;
         this.body.force.z -= v.z * f;
       }
       // 땅에서는 사이드스핀이 빨리 죽는다
-      this.body.angularVelocity.y *= 0.97;
+      this.body.angularVelocity.y *= P.groundSpinKeep;
     }
   }
 

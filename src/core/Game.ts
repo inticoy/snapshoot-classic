@@ -7,7 +7,8 @@ import { Match, type UserCommand } from '../gameplay/Match';
 import { CameraRig } from '../camera/CameraRig';
 import { Hud } from '../ui/Hud';
 import { Menu, assistPanel, controlsPanel, matchupPanel, playerDetailPanel, squadPanel, statsPanel, type MenuScreen } from '../ui/Menu';
-import { ASSIST_LABEL, MOVE_ASSIST_LABEL, cycleAssist, cycleMoveAssist, settings } from './Settings';
+import { ASSIST_LABEL, MOVE_ASSIST_LABEL, cycleAssist, cycleMoveAssist, settings, togglePhysicsPreset } from './Settings';
+import { PRESET_LABEL, activePhysics } from '../physics/presets';
 import { Sound } from '../audio/Sound';
 import { TEAMS } from '../data/Teams';
 import { RESTART_LABEL } from '../gameplay/SetPieces';
@@ -116,6 +117,14 @@ export class Game {
         onLeft: () => cycleAssist('shotAssist', -1),
         onRight: () => cycleAssist('shotAssist', 1),
         panel: () => assistPanel('shot'),
+      },
+      {
+        id: 'physics',
+        label: '물리',
+        value: () => PRESET_LABEL[settings.physicsPreset],
+        onLeft: () => this.togglePhysics(),
+        onRight: () => this.togglePhysics(),
+        panel: () => `<div class="card"><h3>PHYSICS PRESET</h3><p><b>실제</b> · 실측값 그대로. 공기 저항이 속도에 따라 급변하는 구간(drag crisis), 잔디 구름 저항 약 0.9 m/s², 반발 계수 0.62 (FIFA 잔디 시험 기준 범위).<br/><br/><b>아케이드</b> · 실제 값 위에 게임용 보정: 땅볼이 더 빨리 서고(놓친 공을 쫓아갈 수 있게), 커브가 조금 더 크고, 공기 저항을 평평하게 해서 로빙 거리를 예측하기 쉽게.<br/><br/>패스·슛 세기 보정은 아케이드 기준으로 맞춰져 있어서, 실제로 바꾸면 느린 로빙이나 칩슛이 조금 짧게 떨어질 수 있어요. 값은 <code>src/physics/presets.ts</code>에서 관리합니다.</p></div>`,
       },
       {
         id: 'moveAssist',
@@ -235,6 +244,11 @@ export class Game {
     this.state = 'playing';
     this.hud.show(true);
     void this.sound.unlock();
+  }
+
+  private togglePhysics(): void {
+    togglePhysicsPreset();
+    this.physics.applyPreset(activePhysics());
   }
 
   private toggleSound(): boolean {

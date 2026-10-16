@@ -1,9 +1,10 @@
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
-import { BALL, GOAL, PASS, PHYSICS, PITCH, SHOT } from '../config';
+import { BALL, GOAL, PASS, PITCH, SHOT } from '../config';
 import type { AssistLevel } from '../core/Settings';
 import type { Player } from '../entities/Player';
 import { n } from '../data/Stats';
+import { activePhysics, magnusAccel } from '../physics/presets';
 import type { Match } from './Match';
 
 export type PassKind = 'short' | 'through' | 'lob' | 'lobThrough';
@@ -17,7 +18,7 @@ export interface KickResult {
   weakFoot: boolean;
 }
 
-const G = -PHYSICS.gravity;
+const g = () => activePhysics().gravity;
 
 export function gauss(): number {
   const u = 1 - Math.random();
@@ -131,7 +132,7 @@ export class Kicks {
     if (finesse) {
       // 마그누스 횡가속도만큼 반대쪽으로 겨냥하고 회전으로 휘어 들어오게 (커브가 높을수록 많이 감김)
       const spinAmt = SHOT.finesseSpin * (0.7 + 0.5 * n(s.curve));
-      const aLat = (BALL.magnus * spinAmt * speed) / BALL.mass;
+      const aLat = magnusAccel(activePhysics(), BALL.radius, BALL.mass, spinAmt, speed);
       const offset = Math.min(3.5, 0.5 * aLat * T * T * 0.8);
       const lateral = new THREE.Vector3(-horiz.z, 0, horiz.x);
       const curlSide = Math.sign(targetZ - bp.z) * Math.sign(lateral.z) || 1;
@@ -140,7 +141,7 @@ export class Kicks {
       const sgn = Math.sign(launch.z * lateral.x * curlSide - launch.x * lateral.z * curlSide) || 1;
       spin.set(0, sgn * spinAmt, 0);
     }
-    const vy = (targetY - bp.y + 0.5 * G * T * T) / T;
+    const vy = (targetY - bp.y + 0.5 * g() * T * T) / T;
     return { vel: new CANNON.Vec3(launch.x * speed, Math.max(0.5, vy), launch.z * speed), spin, receiver: null, weakFoot: foot.weak };
   }
 
@@ -162,7 +163,7 @@ export class Kicks {
     const T = 1.0 + dist * 0.06;
     const landY = 0.9 + charge * 1.6 + gauss() * 0.25 * (1.5 - acc);
     const vh = (dist / T) * (1 + dist * 0.008);
-    const vy = (landY - bp.y + 0.5 * G * T * T) / T;
+    const vy = (landY - bp.y + 0.5 * g() * T * T) / T;
     const d = new THREE.Vector3(goalX - bp.x, 0, targetZ - bp.z).normalize();
     return { vel: new CANNON.Vec3(d.x * vh, vy, d.z * vh), spin: new CANNON.Vec3(), receiver: null, weakFoot: foot.weak };
   }
@@ -223,7 +224,7 @@ export class Kicks {
     if (aerial) {
       const T = kind === 'lob' ? 0.75 + D * 0.035 : 0.6 + D * 0.026;
       const vh = (D / T) * (1 + D * 0.0095) * powerScale * speedErr;
-      vel.set(dir2.x * vh, 0.5 * G * T, dir2.z * vh);
+      vel.set(dir2.x * vh, 0.5 * g() * T, dir2.z * vh);
     } else {
       // 받는 위치에서 6~9 m/s 정도로 도착하는 세기
       const base = kind === 'through' ? 5.5 + D * 0.48 : 4.8 + D * 0.5;
@@ -270,7 +271,7 @@ export class Kicks {
       const speed = 10 + 8 * acc + incoming * 0.15 + 3 * n(s.strength);
       const T = Math.hypot(goalX - bp.x, tz - bp.z) / speed;
       const d = new THREE.Vector3(goalX - bp.x, 0, tz - bp.z).normalize();
-      vel.set(d.x * speed, (ty - bp.y + 0.5 * G * T * T) / T, d.z * speed);
+      vel.set(d.x * speed, (ty - bp.y + 0.5 * g() * T * T) / T, d.z * speed);
     } else if (mode === 'pass') {
       const dir = aim.lengthSq() > 0.01 ? aim.clone().setY(0).normalize() : p.facing.clone();
       receiver = assist === 'manual' ? null : this.pickReceiver(p, dir, 'short', assist === 'assisted' ? 1.2 : 0.6);
@@ -282,7 +283,7 @@ export class Kicks {
       // 살짝 띄워서 동료 발 앞에 떨어지게
       const T = 0.5 + D * 0.04;
       const vh = D / T;
-      vel.set(d.x * vh, (0.3 - bp.y + 0.5 * G * T * T) / T, d.z * vh);
+      vel.set(d.x * vh, (0.3 - bp.y + 0.5 * g() * T * T) / T, d.z * vh);
     } else {
       // 걷어내기: 자기 골대 반대 방향 + 바깥쪽으로 높고 멀리
       const away = new THREE.Vector3(p.attackDir, 0, Math.sign(bp.z || 1) * 0.6).normalize();
@@ -331,7 +332,7 @@ export class Kicks {
       .applyAxisAngle(new THREE.Vector3(0, 1, 0), gauss() * (0.02 + 0.05 * (1 - acc)));
     const T = (long ? 0.55 : 0.45) + D * 0.03;
     const vh = (D / T) * (1 + D * 0.006);
-    const vy = (0.4 - bp.y + 0.5 * G * T * T) / T;
+    const vy = (0.4 - bp.y + 0.5 * g() * T * T) / T;
     return {
       vel: new CANNON.Vec3(dir2.x * vh, vy, dir2.z * vh),
       spin: new CANNON.Vec3(),

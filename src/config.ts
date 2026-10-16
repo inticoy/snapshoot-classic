@@ -25,20 +25,15 @@ export const GOAL = {
   postRadius: 0.06,
 };
 
+// 공 규격 (FIFA 5호구: 둘레 68~70cm, 410~450g).
+// 공기 저항 · 마그누스 · 구름 저항 · 반발 계수는 src/physics/presets.ts 에서 관리한다.
 export const BALL = {
   radius: 0.11,
   mass: 0.43,
-  // 공기 저항: F = -drag * |v| * v
-  drag: 0.0055,
-  // 마그누스 효과: F = magnus * (ω × v)
-  magnus: 0.0032,
-  // 지면 구름 저항
-  rollingDecel: 1.4,
-  rollingDamping: 0.24,
 };
 
 export const PHYSICS = {
-  gravity: -9.81,
+  gravity: -9.81, // 초기값. 실제 값은 프리셋의 gravity
   step: 1 / 120, // 게임 로직 고정 스텝
   subSteps: 2, // 물리 서브스텝 (터널링 방지)
 };
