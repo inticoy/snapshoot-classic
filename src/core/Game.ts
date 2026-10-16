@@ -132,7 +132,7 @@ export class Game {
         value: () => PRESET_LABEL[settings.physicsPreset],
         onLeft: () => this.togglePhysics(),
         onRight: () => this.togglePhysics(),
-        panel: () => `<div class="card"><h3>PHYSICS PRESET</h3><p><b>실제</b> · 실측값 그대로. 공기 저항이 속도에 따라 급변하는 구간(drag crisis), 잔디 구름 저항 약 0.9 m/s², 반발 계수 0.62 (FIFA 잔디 시험 기준 범위).<br/><br/><b>아케이드</b> · 실제 값 위에 게임용 보정: 땅볼이 더 빨리 서고(놓친 공을 쫓아갈 수 있게), 커브가 조금 더 크고, 공기 저항을 평평하게 해서 로빙 거리를 예측하기 쉽게.<br/><br/>패스·슛 세기 보정은 아케이드 기준으로 맞춰져 있어서, 실제로 바꾸면 느린 로빙이나 칩슛이 조금 짧게 떨어질 수 있어요. 값은 <code>src/physics/presets.ts</code>에서 관리합니다.</p></div>`,
+        panel: () => `<div class="card"><h3>물리</h3><p><b>실제</b> · 실측값 그대로. 공기 저항이 속도에 따라 급변하는 구간(drag crisis), 잔디 구름 저항 약 0.9 m/s², 반발 계수 0.62 (FIFA 잔디 시험 기준 범위).<br/><br/><b>아케이드</b> · 실제 값 위에 게임용 보정: 땅볼이 더 빨리 서고(놓친 공을 쫓아갈 수 있게), 커브가 조금 더 크고, 공기 저항을 평평하게 해서 로빙 거리를 예측하기 쉽게.<br/><br/>패스·슛 세기 보정은 아케이드 기준으로 맞춰져 있어서, 실제로 바꾸면 느린 로빙이나 칩슛이 조금 짧게 떨어질 수 있어요. 값은 <code>src/physics/presets.ts</code>에서 관리합니다.</p></div>`,
       },
       {
         id: 'moveAssist',
@@ -140,7 +140,7 @@ export class Game {
         value: () => MOVE_ASSIST_LABEL[settings.moveAssist],
         onLeft: () => cycleMoveAssist(-1),
         onRight: () => cycleMoveAssist(1),
-        panel: () => `<div class="card"><h3>AUTO SWITCHING MOVE ASSISTANCE</h3><p>패스로 받는 선수가 바뀐 직후, 얼마 동안 AI가 받으러 가는 움직임을 유지할지 정합니다 (FC의 같은 이름 설정).<br/><br/><b>높음</b> · 0.55초 · <b>낮음</b> · 0.25초 · <b>없음</b> · 바로 내 입력<br/><br/>어떤 설정이든 방향키가 공 쪽을 향하면 공을 가로챌 지점으로 가서 그 앞에서 멈추므로 공을 지나치지 않고, 입력 없이 두면 자동으로 받으러 갑니다. 받는 순간 누르고 있던 방향으로 첫 터치를 합니다.</p></div>`,
+        panel: () => `<div class="card"><h3>자동 전환 이동 보조</h3><p>패스로 받는 선수가 바뀐 직후, 얼마 동안 AI가 받으러 가는 움직임을 유지할지 정합니다 (FC의 같은 이름 설정).<br/><br/><b>높음</b> · 0.55초 · <b>낮음</b> · 0.25초 · <b>없음</b> · 바로 내 입력<br/><br/>어떤 설정이든 방향키가 공 쪽을 향하면 공을 가로챌 지점으로 가서 그 앞에서 멈추므로 공을 지나치지 않고, 입력 없이 두면 자동으로 받으러 갑니다. 받는 순간 누르고 있던 방향으로 첫 터치를 합니다.</p></div>`,
       },
       {
         id: 'player',
@@ -157,7 +157,7 @@ export class Game {
         value: () => CAMERA_LABEL[this.rig.mode],
         onLeft: () => this.rig.toggle(),
         onRight: () => this.rig.toggle(),
-        panel: () => `<div class="card"><h3>CAMERA</h3><p><b>TV 중계</b>는 FIFA 기본 카메라처럼 관중석 높은 곳에서 망원으로 당겨 찍어 선수가 크게 보이고, <b>넓은 중계</b>는 가까이서 넓게, <b>선수 뒤</b>는 공격 방향을 정면으로 봅니다. 경기 중 <kbd>V</kbd> 로도 바꿀 수 있어요.</p></div>`,
+        panel: () => `<div class="card"><h3>카메라</h3><p><b>TV 중계</b>는 FIFA 기본 카메라처럼 관중석 높은 곳에서 망원으로 당겨 찍어 선수가 크게 보이고, <b>넓은 중계</b>는 가까이서 넓게, <b>선수 뒤</b>는 공격 방향을 정면으로 봅니다. 경기 중 <kbd>V</kbd> 로도 바꿀 수 있어요.</p></div>`,
       },
       {
         id: 'sound',
@@ -165,7 +165,7 @@ export class Game {
         value: () => (this.sound.muted ? '끔' : '켬'),
         onLeft: () => this.toggleSound(),
         onRight: () => this.toggleSound(),
-        panel: () => `<div class="card"><h3>AUDIO</h3><p>효과음과 관중 소리를 켜거나 끕니다. 경기 중 <kbd>M</kbd> 키로도 바꿀 수 있어요.</p></div>`,
+        panel: () => `<div class="card"><h3>사운드</h3><p>효과음과 관중 소리를 켜거나 끕니다. 경기 중 <kbd>M</kbd> 키로도 바꿀 수 있어요.</p></div>`,
       },
       {
         id: 'graphics',
@@ -173,9 +173,39 @@ export class Game {
         value: () => GRAPHICS_LABEL[settings.graphicsQuality],
         onLeft: () => { cycleGraphics(-1); this.applyGraphics(this.touch.detected); },
         onRight: () => { cycleGraphics(1); this.applyGraphics(this.touch.detected); },
-        panel: () => `<div class="card"><h3>GRAPHICS</h3><p>자동은 터치 기기 또는 CPU 4코어 이하에서 낮음으로 동작합니다. 낮음은 픽셀 비율 최대 1.25, 그림자 1024, 관중 25%로 줄입니다. 높음은 픽셀 비율 최대 2, 그림자 2048, 전체 관중을 표시합니다.</p></div>`,
+        panel: () => `<div class="card"><h3>그래픽 품질</h3><p>자동은 터치 기기 또는 CPU 4코어 이하에서 낮음으로 동작합니다. 낮음은 픽셀 비율 최대 1.25, 그림자 1024, 관중 25%로 줄입니다. 높음은 픽셀 비율 최대 2, 그림자 2048, 전체 관중을 표시합니다.</p></div>`,
       },
       { id: 'controls', label: '조작법', panel: controlsPanel, onSelect: () => {} },
+    ];
+  }
+
+  /** 설정 하위 화면 (FC 온라인처럼 메인 목록을 짧게 유지) */
+  private openSettings(back: () => void): void {
+    const items = this.settingsItems().filter((i) => !['player', 'squad', 'controls'].includes(i.id));
+    this.menu.open({
+      eyebrow: '게임 설정',
+      title: '설정',
+      panel: () => this.settingsSummary(),
+      onBack: back,
+      items: [...items, { id: 'back', label: '돌아가기', onSelect: back }],
+    });
+  }
+
+  private settingsSummary(): string {
+    const rows = this.settingsItems()
+      .filter((i) => i.value)
+      .map((i) => `<li><span>${i.label}</span><b>${i.value!()}</b></li>`)
+      .join('');
+    return `<div class="card"><h3>현재 설정</h3><ul class="setting-list">${rows}</ul></div>`;
+  }
+
+  /** 메인·일시정지 공통: 설정 / 선수 정보 / 조작법 */
+  private linkItems(back: () => void, withSquad: boolean): MenuScreen['items'] {
+    const pick = (id: string) => this.settingsItems().find((i) => i.id === id)!;
+    return [
+      { id: 'settings', label: '설정', panel: () => this.settingsSummary(), onSelect: () => this.openSettings(back) },
+      ...(withSquad ? [pick('player'), pick('squad')] : []),
+      pick('controls'),
     ];
   }
 
@@ -184,8 +214,8 @@ export class Game {
     this.hud.show(false);
     const lengthLabel = () => `${DURATIONS[this.durationIndex] / 60}분`;
     this.menu.open({
-      eyebrow: 'SNAPSHOOT CLASSIC · 11 VS 11',
-      title: 'KICK OFF',
+      eyebrow: '11 vs 11 · 친선 경기',
+      title: '킥오프',
       panel: () => matchupPanel(null, [`경기 시간 ${lengthLabel()}`, '중계 · 11대11 · 4-3-3', TEAMS[0].name + ' 홈']),
       items: [
         { id: 'start', label: '경기 시작', onSelect: () => void this.startMatch() },
@@ -196,12 +226,12 @@ export class Game {
           onLeft: () => (this.durationIndex = (this.durationIndex + DURATIONS.length - 1) % DURATIONS.length),
           onRight: () => (this.durationIndex = (this.durationIndex + 1) % DURATIONS.length),
         },
-        ...this.settingsItems(),
+        ...this.linkItems(() => this.openMainMenu(), true),
         {
           id: 'snapshoot',
           label: 'SnapShoot 승부차기 ↗',
           onSelect: () => window.open('https://inticoy.github.io/snapshoot', '_blank', 'noopener'),
-          panel: () => `<div class="card"><h3>SNAPSHOOT</h3><p>스와이프 한 번으로 차는 승부차기 게임. 같은 SnapShoot 시리즈예요. 나중에 이 게임의 승부차기 모드로 합쳐질 예정입니다.</p></div>`,
+          panel: () => `<div class="card"><h3>SnapShoot</h3><p>스와이프 한 번으로 차는 승부차기 게임. 같은 SnapShoot 시리즈예요. 나중에 이 게임의 승부차기 모드로 합쳐질 예정입니다.</p></div>`,
         },
       ],
     });
@@ -213,14 +243,14 @@ export class Game {
     this.input.clearVirtual();
     const [h, a] = this.match.score;
     this.menu.open({
-      eyebrow: `PAUSED · ${this.clockText()}`,
-      title: 'PAUSE',
+      eyebrow: `경기 중 · ${this.clockText()}`,
+      title: '일시정지',
       panel: () => statsPanel(this.match.stats, [h, a], `경기 진행 ${this.clockText()}`),
       onBack: () => this.resume(),
       items: [
         { id: 'resume', label: '계속하기', onSelect: () => this.resume() },
         { id: 'restart', label: '다시 시작', onSelect: () => void this.startMatch() },
-        ...this.settingsItems(),
+        ...this.linkItems(() => this.openPauseMenu(), false),
         { id: 'quit', label: '메인 메뉴', onSelect: () => this.openMainMenu() },
       ],
     });
@@ -232,8 +262,8 @@ export class Game {
     const [h, a] = this.match.score;
     const verdict = h > a ? '승리' : h < a ? '패배' : '무승부';
     this.menu.open({
-      eyebrow: `FULL TIME · ${verdict}`,
-      title: h > a ? 'VICTORY' : h < a ? 'DEFEAT' : 'DRAW',
+      eyebrow: `경기 종료 · ${TEAMS[0].abbr} ${h} : ${a} ${TEAMS[1].abbr}`,
+      title: verdict,
       panel: () => statsPanel(this.match.stats, [h, a], `경기 종료 · ${verdict}`),
       items: [
         { id: 'again', label: '다시 하기', onSelect: () => void this.startMatch() },

@@ -1,0 +1,198 @@
+/*
+ * SnapShoot Classic 테마 (style.css 위에 덮어쓴다)
+ *
+ * 방향: FC 온라인 계열의 정돈된 스포츠 UI
+ *  - 납작한 패널, 얇은 경계선, 작은 반경(2~4px). 그라데이션 글로우·이탤릭 대형 제목 금지
+ *  - 한글은 Pretendard, 숫자·영문 약어는 압축형 굵은 서체 (점수판·OVR·등번호)
+ *  - 강조색은 SnapShoot 노랑 하나. 초록은 스태미너·긍정 상태에만
+ */
+:root {
+  --ui: 'Pretendard Variable', Pretendard, -apple-system, 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif;
+  --num: 'Barlow Condensed', 'Pretendard Variable', Pretendard, sans-serif;
+  --panel: rgba(13, 15, 19, 0.88);
+  --panel-solid: #0e1014;
+  --panel-raised: #161920;
+  --line: rgba(255, 255, 255, 0.09);
+  --line-strong: rgba(255, 255, 255, 0.18);
+  --text: #f2f3f5;
+  --muted: #8b919c;
+  --brand-yellow: #ffd400;
+  --brand-green: #35cd21;
+  --accent: var(--brand-yellow);
+  --accent-ink: #141100;
+  --font: var(--ui);
+  --font-ko: var(--ui);
+}
+
+html, body { font-family: var(--ui); letter-spacing: -0.01em; }
+
+/* ---------- 스코어보드 ---------- */
+.sb { top: 16px; left: 16px; height: 30px; filter: none; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35); }
+.sb-clock {
+  min-width: 64px; padding: 0 10px; border-radius: 3px 0 0 3px;
+  background: var(--panel-solid); font: 700 17px/1 var(--num); letter-spacing: 0.02em;
+}
+.sb-main { border-radius: 0 3px 3px 0; background: #f4f5f7; }
+.sb-team { padding: 0 10px; gap: 7px; font: 700 16px/1 var(--num); letter-spacing: 0.04em; color: #111318; }
+.chip { width: 4px; height: 100%; border-radius: 0; }
+.sb-team .chip { height: 30px; }
+.sb-score { min-width: 28px; font: 700 19px/1 var(--num); background: #111318; }
+
+.ticker {
+  top: 52px; left: 16px; padding: 4px 10px; border-left-width: 2px; border-left-color: var(--accent);
+  background: var(--panel); font: 600 12px/1.4 var(--ui); letter-spacing: 0; border-radius: 0 2px 2px 0;
+}
+
+/* ---------- 머리 위 인디케이터 ---------- */
+.pi-name { font: 700 12px/1 var(--ui); letter-spacing: 0.02em; text-transform: none; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9); }
+.pi-stamina { display: none; } /* 스태미너는 하단 이름 바에서 */
+.pi-arrow { border-left-width: 6px; border-right-width: 6px; border-top: 8px solid var(--accent); }
+
+/* ---------- 파워 게이지: 글자 없이 얇은 바 ---------- */
+.power { gap: 0; }
+.power-label { display: none; }
+.power-track {
+  width: 92px; height: 6px; transform: none; border-radius: 1px;
+  background: rgba(8, 10, 13, 0.7); outline: 1px solid rgba(255, 255, 255, 0.45);
+}
+.power-fill { background: linear-gradient(90deg, #ffffff 0%, var(--brand-yellow) 65%, #ff6a3d 100%); }
+.power-mark { top: -1px; bottom: -1px; width: 1px; background: rgba(0, 0, 0, 0.75); }
+
+/* ---------- 하단 선수 이름 바 (이름 + 스태미너만) ---------- */
+.nb {
+  bottom: 16px; width: min(250px, 28vw); grid-template-columns: 40px 1fr;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 3px; box-shadow: none;
+}
+.nb-right { grid-template-columns: 1fr 40px; }
+.nb-num b { font: 700 19px/1 var(--num); }
+.nb-num small { font: 700 10px/1 var(--num); letter-spacing: 0.08em; margin-top: 1px; }
+.nb-main { padding: 6px 10px 3px; }
+.nb-name { font: 700 16px/1.1 var(--num); letter-spacing: 0.03em; }
+.nb-sta { padding: 0 10px 7px; gap: 2px; }
+.nb-sta i { height: 3px; border-radius: 0; background: rgba(255, 255, 255, 0.1); }
+.nb-left { left: 16px; }
+.nb-right { right: 16px; }
+
+/* ---------- 키 안내 ---------- */
+.hints { right: 16px; bottom: 76px; gap: 4px; }
+.hint { font: 500 11.5px/1 var(--ui); color: rgba(242, 243, 245, 0.85); gap: 6px; }
+.hint-mode { font: 700 11px/1 var(--ui); font-style: normal; letter-spacing: 0.1em; color: var(--muted); }
+kbd {
+  min-width: 20px; height: 20px; padding: 0 5px; border-radius: 2px;
+  background: rgba(13, 15, 19, 0.85); color: var(--text); border: 1px solid var(--line-strong);
+  box-shadow: none; font: 700 11px/1 var(--num); letter-spacing: 0.02em;
+}
+
+/* ---------- 레이더 ---------- */
+#radar { bottom: 16px; border-radius: 3px; background: rgba(10, 12, 16, 0.62); outline-color: var(--line); }
+
+/* ---------- 골 연출 ---------- */
+.goal-word {
+  font: 800 clamp(64px, 12vw, 160px)/1 var(--num); font-style: normal; letter-spacing: 0.04em;
+  transform: translate(-50%, -50%) scale(1.15); -webkit-text-stroke: 0;
+  text-shadow: 0 4px 24px rgba(0, 0, 0, 0.45);
+}
+.goal-word.show { transform: translate(-50%, -50%) scale(1); }
+.lower-third { border-radius: 3px; border: 1px solid var(--line); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35); }
+.lt-strip { width: 4px; }
+.lt-body { padding: 9px 14px; }
+.lt-title { font: 800 22px/1 var(--num); font-style: normal; letter-spacing: 0.06em; color: var(--accent); }
+.lt-sub { font: 700 15px/1.2 var(--num); letter-spacing: 0.04em; margin-top: 3px; }
+.lt-score { font: 700 26px/1 var(--num); padding: 0 16px; }
+
+/* ---------- 메뉴 ---------- */
+.overlay {
+  background: linear-gradient(90deg, rgba(8, 10, 13, 0.94) 0%, rgba(8, 10, 13, 0.78) 38%, rgba(8, 10, 13, 0.3) 100%);
+}
+.menu { gap: clamp(20px, 4vw, 48px); max-width: 1180px; }
+.menu-left { width: min(380px, 100%); }
+.brand { display: flex; align-items: center; gap: 10px; margin-bottom: 26px; }
+.brand-logo { height: 34px; width: auto; display: block; }
+.brand-mode {
+  font: 800 11px/1 var(--ui); letter-spacing: 0.18em; padding: 5px 7px 4px; border-radius: 2px;
+  background: var(--brand-green); color: #06200a;
+}
+.menu-heading { margin-bottom: 14px; }
+.menu-eyebrow { font: 600 13px/1.4 var(--ui); letter-spacing: 0; color: var(--muted); }
+.menu-title { font: 800 30px/1.15 var(--ui); font-style: normal; letter-spacing: -0.02em; margin: 2px 0 0; }
+.menu-items { gap: 2px; }
+.menu-item {
+  min-height: 48px; padding: 0 12px 0 16px; border-radius: 2px;
+  font: 600 16px/1 var(--ui); letter-spacing: -0.01em; text-transform: none;
+  color: rgba(242, 243, 245, 0.6);
+}
+.menu-item .ko { font: 600 16px/1 var(--ui); }
+.menu-item::before { top: 10px; bottom: 10px; width: 3px; border-radius: 0; background: var(--accent); }
+.menu-item.active { padding-left: 16px; color: #fff; background: rgba(255, 255, 255, 0.07); }
+.menu-item .value { font: 600 14px/1 var(--ui); color: var(--accent); gap: 6px; }
+.menu-item .value b { font: 700 16px var(--num); }
+.menu-foot { margin-top: 20px; font: 500 12px/1 var(--ui); color: var(--muted); gap: 14px; }
+
+.menu-right { padding-top: 96px; }
+.card {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 18px 20px;
+  backdrop-filter: none;
+}
+.card h3 {
+  font: 700 12px/1 var(--ui); font-style: normal; letter-spacing: 0.12em; color: var(--muted);
+  text-transform: uppercase; margin-bottom: 14px;
+}
+.card p { font: 400 14px/1.65 var(--ui); color: #c9ced8; }
+
+.matchup .crest { width: 60px; height: 70px; font: 800 18px/1 var(--num); font-style: normal; }
+.matchup .name { font: 700 18px/1 var(--num); letter-spacing: 0.06em; }
+.matchup .vs { font: 700 20px/1 var(--num); font-style: normal; color: var(--muted); }
+.matchup .big { font: 700 54px/1 var(--num); }
+.match-meta { font: 500 12.5px/1 var(--ui); gap: 14px; }
+
+.keymap h4 { font: 700 12px/1 var(--ui); font-style: normal; letter-spacing: 0.1em; color: var(--accent); }
+.keymap li { font: 500 13px/1.3 var(--ui); }
+
+.stat-row .v { font: 700 17px/1 var(--num); }
+.stat-row .label { font: 500 12px/1 var(--ui); }
+.stat-row .bar { height: 4px; border-radius: 0; }
+
+/* ---------- 선수 카드 ---------- */
+.pcard { width: 160px; padding: 12px 14px 11px; border-radius: 4px; background: var(--panel-raised); border-color: var(--line); }
+.pcard::before { width: 3px; }
+.pcard-top b { font: 700 34px/1 var(--num); color: var(--accent); }
+.pcard-top span { font: 700 14px/1 var(--num); letter-spacing: 0.08em; }
+.pcard-name { font: 700 17px/1.1 var(--num); letter-spacing: 0.03em; margin: 5px 0 9px; }
+.pcard-face b { font: 700 17px/1 var(--num); }
+.pcard-face span { font: 700 10.5px/1 var(--num); letter-spacing: 0.06em; }
+.pcard-meta { margin-top: 9px; gap: 4px; align-items: center; font: 500 11px/1 var(--ui); }
+.pcard-meta .foot {
+  display: inline-flex; align-items: baseline; gap: 2px; padding: 3px 5px 2px; border-radius: 2px;
+  font: 700 11px/1 var(--num); color: var(--muted); border: 1px solid var(--line-strong);
+}
+.pcard-meta .foot b { font-size: 13px; color: var(--text); }
+.pcard-meta .foot.main { background: #f2f3f5; border-color: #f2f3f5; color: #3a3f48; }
+.pcard-meta .foot.main b { color: #111318; }
+.pcard-meta .skill { margin-left: 4px; color: var(--muted); }
+.pcard-meta .skill b { font: 700 12px var(--num); color: var(--text); }
+.sgroup h4 { font: 700 12px/1 var(--ui); font-style: normal; color: var(--muted); letter-spacing: 0.08em; }
+.sgroup li { font: 500 12.5px/1.2 var(--ui); }
+.sgroup li b { font: 700 15px/1 var(--num); }
+.squad-team { font: 700 12px/1 var(--ui); letter-spacing: 0.1em; }
+
+/* ---------- 터치 버튼 (색·글꼴만) ---------- */
+.touch-button {
+  background: rgba(13, 15, 19, 0.6); border: 1px solid rgba(255, 255, 255, 0.22);
+  font-family: var(--ui); font-weight: 700; letter-spacing: -0.01em; box-shadow: none;
+}
+.touch-button.held { border-color: var(--accent); background: rgba(255, 212, 0, 0.16); }
+.touch-shoot { border-color: rgba(255, 212, 0, 0.7); }
+
+/* ---------- 로딩 ---------- */
+.loading { font: 700 12px/1 var(--ui); font-style: normal; letter-spacing: 0.2em; }
+.loading-bar i { background: var(--accent); }
+
+/* ---------- 설정 요약 ---------- */
+.setting-list { list-style: none; display: flex; flex-direction: column; }
+.setting-list li {
+  display: flex; justify-content: space-between; align-items: center; padding: 10px 0;
+  border-bottom: 1px solid var(--line); font: 500 14px/1 var(--ui); color: #c9ced8;
+}
+.setting-list li:last-child { border-bottom: 0; }
+.setting-list b { font: 700 14px/1 var(--ui); color: var(--accent); }
+.brand-logo { height: 44px; }

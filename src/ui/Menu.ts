@@ -94,8 +94,14 @@ export class Menu {
     this.root.innerHTML = `
       <div class="menu">
         <div class="menu-left">
-          <div class="menu-eyebrow">${s.eyebrow}</div>
-          <div class="menu-title">${s.title}</div>
+          <header class="brand">
+            <img class="brand-logo" src="./brand/snapshoot-wordmark.png" alt="SnapShoot" />
+            <span class="brand-mode">CLASSIC</span>
+          </header>
+          <div class="menu-heading">
+            <div class="menu-eyebrow">${s.eyebrow}</div>
+            <h1 class="menu-title">${s.title}</h1>
+          </div>
           <ul class="menu-items">${items}</ul>
           <div class="menu-foot">
             <span><kbd>↑</kbd><kbd>↓</kbd> 이동</span>
@@ -153,12 +159,12 @@ export function controlsPanel(): string {
     `<li><span class="keys">${keys.map((k) => `<kbd>${k}</kbd>`).join('')}</span>${label}</li>`;
   return `
     <div class="card">
-      <h3>CONTROLS</h3>
+      <h3>조작법</h3>
       <p class="touch-instructions">왼쪽 빈 곳을 누르고 드래그하면 이동합니다. 오른쪽 슛/패스/스루/로빙을 꾹 눌러 파워를 모으고 뗍니다. 슛에서 위로 스와이프하며 떼면 칩슛, 좌우로 떼면 감아차기입니다. 질주·압박·동료 압박·견제는 누르는 동안 동작합니다. 수비 때 패스는 선수 변경, 스루는 스탠딩 태클, 로빙은 슬라이딩으로 바뀝니다.</p>
       <h4>FC 온라인 키보드 배치</h4>
       <div class="keymap">
         <div>
-          <h4>ATTACK</h4>
+          <h4>공격</h4>
           <ul>
             ${row(['←', '↑', '↓', '→'], '이동')}
             ${row(['E'], '질주')}
@@ -172,7 +178,7 @@ export function controlsPanel(): string {
           </ul>
         </div>
         <div>
-          <h4>DEFENCE</h4>
+          <h4>수비</h4>
           <ul>
             ${row(['D'], '압박 (꾹)')}
             ${row(['Q'], '동료 압박 (꾹)')}
@@ -181,7 +187,7 @@ export function controlsPanel(): string {
             ${row(['A'], '슬라이딩 태클')}
             ${row(['S'], '선수 변경')}
           </ul>
-          <h4 style="margin-top:18px">GAME</h4>
+          <h4 style="margin-top:18px">게임</h4>
           <ul>
             ${row(['Esc'], '일시정지')}
             ${row(['V'], '카메라 전환')}
@@ -210,7 +216,7 @@ export function statsPanel(stats: MatchStats, score: [number, number], title: st
   return `
     ${matchupPanel(score, [title])}
     <div class="card" style="margin-top:14px">
-      <h3>MATCH FACTS</h3>
+      <h3>경기 기록</h3>
       <div class="stats">
         ${rows
           .map(([label, h, a, unit = '']) => {
@@ -247,7 +253,7 @@ export function playerCard(team: 0 | 1, index: number): string {
       <div class="pcard-top"><b>${p.ovr}</b><span>${p.pos}</span></div>
       <div class="pcard-name">${p.short}</div>
       <div class="pcard-face">${face.map(([k, v]) => `<div><b>${v}</b><span>${k}</span></div>`).join('')}</div>
-      <div class="pcard-meta"><span>${p.foot === 'L' ? '왼발' : '오른발'}</span><span>약발 ${'★'.repeat(p.weakFoot)}</span><span>개인기 ${'★'.repeat(p.skill)}</span></div>
+      <div class="pcard-meta">${footBadges(p.foot, p.weakFoot)}<span class="skill">개인기 <b>${p.skill}</b>★</span></div>
     </div>`;
 }
 
@@ -276,7 +282,7 @@ export function playerDetailPanel(team: 0 | 1, index: number): string {
 export function squadPanel(): string {
   return `
     <div class="card">
-      <h3>SQUADS · 4-3-3 · 11대11</h3>
+      <h3>스쿼드 · 4-3-3</h3>
       ${([0, 1] as const)
         .map(
           (t) => `<div class="squad-row"><div class="squad-team">${TEAMS[t].name.toUpperCase()}</div><div class="squad-cards">${TEAMS[t].players
@@ -289,16 +295,23 @@ export function squadPanel(): string {
 
 export function assistPanel(kind: 'pass' | 'shot'): string {
   const pass = `
-    <h3>PASS ASSISTANCE</h3>
+    <h3>패스 보조</h3>
     <p><b>보조</b> · 방향키 쪽 넓은 범위에서 동료를 찾아 방향과 세기를 자동으로 맞춥니다.<br/>
     <b>세미</b> · 좁은 범위의 동료에게 방향과 세기를 맞추지만, 게이지에 따라 세기가 조금 달라집니다.<br/>
     <b>수동</b> · 방향키와 게이지 그대로. 동료가 없어도 원하는 곳으로 찰 수 있습니다.</p>
     <p style="margin-top:10px">어떤 설정이든 <b>짧은 패스 · 긴 패스 · 시야</b> 능력치와 압박, 약발에 따라 오차가 생깁니다.</p>`;
   const shot = `
-    <h3>SHOT ASSISTANCE</h3>
+    <h3>슛 보조</h3>
     <p><b>보조</b> · 방향키를 어디로 두든 골문 안을 노립니다 (입력은 좌우 선택).<br/>
     <b>세미</b> · 골문 근처까지만 보정. 방향을 잘못 주면 옆으로 빗나갑니다.<br/>
     <b>수동</b> · 방향키 방향 그대로 찹니다.</p>
     <p style="margin-top:10px">정확도는 <b>골 결정력</b>(박스 안) · <b>중거리 슛</b>(박스 밖) · <b>커브</b>(감아차기), 속도는 <b>슛 파워</b>. 압박·질주는 <b>침착성</b>이 버텨 줍니다.</p>`;
   return `<div class="card">${kind === 'pass' ? pass : shot}</div>`;
+}
+
+/** FC 온라인 표기: 양발 수치 (주발 5, 약발 1~5). 예) 오른발잡이 약발 3 → L3 R5 */
+export function footBadges(foot: 'L' | 'R', weakFoot: number): string {
+  const l = foot === 'L' ? 5 : weakFoot;
+  const r = foot === 'R' ? 5 : weakFoot;
+  return `<span class="foot${foot === 'L' ? ' main' : ''}">L<b>${l}</b></span><span class="foot${foot === 'R' ? ' main' : ''}">R<b>${r}</b></span>`;
 }

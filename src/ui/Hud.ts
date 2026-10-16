@@ -32,7 +32,7 @@ const SETPIECE_HINTS: Record<string, [string, string][]> = {
   corner: [['←→', '조준'], ['A', '크로스'], ['S', '짧은 패스']],
   goalkick: [['←→', '조준'], ['A', '롱킥'], ['S', '짧은 패스']],
 };
-const SETPIECE_TITLE: Record<string, string> = { throwin: 'THROW-IN', corner: 'CORNER', goalkick: 'GOAL KICK' };
+const SETPIECE_TITLE: Record<string, string> = { throwin: '스로인', corner: '코너킥', goalkick: '골킥' };
 
 const KIND_LABEL = { shoot: 'SHOT', pass: 'PASS', through: 'THROUGH', lob: 'LOB' } as const;
 
@@ -201,14 +201,11 @@ export class Hud {
     const prof = p.profile;
     el.style.setProperty('--team', hex(p.isKeeper ? c.keeper : c.shirt));
     el.style.setProperty('--team-ink', p.team === 1 && !p.isKeeper ? '#0b0f17' : '#fff');
-    const stars = '★'.repeat(prof.skill) + '<span style="opacity:.25">' + '★'.repeat(5 - prof.skill) + '</span>';
     el.innerHTML = `
       <div class="nb-num"><b>${prof.number}</b><small>${prof.pos}</small></div>
       <div class="nb-main">
         <span class="nb-name">${prof.short}</span>
-        <span class="nb-stars">${stars}</span>
-        <span class="nb-tag">${prof.foot === 'L' ? '왼발' : '오른발'}</span>
-        <span class="nb-tag ovr">${prof.ovr}</span>
+
       </div>
       <div class="nb-sta">${'<i></i>'.repeat(STA_SEGMENTS)}</div>`;
   }
@@ -231,7 +228,7 @@ export class Hud {
     if (mode === this.hintMode) return;
     this.hintMode = mode;
     const list = SETPIECE_HINTS[mode] ?? (mode === 'attack' ? ATTACK_HINTS : DEFENCE_HINTS);
-    const title = SETPIECE_TITLE[mode] ?? (mode === 'attack' ? 'ATTACK' : 'DEFENCE');
+    const title = SETPIECE_TITLE[mode] ?? (mode === 'attack' ? '공격' : '수비');
     this.hints.innerHTML =
       `<div class="hint-mode">${title}</div>` +
       list.map(([k, label]) => `<div class="hint">${label} ${k.split('+').map((x) => `<kbd>${x}</kbd>`).join('+')}</div>`).join('');
