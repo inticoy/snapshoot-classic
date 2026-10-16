@@ -70,8 +70,21 @@ describe('킥 동작 타이밍', () => {
     expect(match.ball.velocity.x).toBeGreaterThan(3);
   });
 
-  it.each([7, 42])('킥 동작을 켠 AI 대 AI 4분 (시드 %i): 멈춤 없이 끝나고 패스·슛이 이어진다', (seed) => {
-    const { match } = simulation(seed, { kickMotion: true, userControl: false });
+  it('킥 동작을 켠 AI 대 AI 4분 × 2경기: 멈춤 없이 끝나고 패스·슛이 이어진다', () => {
+    let shots = 0;
+    for (const seed of [7, 42]) {
+      const { match } = simulation(seed, { kickMotion: true, userControl: false });
+      const cmd = command();
+      for (let i = 0; i < 330 / PHYSICS.step && match.phase !== 'fulltime'; i++) {
+        match.update(PHYSICS.step, cmd);
+        match.events.length = 0;
+      }
+      expect(match.phase).toBe('fulltime');
+      expect(match.stats.passes[0] + match.stats.passes[1]).toBeGreaterThan(80);
+      shots += match.stats.shots[0] + match.stats.shots[1];
+    }
+    expect(shots).toBeGreaterThan(0);
+  });
     const cmd = command();
     for (let i = 0; i < 330 / PHYSICS.step && match.phase !== 'fulltime'; i++) {
       match.update(PHYSICS.step, cmd);

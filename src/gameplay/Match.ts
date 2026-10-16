@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
-import { BALL, GOAL, KEEPER, MATCH, PASS, PHYSICS, PITCH, PLAYER, SHOT } from '../config';
+import { BALL, DRIBBLE, GOAL, KEEPER, MATCH, PASS, PHYSICS, PITCH, PLAYER, SHOT } from '../config';
 import { Ball } from '../entities/Ball';
 import { Goal } from '../entities/Goal';
 import { Random } from '../core/Random';
@@ -26,6 +26,7 @@ export type Phase = 'kickoff' | 'playing' | 'out' | 'setpiece' | 'goal' | 'halft
 
 export type MatchEvent =
   | { type: 'kick'; speed: number }
+  | { type: 'touch'; speed: number }
   | { type: 'bounce'; speed: number }
   | { type: 'post'; speed: number }
   | { type: 'net'; speed: number }
@@ -101,6 +102,8 @@ export interface MatchOptions {
    * 끄면 예전처럼 즉시 찬다 (기존 물리·조작 테스트용)
    */
   kickMotion?: boolean;
+  /** 터치 드리블 (기본 켜짐). 끄면 공이 발 앞에 붙어 다닌다 */
+  dribbleTouches?: boolean;
 }
 
 export class Match {
@@ -454,7 +457,7 @@ export class Match {
     this.rules.update(dt);
     if (this.phase !== 'playing') return; // 어드밴티지 무효 → 프리킥
     this.updateWindups(dt);
-    this.carryBall(dt);
+    this.carryBall(dt, this.options.dribbleTouches !== false);
     this.stepWorld(dt);
     this.deflectOffBodies();
     this.checkAerial();
@@ -684,6 +687,22 @@ export class Match {
       if (move.length() > 1) move.normalize();
       if (containing) speedScale = cmd.sprint ? 0.95 : 0.7;
     }
+    // 공을 가진 채 손을 떼면 굴러가는 공까지 걸어가 발로 세운다 (FC처럼)
+    this.trapping = hasBall && move.lengthSq() < 0.01;
+    if (hasBall && this.options.dribbleTouches !== false) {
+      this.footPoint(p, tmp2);
+      tmp.set(bp.x - tmp2.x, 0, bp.z - tmp2.z);
+      const d = tmp.length();
+      if (this.trapping) {
+        if (d > 0.25) move.copy(tmp.multiplyScalar(Math.min(1, d / 1.5) / d));
+      } else if (d > 0.35) {
+        // 공이 발에서 떨어져 있으면 먼저 공 쪽으로 휘어 가서 닿은 뒤 새 방향으로 꺾는다
+        // 1m 이상 떨어지면 완전히 공을 쫓는다 (입력 방향은 닿은 뒤 꺾는 방향이 된다)
+        const pull = Math.min(1, (d - 0.35) / 0.65);
+        const len = move.length();
+        move.normalize().lerp(tmp.normalize(), pull).normalize().multiplyScalar(len);
+      }
+    }
     if (!p.busy) p.steer(move, cmd.sprint || autoSprint, hasBall, dt, speedScale);
     // 압박/견제 중에는 상대를 바라본다 (뒷걸음질)
     if ((pressing || containing) && !p.busy) {
@@ -888,8 +907,12 @@ export class Match {
 
   // ---------------------------------------------------------------- 공 & 몸싸움
 
-  /** 소유 중인 공을 발 앞에 붙여 다닌다 */
-  private carryBall(dt: number): void {
+  /** 소유 중인 공 다루기. touches면 터치 드리블, 아니면 발 앞에 붙여 다닌다 (킥오프 대기 등) */
+  private touchGap = 0;
+  /** 사용자가 공을 가진 채 입력을 뗐다: 앞으로 치지 않고 발로 세운다 */
+  private trapping = false;
+
+  private carryBall(dt: number, touches = false): void {
     const o = this.ball.owner;
     if (!o) return;
     if (o.isKeeper && this.ball.position.y > 0.4) {
@@ -897,6 +920,11 @@ export class Match {
       tmp.copy(o.pos).addScaledVector(o.facing, 0.32);
       cv.set(tmp.x, 0, tmp.z);
       this.ball.carry(cv, o.cannonVel, dt, 1.15);
+      return;
+    }
+    // 킥 동작 중에는 발 앞에 붙여 둔다 (차는 순간 위치가 흔들리지 않게)
+    if (touches && !this.windups.has(o)) {
+      this.touchDribble(o, dt);
       return;
     }
     // 스프린트 중에는 공을 조금 더 멀리 치고 나간다 (터치)
@@ -910,6 +938,69 @@ export class Match {
     tmp.copy(o.pos).addScaledVector(o.facing, reach);
     cv.set(tmp.x, 0, tmp.z);
     this.ball.carry(cv, o.cannonVel, dt);
+  }
+
+  /**
+   * 터치 드리블: 공은 굴러가고(구름 감속), 선수가 따라가 발이 닿을 때 다시 툭 찬다.
+   *  - 공이 몸 앞 가까이 오거나, 몸 방향과 공 방향이 어긋나면(방향 전환) 터치
+   *  - 질주 터치는 길게 치고 나가고, 드리블·볼 컨트롤이 좋을수록 짧고 정확하다
+   *  - 멈추면 발바닥으로 세워 발 앞에 둔다
+   *  - 공이 너무 멀어지면(헤비 터치) 소유를 잃는다
+   */
+  private touchDribble(o: Player, dt: number): void {
+    const body = this.ball.body, bp = body.position, bv = body.velocity;
+    const speed = Math.hypot(o.vel.x, o.vel.z);
+    const fx = o.facing.x, fz = o.facing.z;
+    const rx = bp.x - o.pos.x, rz = bp.z - o.pos.z;
+    const dist = Math.hypot(rx, rz);
+    if (dist > DRIBBLE.leash) {
+      this.ball.owner = null; // 헤비 터치: 이제 누구 공도 아니다
+      return;
+    }
+    const ahead = rx * fx + rz * fz;
+    // 구름 감속
+    let vx = bv.x, vz = bv.z;
+    const v = Math.hypot(vx, vz);
+    if (v > 0) {
+      const k = Math.max(0, v - (DRIBBLE.rollDecel + DRIBBLE.rollDamping * v) * dt) / v;
+      vx *= k;
+      vz *= k;
+    }
+    const st = o.profile.stats;
+    const ctrl = n(st.dribbling) * 0.6 + n(st.ballControl) * 0.4;
+    const moving = speed > 0.6 && !(this.trapping && this.isUserControlled(o));
+    const along = v > 0.3 ? (vx * fx + vz * fz) / v : 1;
+    this.touchGap -= dt;
+    // 발끝 기준 거리: 몸 옆이나 앞으로 굴러간 공은 따라가서 발이 닿아야 건드린다
+    this.footPoint(o, tmp2);
+    const footDist = Math.hypot(bp.x - tmp2.x, bp.z - tmp2.z);
+    const inReach = footDist < DRIBBLE.reach;
+    const close = ahead > -0.2 && ahead < DRIBBLE.touchLead + speed * 0.05;
+    // 방향을 꺾는 터치는 공이 발 바로 앞에 있을 때만
+    const turning = along < Math.cos(DRIBBLE.turnAngle) && footDist < DRIBBLE.turnReach;
+    if (moving && inReach && this.touchGap <= 0 && (close || turning)) {
+      const knock = (o.sprinting ? DRIBBLE.knockSprint : DRIBBLE.knockWalk) * (1.25 - 0.6 * ctrl) * (0.85 + 0.3 * this.random.next());
+      const u = speed + knock;
+      // 옆으로 벗어난 공은 몸 앞쪽으로 끌어오며 찬다
+      // side > 0: 공이 몸 왼쪽(+X 쪽)에 있다 → 오른쪽 벡터(-fz, fx) 방향으로 당긴다
+      const side = rx * fz - rz * fx;
+      vx = fx * u - fz * side * 2;
+      vz = fz * u + fx * side * 2;
+      this.touchGap = DRIBBLE.touchGap;
+      this.dribbleTouch++;
+      this.events.push({ type: 'touch', speed: u });
+    } else if (!moving && footDist < DRIBBLE.reach) {
+      // 멈춤: 발 앞 자리로 부드럽게 세운다 (굴러오던 공을 발바닥으로 받는 것도 터치)
+      if (v > 1 && this.touchGap <= 0) {
+        this.events.push({ type: 'touch', speed: v });
+        this.touchGap = DRIBBLE.touchGap;
+      }
+      this.footPoint(o, tmp).addScaledVector(o.facing, 0.12);
+      vx = (tmp.x - bp.x) * 6;
+      vz = (tmp.z - bp.z) * 6;
+    }
+    body.velocity.set(vx, Math.min(bv.y, 0), vz);
+    body.angularVelocity.set(vz / BALL.radius, 0, -vx / BALL.radius);
   }
 
   private resolveTackles(): void {
