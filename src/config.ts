@@ -99,8 +99,17 @@ export const PASS = {
   minSpeed: 8,
   maxSpeed: 22,
   chargeTime: 0.7,
+  /** 짧은 패스(S) 기본 세기 = shortBase + 거리 × shortPerMetre (m/s). 사용자 피드백: S가 Z+S처럼 세다 → 약 8% 낮춤
+   *  (15% 낮추면 받는 선수가 덜 움직여 첫 터치가 발에서 먼 곳에서 일어난다) */
+  shortBase: 4.4,
+  shortPerMetre: 0.46,
   // Z 패스: 낮은 궤적으로 빠르게 보내는 대신 방향 오차를 조금 늘린다.
-  drivenSpeed: 1.25,
+  /** Z+S·Z+A 세기 배수 (S보다 확실히 세게) */
+  drivenSpeed: 1.5,
+  /** Z+W: 세기는 W와 비슷하게, 대신 받는 선수 앞 빈 공간으로 더 길게 (lead × 배수 + 추가 m) */
+  drivenThroughSpeed: 1.05,
+  drivenThroughLead: 1.6,
+  drivenThroughExtra: 3,
   drivenError: 1.15,
   drivenLift: 0.12,
   lowLobTime: 0.72,

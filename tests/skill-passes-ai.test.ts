@@ -27,7 +27,12 @@ describe('Z 패스 3종', () => {
       match.random.reset(42);
       const fast = match.kicks.pass(p, new THREE.Vector3(1, 0, 0), driven, 0.55, assist);
       const vh = (r: typeof fast) => Math.hypot(r.vel.x, r.vel.z);
-      expect(vh(fast) / vh(normal)).toBeCloseTo(driven === 'lowLob' ? 1 / PASS.lowLobTime : PASS.drivenSpeed, 8);
+      if (driven === 'drivenThrough') {
+        // Z+W는 더 세게가 아니라 더 깊은 공간으로: 보조·세미는 목표가 멀어진 만큼만 빨라지고(1.5배 미만), 수동은 같은 거리를 W와 비슷한 세기로
+        const ratio = vh(fast) / vh(normal);
+        if (assist === 'manual') expect(ratio).toBeCloseTo(PASS.drivenThroughSpeed, 8);
+        else expect(ratio).toBeGreaterThan(1.05), expect(ratio).toBeLessThan(1.5);
+      } else expect(vh(fast) / vh(normal)).toBeCloseTo(driven === 'lowLob' ? 1 / PASS.lowLobTime : PASS.drivenSpeed, 8);
       expect(fast.vel.y).toBeLessThan(normal.vel.y);
       expect(fast.receiver).toBe(normal.receiver);
       if (assist !== 'manual') expect(fast.receiver).not.toBeNull();
@@ -59,10 +64,32 @@ describe('Z 패스 3종', () => {
     expect(b.events.filter((e) => e.type === 'skill')).toHaveLength(0);
     const frame = (r: typeof a) => r.frames.find((f) => f.t + 1e-6 >= r.events.find((e) => e.type === 'kick')!.t)!;
     const normal = frame(a).ball.vel, fast = frame(b).ball.vel;
-    expect(Math.hypot(fast[0], fast[2])).toBeGreaterThan(Math.hypot(normal[0], normal[2]) * 1.15);
+    // Z+S·Z+A는 확실히 세게, Z+W는 W와 비슷한 세기 (깊이는 아래 보조 테스트에서)
+    if (driven === 'drivenThrough') expect(Math.hypot(fast[0], fast[2])).toBeGreaterThan(Math.hypot(normal[0], normal[2]) * 0.8);
+    else expect(Math.hypot(fast[0], fast[2])).toBeGreaterThan(Math.hypot(normal[0], normal[2]) * 1.15);
     expect(fast[1]).toBeLessThan(normal[1]);
     if (driven === 'lowLob') expect(fast[1]).toBeGreaterThan(1);
   });
+});
+
+it('Z+W는 W보다 받는 선수 앞 공간으로 3m 이상 더 깊게, Z+S는 S보다 1.4배 이상 세게', () => {
+  for (const assist of ['assisted', 'semi'] as AssistLevel[]) {
+    const { match, p, mate } = passSetup();
+    const land = (kind: PassKind) => {
+      match.random.reset(3);
+      const r = match.kicks.pass(p, new THREE.Vector3(1, 0, 0), kind, 0.55, assist);
+      // 굴러가는 방향으로 받는 선수를 지나친 거리의 근사: 속도 방향 × (받는 선수 x 기준)
+      return { r, vh: Math.hypot(r.vel.x, r.vel.z) };
+    };
+    const w = land('through'), zw = land('drivenThrough');
+    // 같은 수신자, 더 긴 목표 → 더 멀리 굴러갈 세기 (구름 감속 기준 도달 거리 차이로 비교)
+    const reach = (v: number) => (v * v) / (2 * 1.6);
+    expect(zw.r.receiver).toBe(w.r.receiver);
+    expect(reach(zw.vh) - reach(w.vh), assist).toBeGreaterThan(3);
+    const s = land('short'), zs = land('driven');
+    expect(zs.vh / s.vh, assist).toBeGreaterThan(1.4);
+    expect(mate).toBeDefined();
+  }
 });
 
 describe('AI의 별·정면 1:1 조건', () => {

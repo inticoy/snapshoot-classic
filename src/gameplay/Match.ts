@@ -391,7 +391,7 @@ export class Match {
   private withKickMotion(p: Player, kind: MotionKind, vel: CANNON.Vec3, run: () => void, instant = false): void {
     if (this.windups.has(p)) return;
     const foot = this.kicks.footFactor(p).side === 1 ? 'R' : 'L';
-    const plan = this.options.kickMotion !== false ? planKick(p, kind, vel.x, vel.z, foot, this.random.next()) : null;
+    const plan = this.options.kickMotion !== false ? planKick(p, kind, vel.x, vel.z, foot, this.random.next(), this.ball.position.y) : null;
     if (!plan) {
       run();
       return;

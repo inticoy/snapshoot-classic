@@ -184,7 +184,9 @@ export class Kicks {
       if (throughBall) {
         // 동료가 상대 골대 쪽으로 뛰어들어갈 공간. 보조는 자동, 세미는 게이지로 거리
         const run = new THREE.Vector3(p.attackDir, 0, 0).lerp(d, 0.35).normalize();
-        const lead = assist === 'assisted' ? 4 + 5 * vision + 2 * charge : 3 + 9 * charge;
+        let lead = assist === 'assisted' ? 4 + 5 * vision + 2 * charge : 3 + 9 * charge;
+        // Z+W: 더 깊은 공간으로 (받는 선수가 뛰어서 따라잡는 공)
+        if (kind === 'drivenThrough') lead = lead * PASS.drivenThroughLead + PASS.drivenThroughExtra;
         tx = receiver.pos.x + run.x * lead;
         tz = receiver.pos.z + run.z * lead;
       } else {
@@ -223,9 +225,9 @@ export class Kicks {
       vel.set(dir2.x * vh, 0.5 * g() * T, dir2.z * vh);
     } else {
       // 받는 위치에서 6~9 m/s 정도로 도착하는 세기
-      const base = baseKind === 'through' ? 5.5 + D * 0.48 : 4.8 + D * 0.5;
+      const base = baseKind === 'through' ? 5.5 + D * 0.48 : PASS.shortBase + D * PASS.shortPerMetre;
       const speed = THREE.MathUtils.clamp(base * powerScale * speedErr, PASS.minSpeed * 0.8, PASS.maxSpeed + 3);
-      const vh = speed * (driven ? PASS.drivenSpeed : 1);
+      const vh = speed * (kind === 'drivenThrough' ? PASS.drivenThroughSpeed : driven ? PASS.drivenSpeed : 1);
       vel.set(dir2.x * vh, driven ? PASS.drivenLift : D > 22 ? 2.2 : 0.4, dir2.z * vh);
     }
 

@@ -51,6 +51,10 @@ export interface MotionQuery {
   foot?: 'L' | 'R';
   /** 0..1 무작위 (재현 가능한 경기 난수를 넘긴다) */
   random?: number;
+  /** 차는 순간 공 높이 (m). 주면 높이가 크게 다른 클립(땅볼에 헤딩·다이빙 헤딩 등)은 고르지 않는다 */
+  height?: number;
+  /** 넘어지며 끝나는 클립(next = 일어나기)도 허용 */
+  allowFall?: boolean;
 }
 
 const wrap = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
@@ -63,6 +67,8 @@ export function selectMotion(catalog: MotionEntry[], q: MotionQuery): { entry: M
   const S = MOTION_SELECT;
   for (const e of catalog) {
     if (e.kind !== q.kind) continue;
+    if (q.height !== undefined && Math.abs(e.height - q.height) > 0.45) continue;
+    if (!q.allowFall && e.next) continue;
     // 클립은 지금 몸 방향 그대로 시작한다. 공 방향(ballAngle)이 원하는 각도와 다를수록 감점
     // (실제 공은 킥 계산대로 나가므로, 차이는 '보이는 동작'의 어긋남이다)
     let score = (e.source === 'mocap' ? S.mocapBonus : 0) - Math.abs(wrap(q.angle - e.ballAngle)) * S.angleCost;

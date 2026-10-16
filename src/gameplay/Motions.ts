@@ -20,11 +20,12 @@ export interface KickPlan {
  * 킥 동작 고르기: 공을 보낼 방향(월드)과 지금 몸 방향·속도·쓰는 발로 가장 맞는 클립.
  * 모션캡처가 비슷하게 맞으면 우선, 각도·속도가 크게 다르면 그 상황에 맞는 GRF 동작.
  */
-export function planKick(p: Player, kind: MotionKind, dirX: number, dirZ: number, foot: 'L' | 'R', random: number): KickPlan | null {
+/** height: 차는 순간 공 높이 (땅볼 킥에 헤딩·다이빙 헤딩 클립이 뽑히지 않게) */
+export function planKick(p: Player, kind: MotionKind, dirX: number, dirZ: number, foot: 'L' | 'R', random: number, height = 0.11): KickPlan | null {
   const body = Math.atan2(p.facing.x, p.facing.z);
   const want = Math.atan2(dirX, dirZ);
   const angle = Math.atan2(Math.sin(want - body), Math.cos(want - body));
-  const pick = selectMotion(MOTION_CATALOG, { kind, speed: speedClass(p), angle, foot, random });
+  const pick = selectMotion(MOTION_CATALOG, { kind, speed: speedClass(p), angle, foot, random, height });
   if (!pick) return null;
   return { entry: pick.entry, facing: body, windup: Math.min(MOTION_SELECT.windup, pick.entry.key) };
 }
