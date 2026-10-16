@@ -511,3 +511,82 @@ kbd {
   .card.detail { flex-direction: column; }
   .sgroups { grid-template-columns: 1fr; width: 100%; }
 }
+
+/* ---------- 터치 조작 ---------- */
+button { font: inherit; color: inherit; cursor: pointer; }
+.menu-select { border: 0; background: none; text-align: left; flex: 1; padding: 4px 0; }
+.menu-item .value button, .menu-back {
+  min-width: 44px; min-height: 44px; border: 1px solid var(--line); border-radius: 5px;
+  background: var(--glass); color: var(--accent); touch-action: manipulation;
+}
+.menu-item .value button { font-size: 24px; }
+.menu-back { padding: 0 14px; }
+.touch-instructions { margin-bottom: 18px; }
+#touch-controls { position: fixed; inset: 0; pointer-events: none; }
+.touch-move { position: absolute; left: 0; top: 22%; width: 48%; bottom: 0; pointer-events: auto; touch-action: none; }
+.touch-stick {
+  position: absolute; width: 104px; height: 104px; margin: -52px 0 0 -52px;
+  border: 2px solid #ffffff66; border-radius: 50%; background: #07101c55;
+}
+.touch-stick i { position: absolute; width: 44px; height: 44px; left: 28px; top: 28px; border-radius: 50%; background: #ffffff88; }
+.touch-button {
+  position: absolute; width: 62px; height: 62px; border-radius: 50%; border: 1px solid #ffffff66;
+  background: #0b182cbb; color: #fff; font: 700 12px var(--font-ko); line-height: 1.25;
+  pointer-events: auto; touch-action: none; -webkit-touch-callout: none;
+  padding: 5px; right: calc(18px + env(safe-area-inset-right)); bottom: calc(28px + env(safe-area-inset-bottom));
+}
+.touch-button.held { background: #2ef59aaa; color: #04140c; border-color: var(--accent); }
+.touch-shoot { width: 76px; height: 76px; right: calc(24px + env(safe-area-inset-right)); bottom: calc(98px + env(safe-area-inset-bottom)); border-color: var(--accent); font-size: 16px; }
+.touch-pass { right: calc(96px + env(safe-area-inset-right)); }
+.touch-through { right: calc(100px + env(safe-area-inset-right)); bottom: calc(182px + env(safe-area-inset-bottom)); }
+.touch-lob { bottom: calc(194px + env(safe-area-inset-bottom)); }
+.touch-sprint { right: calc(170px + env(safe-area-inset-right)); bottom: calc(96px + env(safe-area-inset-bottom)); }
+.touch-support { right: calc(176px + env(safe-area-inset-right)); bottom: calc(176px + env(safe-area-inset-bottom)); }
+.touch-contain { right: calc(166px + env(safe-area-inset-right)); bottom: calc(22px + env(safe-area-inset-bottom)); }
+.touch-pause { top: calc(12px + env(safe-area-inset-top)); bottom: auto; width: 86px; height: 44px; border-radius: 6px; }
+#rotate-guide { display: none; }
+.touch-device #hints, .touch-device .menu-foot > span { display: none; }
+.touch-device #scene { touch-action: none; }
+.touch-device .overlay { padding: max(16px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left)); }
+.touch-device .menu-left { width: min(420px, 100%); }
+.touch-device .menu-title { font-size: 48px; margin-bottom: 16px; }
+.touch-device .menu-item { min-height: 48px; padding: 0 4px 0 12px; gap: 8px; }
+.touch-device .menu-item .ko { font-size: 16px; min-height: 48px; }
+.touch-device .menu-item .value { gap: 6px; font-size: 14px; }
+.touch-device .menu-foot { margin-top: 12px; }
+.touch-device .sb { top: calc(10px + env(safe-area-inset-top)); left: calc(12px + env(safe-area-inset-left)); height: 30px; }
+.touch-device .sb-clock { font-size: 16px; min-width: 60px; padding: 0 8px; }
+.touch-device .sb-team { font-size: 15px; padding: 0 8px; }
+.touch-device .sb-score { font-size: 18px; min-width: 28px; }
+.touch-device .ticker { top: calc(46px + env(safe-area-inset-top)); left: calc(12px + env(safe-area-inset-left)); max-width: 45vw; font-size: 11px; }
+/* 선수 바는 상단, 레이더는 중앙 하단에 두어 양손 조작 영역을 비운다. */
+.touch-device .nb { top: calc(76px + env(safe-area-inset-top)); bottom: auto; width: 150px; grid-template-columns: 34px 1fr; }
+.touch-device .nb-left { left: calc(12px + env(safe-area-inset-left)); }
+.touch-device .nb-right { left: calc(174px + env(safe-area-inset-left)); right: auto; grid-template-columns: 1fr 34px; }
+.touch-device .nb-num b { font-size: 19px; }
+.touch-device .nb-num small { font-size: 10px; }
+.touch-device .nb-main { padding: 4px 6px; }
+.touch-device .nb-name { font-size: 13px; }
+.touch-device .nb-tag, .touch-device .nb-stars { display: none; }
+.touch-device .nb-sta { padding: 0 6px 5px; gap: 2px; }
+.touch-device .nb-sta i { height: 3px; }
+.touch-device #radar { width: 132px !important; height: 84px !important; bottom: calc(10px + env(safe-area-inset-bottom)); }
+.touch-device .lower-third { left: 33%; right: 33%; bottom: 110px; min-width: 0; }
+.touch-device .lt-title { font-size: 24px; }
+.touch-device .lt-sub { font-size: 12px; }
+.touch-device .lt-body { padding: 8px; }
+.touch-device .lt-score { padding: 0 8px; font-size: 22px; }
+@media (min-width: 720px) and (max-width: 860px) {
+  .touch-device .menu { flex-direction: row; }
+  .touch-device .menu-left { width: 360px; }
+  .touch-device .menu-right { padding-top: 36px; }
+}
+@media (orientation: portrait) {
+  .touch-device #rotate-guide {
+    position: fixed; inset: 0; z-index: 10; display: flex; flex-direction: column; gap: 20px;
+    align-items: center; justify-content: center; text-align: center; background: #06090ff5;
+    font: 700 22px var(--font-ko); padding: 24px;
+  }
+  #rotate-guide b { font-size: 64px; color: var(--accent); }
+  #rotate-guide small { font-size: 13px; color: var(--muted); }
+}

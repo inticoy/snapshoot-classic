@@ -1,13 +1,14 @@
 import * as THREE from 'three';
-import { PHYSICS, PITCH } from '../config';
+import { GRAPHICS, PHYSICS, PITCH } from '../config';
 import { Input } from './Input';
+import { TouchControls } from '../ui/TouchControls';
 import { PhysicsWorld } from '../physics/PhysicsWorld';
 import { Stadium } from '../environment/Stadium';
 import { Match, type UserCommand } from '../gameplay/Match';
 import { CameraRig } from '../camera/CameraRig';
 import { Hud } from '../ui/Hud';
 import { Menu, assistPanel, controlsPanel, matchupPanel, playerDetailPanel, squadPanel, statsPanel, type MenuScreen } from '../ui/Menu';
-import { ASSIST_LABEL, MOVE_ASSIST_LABEL, cycleAssist, cycleMoveAssist, settings, togglePhysicsPreset } from './Settings';
+import { ASSIST_LABEL, MOVE_ASSIST_LABEL, GRAPHICS_LABEL, cycleAssist, cycleMoveAssist, cycleGraphics, graphicsQuality, settings, togglePhysicsPreset } from './Settings';
 import { PRESET_LABEL, activePhysics } from '../physics/presets';
 import { Sound } from '../audio/Sound';
 import { TEAMS } from '../data/Teams';
@@ -31,6 +32,8 @@ export class Game {
   private readonly menu = new Menu();
   private readonly sound = new Sound();
   private readonly marker: THREE.Group;
+  private readonly touch: TouchControls;
+  private readonly sun = new THREE.DirectionalLight(0xfff3e0, 2.2);
 
   private state: AppState = 'menu';
   private accumulator = 0;
@@ -52,7 +55,7 @@ export class Game {
 
   constructor(canvas: HTMLCanvasElement) {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, GRAPHICS.high.pixelRatio));
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -83,6 +86,10 @@ export class Game {
       if (e.code === 'KeyM' && this.state === 'playing') this.hud.tick(this.toggleSound() ? '사운드 끔' : '사운드 켬');
     });
 
+    this.touch = new TouchControls(this.input, () => this.match.cancelUserCharge(), () => this.applyGraphics(true), () => {
+      if (this.state === 'playing') this.openPauseMenu();
+    });
+    this.applyGraphics(this.touch.detected);
     this.openMainMenu();
   }
 
@@ -160,6 +167,14 @@ export class Game {
         onRight: () => this.toggleSound(),
         panel: () => `<div class="card"><h3>AUDIO</h3><p>효과음과 관중 소리를 켜거나 끕니다. 경기 중 <kbd>M</kbd> 키로도 바꿀 수 있어요.</p></div>`,
       },
+      {
+        id: 'graphics',
+        label: '그래픽 품질',
+        value: () => GRAPHICS_LABEL[settings.graphicsQuality],
+        onLeft: () => { cycleGraphics(-1); this.applyGraphics(this.touch.detected); },
+        onRight: () => { cycleGraphics(1); this.applyGraphics(this.touch.detected); },
+        panel: () => `<div class="card"><h3>GRAPHICS</h3><p>자동은 터치 기기 또는 CPU 4코어 이하에서 낮음으로 동작합니다. 낮음은 픽셀 비율 최대 1.25, 그림자 1024, 관중 25%로 줄입니다. 높음은 픽셀 비율 최대 2, 그림자 2048, 전체 관중을 표시합니다.</p></div>`,
+      },
       { id: 'controls', label: '조작법', panel: controlsPanel, onSelect: () => {} },
     ];
   }
@@ -194,6 +209,8 @@ export class Game {
 
   private openPauseMenu(): void {
     this.state = 'paused';
+    this.match.cancelUserCharge();
+    this.input.clearVirtual();
     const [h, a] = this.match.score;
     this.menu.open({
       eyebrow: `PAUSED · ${this.clockText()}`,
@@ -259,6 +276,10 @@ export class Game {
   // ---------------------------------------------------------------- 루프
 
   private frame(dt: number): void {
+    const restart = this.match.setPieces.current;
+    const mode = restart?.team === 0 ? restart.kind
+      : this.match.userAttacking || this.match.ball.owner?.team === 0 ? 'attack' : 'defence';
+    this.touch.update(this.state === 'playing', mode);
     const menuWasVisible = this.menu.visible;
     if (menuWasVisible) {
       for (const code of this.input.drainPresses()) if (MENU_KEYS.includes(code)) this.menu.handleKey(code);
@@ -427,10 +448,10 @@ export class Game {
 
   private setupLights(): void {
     this.scene.add(new THREE.HemisphereLight(0xcfe0ff, 0x2a3b22, 0.9));
-    const sun = new THREE.DirectionalLight(0xfff3e0, 2.2);
+    const sun = this.sun;
     sun.position.set(-25, 45, 20);
     sun.castShadow = true;
-    sun.shadow.mapSize.set(2048, 2048);
+    sun.shadow.mapSize.set(GRAPHICS.high.shadowSize, GRAPHICS.high.shadowSize);
     const s = sun.shadow.camera;
     s.left = -PITCH.halfL - 6;
     s.right = PITCH.halfL + 6;
@@ -446,8 +467,20 @@ export class Game {
     this.scene.add(fill);
   }
 
+  private applyGraphics(touch: boolean): void {
+    const profile = GRAPHICS[graphicsQuality(touch, navigator.hardwareConcurrency ?? 8)];
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, profile.pixelRatio));
+    if (this.sun.shadow.mapSize.x !== profile.shadowSize) {
+      this.sun.shadow.mapSize.set(profile.shadowSize, profile.shadowSize);
+      this.sun.shadow.map?.dispose();
+      this.sun.shadow.map = null;
+    }
+    this.stadium.setCrowdDensity(profile.crowdDensity);
+  }
+
   private resize(): void {
     const w = window.innerWidth, h = window.innerHeight;
+    this.applyGraphics(this.touch?.detected ?? window.matchMedia('(pointer: coarse)').matches);
     this.renderer.setSize(w, h, false);
     this.rig.resize(w / h);
   }

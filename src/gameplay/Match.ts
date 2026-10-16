@@ -433,6 +433,18 @@ export class Match {
 
   // ---------------------------------------------------------------- 사용자 조작
 
+  /** 터치 라벨과 경기 판정이 같은 공격/수비 경계를 사용한다. */
+  get userAttacking(): boolean {
+    const p = this.controlled, owner = this.ball.owner, bp = this.ball.position;
+    const incoming = !owner && (this.passTarget === p || this.ballComingTo(p));
+    return owner === p || (!owner && (Math.hypot(bp.x - p.pos.x, bp.z - p.pos.z) < 4.5 || incoming));
+  }
+
+  cancelUserCharge(): void {
+    this.charge = null;
+    this.queued = null;
+  }
+
   private handleUser(dt: number, cmd: UserCommand): void {
     const p = this.controlled;
     const owner = this.ball.owner;
@@ -440,10 +452,7 @@ export class Match {
     const teamHasBall = owner?.team === p.team;
     const oppHasBall = !!owner && owner.team !== p.team;
     const bp = this.ball.position;
-    const ballDist = Math.hypot(bp.x - p.pos.x, bp.z - p.pos.z);
-    // 공을 가졌거나, 공이 나에게 오는 중이면 공격 입력 (원터치 · 헤더 · 발리 예약 가능)
-    const incoming = !owner && (this.passTarget === p || this.ballComingTo(p));
-    const attacking = hasBall || (!owner && (ballDist < 4.5 || incoming));
+    const attacking = this.userAttacking;
 
     // S (수비 시) = 선수 변경
     if (cmd.pass.pressed && !attacking && !teamHasBall) this.switchToNearest();

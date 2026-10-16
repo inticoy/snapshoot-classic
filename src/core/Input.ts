@@ -61,6 +61,45 @@ export class Input {
   /** 메뉴 조작용: 눌린 순서 그대로 (같은 키 연타도 보존) */
   private readonly pressOrder: string[] = [];
 
+  private readonly virtual = new Map<string, Set<Action>>();
+  private readonly virtualPressed = new Set<Action>();
+  private readonly virtualReleased = new Set<Action>();
+  private readonly pulses = new Set<Action>();
+  private touchAxis = { x: 0, y: 0 };
+
+  /** 포인터마다 소스를 분리해 한 손을 떼어도 다른 손/키보드 입력을 유지한다. */
+  setActions(source: string, actions: Action[]): void {
+    const before = new Set(Object.keys(ACTION_KEYS).filter((a) => this.isDown(a as Action)) as Action[]);
+    if (actions.length) this.virtual.set(source, new Set(actions));
+    else this.virtual.delete(source);
+    for (const action of Object.keys(ACTION_KEYS) as Action[]) {
+      const held = this.isDown(action);
+      if (held && !before.has(action)) this.virtualPressed.add(action);
+      if (!held && before.has(action)) this.virtualReleased.add(action);
+    }
+  }
+
+  /** 뗄 때 결정한 스와이프 보조키를 다음 고정 스텝까지 보존한다. */
+  pulse(action: Action): void { this.pulses.add(action); }
+
+  setMove(x: number, y: number): void {
+    const scale = Math.max(1, Math.hypot(x, y));
+    this.touchAxis = { x: x / scale, y: y / scale };
+  }
+
+  /** 취소는 킥의 release가 아니다. 호출 측에서도 진행 중인 차지를 취소한다. */
+  clearVirtual(): void {
+    this.clearVirtualActions();
+    this.setMove(0, 0);
+  }
+
+  clearVirtualActions(): void {
+    this.virtual.clear();
+    this.virtualPressed.clear();
+    this.virtualReleased.clear();
+    this.pulses.clear();
+  }
+
   constructor(target: Window = window) {
     target.addEventListener('keydown', (e) => {
       if (GAME_KEYS.has(e.code)) e.preventDefault();
@@ -80,15 +119,17 @@ export class Input {
   }
 
   isDown(action: Action): boolean {
-    return ACTION_KEYS[action].some((k) => this.down.has(k));
+    if (ACTION_KEYS[action].some((k) => this.down.has(k)) || this.pulses.has(action)) return true;
+    for (const actions of this.virtual.values()) if (actions.has(action)) return true;
+    return false;
   }
 
   wasPressed(action: Action): boolean {
-    return ACTION_KEYS[action].some((k) => this.pressedQueue.has(k));
+    return ACTION_KEYS[action].some((k) => this.pressedQueue.has(k)) || this.virtualPressed.has(action);
   }
 
   wasReleased(action: Action): boolean {
-    return ACTION_KEYS[action].some((k) => this.releasedQueue.has(k)) && !this.isDown(action);
+    return (ACTION_KEYS[action].some((k) => this.releasedQueue.has(k)) || this.virtualReleased.has(action)) && !this.isDown(action);
   }
 
   /** 이번 프레임까지 눌린 키들을 순서대로 꺼낸다 */
@@ -105,8 +146,10 @@ export class Input {
     const has = (keys: string[]) => keys.some((k) => this.down.has(k));
     let x = (has(MOVE_KEYS.right) ? 1 : 0) - (has(MOVE_KEYS.left) ? 1 : 0);
     let y = (has(MOVE_KEYS.up) ? 1 : 0) - (has(MOVE_KEYS.down) ? 1 : 0);
+    x += this.touchAxis.x;
+    y += this.touchAxis.y;
     const len = Math.hypot(x, y);
-    if (len > 0) {
+    if (len > 1) {
       x /= len;
       y /= len;
     }
@@ -117,5 +160,8 @@ export class Input {
   endFrame(): void {
     this.pressedQueue.clear();
     this.releasedQueue.clear();
+    this.virtualPressed.clear();
+    this.virtualReleased.clear();
+    this.pulses.clear();
   }
 }

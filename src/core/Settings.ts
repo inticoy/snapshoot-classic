@@ -25,17 +25,22 @@ export const MOVE_ASSIST_LABEL: Record<MoveAssist, string> = { none: '없음', l
 export const MOVE_ASSIST_TIME: Record<MoveAssist, number> = { none: 0, low: 0.25, high: 0.55 };
 const MOVE_ORDER: MoveAssist[] = ['none', 'low', 'high'];
 
+export type GraphicsQuality = 'auto' | 'low' | 'high';
+export const GRAPHICS_LABEL: Record<GraphicsQuality, string> = { auto: '자동', low: '낮음', high: '높음' };
+const GRAPHICS_ORDER: GraphicsQuality[] = ['auto', 'low', 'high'];
+
 interface SettingsData {
   passAssist: AssistLevel;
   shotAssist: AssistLevel;
   moveAssist: MoveAssist;
   physicsPreset: PresetName;
+  graphicsQuality: GraphicsQuality;
 }
 
 const KEY = 'snapshoot-classic:settings';
 
 function load(): SettingsData {
-  const fallback: SettingsData = { passAssist: 'assisted', shotAssist: 'assisted', moveAssist: 'high', physicsPreset: 'arcade' };
+  const fallback: SettingsData = { passAssist: 'assisted', shotAssist: 'assisted', moveAssist: 'high', physicsPreset: 'arcade', graphicsQuality: 'auto' };
   try {
     const raw = localStorage.getItem(KEY);
     if (!raw) return fallback;
@@ -45,6 +50,7 @@ function load(): SettingsData {
       shotAssist: ORDER.includes(parsed.shotAssist!) ? parsed.shotAssist! : fallback.shotAssist,
       moveAssist: MOVE_ORDER.includes(parsed.moveAssist!) ? parsed.moveAssist! : fallback.moveAssist,
       physicsPreset: parsed.physicsPreset === 'real' ? 'real' : 'arcade',
+      graphicsQuality: GRAPHICS_ORDER.includes(parsed.graphicsQuality!) ? parsed.graphicsQuality! : 'auto',
     };
   } catch {
     return fallback;
@@ -79,4 +85,15 @@ function save(): void {
   } catch {
     // 저장이 막혀 있어도 이번 세션에서는 동작한다
   }
+}
+
+export function cycleGraphics(dir: 1 | -1): void {
+  const i = GRAPHICS_ORDER.indexOf(settings.graphicsQuality);
+  settings.graphicsQuality = GRAPHICS_ORDER[(i + dir + GRAPHICS_ORDER.length) % GRAPHICS_ORDER.length];
+  save();
+}
+
+/** 터치 또는 적은 CPU 코어는 자동 품질에서 렌더링 비용을 줄인다. */
+export function graphicsQuality(touch: boolean, cores: number): 'low' | 'high' {
+  return settings.graphicsQuality === 'auto' ? (touch || cores <= 4 ? 'low' : 'high') : settings.graphicsQuality;
 }

@@ -102,3 +102,10 @@ export const AI = {
   shootRange: 20,
   speedFactor: 0.96,
 };
+
+// 화면 픽셀 기준 입력 임계값: 작은 손떨림은 이동/슛 제스처로 보지 않는다.
+export const TOUCH = { joystickRadius: 52, deadZone: 0.12, swipeDistance: 30 };
+export const GRAPHICS = {
+  high: { pixelRatio: 2, shadowSize: 2048, crowdDensity: 1 },
+  low: { pixelRatio: 1.25, shadowSize: 1024, crowdDensity: 0.25 },
+};

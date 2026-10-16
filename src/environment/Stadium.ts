@@ -9,7 +9,8 @@ const AREA_W = PITCH.width + PITCH.runoffSide * 2;
 export class Stadium {
   readonly group = new THREE.Group();
   private crowd!: THREE.InstancedMesh;
-  private crowdBase: { pos: THREE.Vector3; phase: number; rotY: number }[] = [];
+  private crowdBase: { pos: THREE.Vector3; phase: number; rotY: number; color: THREE.Color }[] = [];
+  private density = 1;
   private excitement = 0;
   private time = 0;
 
@@ -201,7 +202,7 @@ export class Stadium {
       color.setHex(palette[Math.floor(visualRandom.next() * palette.length)]);
       color.offsetHSL(0, 0, (visualRandom.next() - 0.5) * 0.1);
       this.crowd.setColorAt(i, color);
-      this.crowdBase.push({ pos: p.pos.clone(), phase: visualRandom.next() * Math.PI * 2, rotY: p.rotY });
+      this.crowdBase.push({ pos: p.pos.clone(), phase: visualRandom.next() * Math.PI * 2, rotY: p.rotY, color: color.clone() });
     });
     this.group.add(this.crowd);
   }
@@ -224,6 +225,16 @@ export class Stadium {
     }
   }
 
+  setCrowdDensity(density: number): void {
+    if (this.density === density) return;
+    this.density = density;
+    this.crowd.count = Math.floor(this.crowdBase.length * density);
+    this.updateCrowd();
+    // 밀도가 바뀌어도 모든 관중석에 고르게 배치한다.
+    for (let i = 0; i < this.crowd.count; i++) this.crowd.setColorAt(i, this.crowdBase[Math.floor(i / density)].color);
+    this.crowd.instanceColor!.needsUpdate = true;
+  }
+
   /** 골이 들어가면 관중이 들썩인다 */
   cheer(amount = 1): void {
     this.excitement = Math.max(this.excitement, amount);
@@ -233,14 +244,19 @@ export class Stadium {
     this.time += dt;
     if (this.excitement < 0.01) return;
     this.excitement *= Math.exp(-0.45 * dt);
+    this.updateCrowd();
+  }
+
+  private updateCrowd(): void {
     const dummy = new THREE.Object3D();
-    this.crowdBase.forEach((p, i) => {
+    for (let i = 0; i < this.crowd.count; i++) {
+      const p = this.crowdBase[Math.floor(i / this.density)];
       dummy.position.copy(p.pos);
       dummy.position.y += Math.max(0, Math.sin(this.time * 11 + p.phase)) * 0.35 * this.excitement;
       dummy.rotation.y = p.rotY;
       dummy.updateMatrix();
       this.crowd.setMatrixAt(i, dummy.matrix);
-    });
+    }
     this.crowd.instanceMatrix.needsUpdate = true;
   }
 }

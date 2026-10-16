@@ -86,9 +86,9 @@ export class Menu {
     const items = s.items
       .map((it, i) => {
         const value = it.value
-          ? `<span class="value"><b>‹</b>${it.value()}<b>›</b></span>`
+          ? `<span class="value"><button type="button" data-dir="left" aria-label="${it.label} 이전 값">‹</button><span>${it.value()}</span><button type="button" data-dir="right" aria-label="${it.label} 다음 값">›</button></span>`
           : '';
-        return `<li class="menu-item${i === this.index ? ' active' : ''}" data-i="${i}"><span class="ko">${it.label}</span>${value}</li>`;
+        return `<li class="menu-item${i === this.index ? ' active' : ''}" data-i="${i}"><button type="button" class="menu-select ko">${it.label}</button>${value}</li>`;
       })
       .join('');
     this.root.innerHTML = `
@@ -101,24 +101,32 @@ export class Menu {
             <span><kbd>↑</kbd><kbd>↓</kbd> 이동</span>
             <span><kbd>←</kbd><kbd>→</kbd> 변경</span>
             <span><kbd>Enter</kbd> 선택</span>
-            ${s.onBack ? '<span><kbd>Esc</kbd> 뒤로</span>' : ''}
+            ${s.onBack ? '<button type="button" class="menu-back">뒤로</button>' : ''}
           </div>
         </div>
         <div class="menu-right">${active.panel ? active.panel() : s.panel()}</div>
       </div>`;
     this.root.querySelectorAll<HTMLElement>('.menu-item').forEach((el) => {
       const i = Number(el.dataset.i);
-      el.addEventListener('mouseenter', () => {
-        if (this.index !== i) {
+      el.addEventListener('pointerenter', (event) => {
+        if (event.pointerType === 'mouse' && this.index !== i) {
           this.index = i;
           this.render();
         }
+      });
+      el.querySelectorAll<HTMLButtonElement>('[data-dir]').forEach((button) => {
+        button.addEventListener('click', (event) => {
+          event.stopPropagation();
+          this.index = i;
+          this.handleKey(button.dataset.dir === 'left' ? 'ArrowLeft' : 'ArrowRight');
+        });
       });
       el.addEventListener('click', () => {
         this.index = i;
         this.handleKey('Enter');
       });
     });
+    this.root.querySelector('.menu-back')?.addEventListener('click', () => s.onBack?.());
   }
 }
 
@@ -145,7 +153,9 @@ export function controlsPanel(): string {
     `<li><span class="keys">${keys.map((k) => `<kbd>${k}</kbd>`).join('')}</span>${label}</li>`;
   return `
     <div class="card">
-      <h3>CONTROLS · FC 온라인 키보드 배치</h3>
+      <h3>CONTROLS</h3>
+      <p class="touch-instructions">왼쪽 빈 곳을 누르고 드래그하면 이동합니다. 오른쪽 슛/패스/스루/로빙을 꾹 눌러 파워를 모으고 뗍니다. 슛에서 위로 스와이프하며 떼면 칩슛, 좌우로 떼면 감아차기입니다. 질주·압박·동료 압박·견제는 누르는 동안 동작합니다. 수비 때 패스는 선수 변경, 스루는 스탠딩 태클, 로빙은 슬라이딩으로 바뀝니다.</p>
+      <h4>FC 온라인 키보드 배치</h4>
       <div class="keymap">
         <div>
           <h4>ATTACK</h4>
