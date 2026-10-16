@@ -11,7 +11,7 @@ const TELE_CAMERA = {
   backFromTouchline: 22,
   endMargin: 9,
   followX: 0.9,
-  followZ: 0.85, // 공이 먼 쪽/가까운 쪽으로 가면 카메라도 앞뒤로 따라가 거리를 거의 일정하게 (줌은 남은 차이만 보정)
+  followZ: 0.45, // 공이 먼 쪽/가까운 쪽으로 가면 카메라도 앞뒤로 조금 따라간다 (나머지 거리 차이는 줌으로 보정)
   minFov: 14,
   maxFov: 40,
 };

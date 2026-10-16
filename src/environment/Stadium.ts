@@ -180,7 +180,8 @@ export class Stadium {
     const ex = AREA_L / 2;
     const ez = AREA_W / 2;
     addStand(AREA_L + 4, 0, -ez, 0);
-    addStand(AREA_L + 4, 0, ez, Math.PI, false);
+    // 카메라 쪽(가까운) 관중석은 만들지 않는다: 실제 중계/FIFA처럼 카메라가 그 관중석 위에 있어 화면에 안 잡히고,
+    // 공이 가까운 터치라인에 오면 화면 아래를 가리기 때문
     addStand(AREA_W, -ex, 0, Math.PI / 2);
     addStand(AREA_W, ex, 0, -Math.PI / 2);
 
