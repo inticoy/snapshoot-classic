@@ -2,7 +2,15 @@ import * as THREE from 'three';
 import { CAMERA, PITCH } from '../config';
 import { visualRandom } from '../core/Random';
 
-export type CameraMode = 'broadcast' | 'pro';
+// TV 중계 (FIFA 기본 카메라 느낌): 관중석 높은 곳에서 망원(좁은 화각)으로 당겨 찍는다.
+// 원근 왜곡이 적고 선수가 크게 보인다. 카메라는 터치라인 밖에 고정, 좌우로만 공을 따라간다.
+// CAMERA(config.ts)는 '넓은 중계' 설정.
+const TELE_CAMERA = { fov: 24, height: 27, backFromTouchline: 44, endMargin: 9, followX: 0.85 };
+
+export type CameraMode = 'tele' | 'broadcast' | 'pro';
+
+export const CAMERA_LABEL: Record<CameraMode, string> = { tele: 'TV 중계', broadcast: '넓은 중계', pro: '선수 뒤' };
+const ORDER: CameraMode[] = ['tele', 'broadcast', 'pro'];
 
 /**
  * 중계 카메라(옆에서) / 프로 카메라(선수 뒤에서).
@@ -10,7 +18,7 @@ export type CameraMode = 'broadcast' | 'pro';
  */
 export class CameraRig {
   readonly camera: THREE.PerspectiveCamera;
-  mode: CameraMode = 'broadcast';
+  mode: CameraMode = 'tele';
   private readonly pos = new THREE.Vector3(0, CAMERA.height, CAMERA.distance);
   private readonly look = new THREE.Vector3();
   private readonly desiredPos = new THREE.Vector3();
@@ -23,17 +31,18 @@ export class CameraRig {
   }
 
   toggle(): CameraMode {
-    this.mode = this.mode === 'broadcast' ? 'pro' : 'broadcast';
+    this.mode = ORDER[(ORDER.indexOf(this.mode) + 1) % ORDER.length];
+    this.applyFov();
     return this.mode;
   }
 
   /** 화면 위쪽이 가리키는 지면 방향 */
   forward(out: THREE.Vector3): THREE.Vector3 {
-    return this.mode === 'broadcast' ? out.set(0, 0, -1) : out.set(1, 0, 0);
+    return this.mode !== 'pro' ? out.set(0, 0, -1) : out.set(1, 0, 0);
   }
 
   right(out: THREE.Vector3): THREE.Vector3 {
-    return this.mode === 'broadcast' ? out.set(1, 0, 0) : out.set(0, 0, 1);
+    return this.mode !== 'pro' ? out.set(1, 0, 0) : out.set(0, 0, 1);
   }
 
   addShake(amount: number): void {
@@ -50,6 +59,12 @@ export class CameraRig {
       // 득점자 클로즈업
       this.desiredPos.set(celebrate.x + (this.mode === 'pro' ? -6 : 0), 3.2, celebrate.z + (this.mode === 'pro' ? 0 : 7));
       this.desiredLook.set(celebrate.x, 1.2, celebrate.z);
+    } else if (this.mode === 'tele') {
+      // 관중석 고정 위치에서 좌우로 따라가며 공을 바라본다 (망원)
+      const fx = THREE.MathUtils.clamp(ball.x * TELE_CAMERA.followX + focus.x * 0.1, -PITCH.halfL + TELE_CAMERA.endMargin, PITCH.halfL - TELE_CAMERA.endMargin);
+      const fz = ball.z * 0.85 + focus.z * 0.15;
+      this.desiredPos.set(fx, TELE_CAMERA.height, PITCH.halfW + TELE_CAMERA.backFromTouchline);
+      this.desiredLook.set(ball.x * 0.9 + focus.x * 0.1, 0, fz);
     } else if (this.mode === 'broadcast') {
       // 공과 조종 선수 사이를 따라가되, 경기장 끝에서는 멈춘다
       const fx = THREE.MathUtils.clamp(ball.x * 0.8 + focus.x * 0.2, -PITCH.halfL + CAMERA.endMargin, PITCH.halfL - CAMERA.endMargin);
@@ -77,8 +92,13 @@ export class CameraRig {
 
   resize(aspect: number): void {
     this.camera.aspect = aspect;
+    this.applyFov();
+  }
+
+  private applyFov(): void {
     // 세로로 긴 화면에서는 더 넓게
-    this.camera.fov = aspect < 1 ? 60 : CAMERA.fov;
+    const base = this.mode === 'tele' ? TELE_CAMERA.fov : CAMERA.fov;
+    this.camera.fov = this.camera.aspect < 1 ? base * 1.45 : base;
     this.camera.updateProjectionMatrix();
   }
 }

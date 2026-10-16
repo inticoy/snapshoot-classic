@@ -5,7 +5,7 @@ import { TouchControls } from '../ui/TouchControls';
 import { PhysicsWorld } from '../physics/PhysicsWorld';
 import { Stadium } from '../environment/Stadium';
 import { Match, type UserCommand } from '../gameplay/Match';
-import { CameraRig } from '../camera/CameraRig';
+import { CAMERA_LABEL, CameraRig } from '../camera/CameraRig';
 import { Hud } from '../ui/Hud';
 import { Menu, assistPanel, controlsPanel, matchupPanel, playerDetailPanel, squadPanel, statsPanel, type MenuScreen } from '../ui/Menu';
 import { ASSIST_LABEL, MOVE_ASSIST_LABEL, GRAPHICS_LABEL, cycleAssist, cycleMoveAssist, cycleGraphics, graphicsQuality, settings, togglePhysicsPreset } from './Settings';
@@ -154,10 +154,10 @@ export class Game {
       {
         id: 'camera',
         label: '카메라',
-        value: () => (this.rig.mode === 'broadcast' ? '중계 카메라' : '선수 뒤 카메라'),
+        value: () => CAMERA_LABEL[this.rig.mode],
         onLeft: () => this.rig.toggle(),
         onRight: () => this.rig.toggle(),
-        panel: () => `<div class="card"><h3>CAMERA</h3><p>중계 카메라는 옆에서 경기장 전체를 보여주고, 선수 뒤 카메라는 공격 방향을 정면으로 봅니다. 경기 중 <kbd>V</kbd> 로도 바꿀 수 있어요.</p></div>`,
+        panel: () => `<div class="card"><h3>CAMERA</h3><p><b>TV 중계</b>는 FIFA 기본 카메라처럼 관중석 높은 곳에서 망원으로 당겨 찍어 선수가 크게 보이고, <b>넓은 중계</b>는 가까이서 넓게, <b>선수 뒤</b>는 공격 방향을 정면으로 봅니다. 경기 중 <kbd>V</kbd> 로도 바꿀 수 있어요.</p></div>`,
       },
       {
         id: 'sound',
@@ -289,7 +289,7 @@ export class Game {
         this.input.endFrame();
         this.openPauseMenu();
       } else {
-        if (this.input.wasPressed('camera')) this.hud.tick(this.rig.toggle() === 'pro' ? '선수 뒤 카메라' : '중계 카메라', 1);
+        if (this.input.wasPressed('camera')) this.hud.tick(`${CAMERA_LABEL[this.rig.toggle()]} 카메라`, 1);
         this.accumulator += dt;
         let steps = 0;
         while (this.accumulator >= PHYSICS.step && steps < 12) {
