@@ -82,6 +82,10 @@ export class Game {
     this.rig = new CameraRig(window.innerWidth / window.innerHeight);
     this.resize();
     window.addEventListener('resize', () => this.resize());
+    // 모바일 회전 직후에는 innerWidth/innerHeight가 늦게 바뀌므로 회전·뷰포트 변화 뒤에 다시 맞춘다
+    const later = () => [60, 250, 600].forEach((ms) => setTimeout(() => this.resize(), ms));
+    window.addEventListener('orientationchange', later);
+    window.visualViewport?.addEventListener('resize', later);
     window.addEventListener('keydown', (e) => {
       if (e.code === 'KeyM' && this.state === 'playing') this.hud.tick(this.toggleSound() ? '사운드 끔' : '사운드 켬');
     });
@@ -173,7 +177,7 @@ export class Game {
         value: () => GRAPHICS_LABEL[settings.graphicsQuality],
         onLeft: () => { cycleGraphics(-1); this.applyGraphics(this.touch.detected); },
         onRight: () => { cycleGraphics(1); this.applyGraphics(this.touch.detected); },
-        panel: () => `<div class="card"><h3>그래픽 품질</h3><p>자동은 터치 기기 또는 CPU 4코어 이하에서 낮음으로 동작합니다. 낮음은 픽셀 비율 최대 1.25, 그림자 1024, 관중 25%로 줄입니다. 높음은 픽셀 비율 최대 2, 그림자 2048, 전체 관중을 표시합니다.</p></div>`,
+        panel: () => `<div class="card"><h3>그래픽 품질</h3><p>자동은 터치 기기 또는 CPU 4코어 이하에서 낮음으로 동작합니다. 낮음은 픽셀 비율 최대 1.75, 그림자 1024, 관중 25%로 줄입니다. 높음은 픽셀 비율 최대 2, 그림자 2048, 전체 관중을 표시합니다.</p></div>`,
       },
       { id: 'controls', label: '조작법', panel: controlsPanel, onSelect: () => {} },
     ];
@@ -306,6 +310,7 @@ export class Game {
   // ---------------------------------------------------------------- 루프
 
   private frame(dt: number): void {
+    this.ensureViewSize();
     const restart = this.match.setPieces.current;
     const mode = restart?.team === 0 ? restart.kind
       : this.match.userAttacking || this.match.ball.owner?.team === 0 ? 'attack' : 'defence';
@@ -511,10 +516,28 @@ export class Game {
     this.stadium.setCrowdDensity(profile.crowdDensity);
   }
 
+  private viewW = 0;
+  private viewH = 0;
+
+  /** 캔버스의 실제 표시 크기 (회전 직후에도 레이아웃 기준이라 정확하다) */
+  private viewSize(): [number, number] {
+    const c = this.renderer.domElement;
+    return [c.clientWidth || window.innerWidth, c.clientHeight || window.innerHeight];
+  }
+
   private resize(): void {
-    const w = window.innerWidth, h = window.innerHeight;
+    const [w, h] = this.viewSize();
+    if (!w || !h) return;
+    this.viewW = w;
+    this.viewH = h;
     this.applyGraphics(this.touch?.detected ?? window.matchMedia('(pointer: coarse)').matches);
     this.renderer.setSize(w, h, false);
     this.rig.resize(w / h);
+  }
+
+  /** 매 프레임: 표시 크기가 바뀌었는데 resize 이벤트를 놓쳤으면 맞춘다 (화면이 눌려 보이는 문제 방지) */
+  private ensureViewSize(): void {
+    const [w, h] = this.viewSize();
+    if (w !== this.viewW || h !== this.viewH) this.resize();
   }
 }

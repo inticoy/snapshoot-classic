@@ -37,7 +37,7 @@ try {
     const game = window.__game.game;
     return { dpr: game.renderer.getPixelRatio(), shadowSize: game.sun.shadow.mapSize.x, crowd: game.stadium.crowd.count, fullCrowd: game.stadium.crowdBase.length };
   });
-  assert.equal(graphics.dpr, 1.25);
+  assert.equal(graphics.dpr, 1.75);
   assert.equal(graphics.shadowSize, 1024);
   assert.equal(graphics.crowd, Math.floor(graphics.fullCrowd * 0.25));
 

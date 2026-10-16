@@ -120,7 +120,8 @@ export const AI = {
 export const TOUCH = { joystickRadius: 52, deadZone: 0.12, swipeDistance: 30 };
 export const GRAPHICS = {
   high: { pixelRatio: 2, shadowSize: 2048, crowdDensity: 1 },
-  low: { pixelRatio: 1.25, shadowSize: 1024, crowdDensity: 0.25 },
+  // 픽셀 비율은 화질에 가장 크게 보이므로 1.75까지 유지하고, 대신 그림자와 관중을 줄인다
+  low: { pixelRatio: 1.75, shadowSize: 1024, crowdDensity: 0.25 },
 };
 
 // 공 주변 약 50m를 보여 주되 터치라인에서도 시야 크기를 유지한다.

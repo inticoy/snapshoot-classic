@@ -211,7 +211,7 @@ it('모바일/저코어 자동 품질과 수동 품질을 순환·저장하며 �
   expect(JSON.parse(setItem.mock.calls.at(-1)![1]).graphicsQuality).toBe('high');
   expect(GRAPHICS.low.shadowSize ** 2 / GRAPHICS.high.shadowSize ** 2).toBe(0.25);
   expect(GRAPHICS.low.crowdDensity).toBe(0.25);
-  expect(GRAPHICS.low.pixelRatio).toBe(1.25);
+  expect(GRAPHICS.low.pixelRatio).toBe(1.75);
 });
 
 it.each(['pass', 'through', 'lob'] as const)('터치 %s 차지·뗌이 실제 패스와 kick 이벤트를 만든다', (slot) => {
