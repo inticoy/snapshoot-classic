@@ -129,9 +129,19 @@ export const RULES = {
   shootoutPause: 1.4,
 };
 
+/**
+ * 유니폼. style: 0 무지, 1 어깨 라인, 2 세로 줄무늬. ink = 등번호·이름 색, inkEdge = 테두리
+ * 키퍼는 다른 색 + 긴소매 + 장갑으로 구분한다
+ */
 export const TEAM_COLORS = [
-  { name: 'HOME', shirt: 0xd8323f, shorts: 0xffffff, socks: 0xd8323f, keeper: 0x2ccf7a, ui: '#e84855' },
-  { name: 'AWAY', shirt: 0xf4f4f0, shorts: 0x1d2a5b, socks: 0x1d2a5b, keeper: 0xf2c230, ui: '#e8ecf5' },
+  {
+    name: 'HOME', shirt: 0xd8323f, shorts: 0xffffff, socks: 0xd8323f, keeper: 0x2ccf7a, ui: '#e84855',
+    trim: 0xffffff, style: 1, ink: '#ffffff', inkEdge: '#7a121b', keeperInk: '#0d3b24', gloves: 0xf4f4f0,
+  },
+  {
+    name: 'AWAY', shirt: 0xf4f4f0, shorts: 0x1d2a5b, socks: 0x1d2a5b, keeper: 0xf2c230, ui: '#e8ecf5',
+    trim: 0x1d2a5b, style: 2, ink: '#1d2a5b', inkEdge: '#f4f4f0', keeperInk: '#2a2100', gloves: 0x1d2a5b,
+  },
 ] as const;
 
 export const AI = {

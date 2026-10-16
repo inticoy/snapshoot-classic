@@ -8,6 +8,7 @@ import type { Role, Slot } from '../data/Formation';
 
 export type { Role };
 import { n, type OutfieldStats } from '../data/Stats';
+import { appearance, backName } from '../data/Appearance';
 
 
 export type PlayerModelFactory = (colors: ModelColors, number: number, keeper: boolean) => CharacterModel;
@@ -59,7 +60,27 @@ export class Player {
   ) {
     this.attackDir = team === 0 ? 1 : -1;
     const c = TEAM_COLORS[team];
-    const colors = { shirt: role === 'GK' ? c.keeper : c.shirt, shorts: c.shorts, socks: role === 'GK' ? c.keeper : c.socks };
+    const keeper = role === 'GK';
+    const look = appearance(profile.name);
+    const colors: ModelColors = {
+      shirt: keeper ? c.keeper : c.shirt,
+      shorts: c.shorts,
+      socks: keeper ? c.keeper : c.socks,
+      skin: look.skin,
+      hair: look.hair,
+      hairStyle: look.hairStyle,
+      style: keeper ? 0 : c.style,
+      trim: c.trim,
+      keeper,
+      gloves: c.gloves,
+      decal: {
+        number,
+        name: backName(profile.short),
+        ink: keeper ? c.keeperInk : c.ink,
+        inkEdge: keeper ? 'rgba(255, 255, 255, 0.55)' : c.inkEdge,
+        look,
+      },
+    };
     // 캐릭터 에셋이 로드됐으면 스킨드 캐릭터, 아니면 절차적 모델로 대체
     this.model = modelFactory(colors, number, role === 'GK');
   }

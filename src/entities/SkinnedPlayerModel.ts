@@ -4,6 +4,7 @@ import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import type { AnimState, CharacterModel, ModelColors } from './PlayerModel';
 import { visualRandom } from '../core/Random';
+import { makeDecalTexture } from './KitDecal';
 
 /**
  * 스킨드 캐릭터 (Quaternius Universal Animation Library, CC0).
@@ -295,9 +296,14 @@ export class SkinnedPlayerModel implements CharacterModel {
   }
 }
 
-/** 바인드 포즈 좌표로 유니폼 영역을 칠하는 머티리얼 */
+/**
+ * 바인드 포즈 좌표로 유니폼 영역을 칠하는 머티리얼.
+ * 등번호·이름·가슴 번호·얼굴은 선수별 데칼 아틀라스(KitDecal)를 좌표 투영으로 입힌다.
+ * 모델은 +Z를 바라본다 (등 = -Z). 수치는 메시 바인드 포즈 실측값.
+ */
 function makeKitMaterial(colors: ModelColors): THREE.MeshStandardMaterial {
   const mat = new THREE.MeshStandardMaterial({ roughness: 0.65, metalness: 0 });
+  const decal = colors.decal && typeof document !== 'undefined' ? makeDecalTexture(colors.decal) : null;
   const uniforms = {
     uShirt: { value: new THREE.Color(colors.shirt) },
     uShorts: { value: new THREE.Color(colors.shorts) },
@@ -305,6 +311,13 @@ function makeKitMaterial(colors: ModelColors): THREE.MeshStandardMaterial {
     uSkin: { value: new THREE.Color(colors.skin ?? SKIN_TONES[Math.floor(visualRandom.next() * SKIN_TONES.length)]) },
     uHair: { value: new THREE.Color(colors.hair ?? HAIR_TONES[Math.floor(visualRandom.next() * HAIR_TONES.length)]) },
     uBoots: { value: new THREE.Color(0x15171c) },
+    uTrim: { value: new THREE.Color(colors.trim ?? colors.shirt) },
+    uGloves: { value: new THREE.Color(colors.gloves ?? 0xf4f4f0) },
+    uStyle: { value: colors.style ?? 0 },
+    uHairStyle: { value: colors.hairStyle ?? 0 },
+    uKeeper: { value: colors.keeper ? 1 : 0 },
+    uDecal: { value: decal },
+    uHasDecal: { value: decal ? 1 : 0 },
   };
   mat.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, uniforms);
@@ -316,24 +329,67 @@ function makeKitMaterial(colors: ModelColors): THREE.MeshStandardMaterial {
         '#include <common>',
         `#include <common>
 varying vec3 vKit;
-uniform vec3 uShirt, uShorts, uSocks, uSkin, uHair, uBoots;
+uniform vec3 uShirt, uShorts, uSocks, uSkin, uHair, uBoots, uTrim, uGloves;
+uniform float uStyle, uHairStyle, uKeeper, uHasDecal;
+uniform sampler2D uDecal;
+
+bool isHair(vec3 p) {
+  if (uHairStyle > 2.5) return false;                                   // 민머리
+  if (uHairStyle > 1.5) return p.y > 1.73 || (p.y > 1.57 && p.z < 0.0) || (p.y > 1.66 && abs(p.x) > 0.075); // 긴 머리
+  if (uHairStyle > 0.5) return p.y > 1.79 || (p.y > 1.68 && p.z < -0.05); // 버즈컷
+  return p.y > 1.76 || (p.y > 1.62 && p.z < -0.03);                     // 짧은 머리
+}
+
+// 데칼 아틀라스 투영. 영역 밖이면 알파 0
+vec4 decalAt(vec3 p) {
+  if (uHasDecal < 0.5) return vec4(0.0);
+  float ax = abs(p.x);
+  // 등: 이름 + 등번호 (뒤에서 보면 +X가 왼쪽)
+  if (p.z < -0.02 && ax < 0.16 && p.y > 1.02 && p.y < 1.43)
+    return texture2D(uDecal, vec2((0.16 - p.x) / 0.32 * 0.5, (p.y - 1.02) / 0.41));
+  // 가슴 번호
+  if (p.z > 0.02 && ax < 0.065 && p.y > 1.24 && p.y < 1.37)
+    return texture2D(uDecal, vec2(0.75 + (p.x + 0.065) / 0.13 * 0.25, 0.5 + (p.y - 1.24) / 0.13 * 0.5));
+  // 얼굴
+  if (p.z > 0.0 && ax < 0.09 && p.y > 1.56 && p.y < 1.8)
+    return texture2D(uDecal, vec2(0.5 + (p.x + 0.09) / 0.18 * 0.25, (p.y - 1.56) / 0.24));
+  return vec4(0.0);
+}
+
 vec3 kitColor(vec3 p) {
   float ax = abs(p.x);
   if (p.y > 1.52) {
-    // 머리: 정수리와 뒤통수는 머리카락
-    if (p.y > 1.76 || (p.y > 1.62 && p.z < -0.03)) return uHair;
+    if (isHair(p)) return uHair;
     return uSkin;
   }
-  if (ax > 0.58) return uSkin;          // 팔뚝, 손
-  if (ax > 0.24 && p.y > 1.18) return uShirt; // 소매
-  if (p.y > 0.96) return uShirt;
-  if (p.y > 0.52) return uShorts;
+  if (ax > 0.58) {
+    // 키퍼는 긴소매 + 장갑, 필드 플레이어는 맨팔
+    if (uKeeper > 0.5) return ax > 0.8 ? uGloves : uShirt;
+    return uSkin;
+  }
+  if (ax > 0.24 && p.y > 1.18) {
+    // 소매 끝 라인
+    if (uStyle > 0.5 && uStyle < 1.5 && ax > 0.53) return uTrim;
+    return uShirt;
+  }
+  if (p.y > 0.96) {
+    if (p.y > 1.485 && ax < 0.08) return uTrim;                          // 깃
+    if (uStyle > 0.5 && uStyle < 1.5 && p.y > 1.36 && ax > 0.19) return uTrim; // 어깨 라인
+    if (uStyle > 1.5 && fract(p.x * 9.0 + 0.5) < 0.2) return uTrim;      // 세로 줄무늬
+    return uShirt;
+  }
+  if (p.y > 0.52) return (uStyle > 0.5 && ax > 0.15 && ax < 0.17) ? uTrim : uShorts; // 바지 옆선
   if (p.y > 0.09) return uSocks;
   return uBoots;
 }`,
       )
-      .replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb = kitColor(vKit);');
+      .replace(
+        '#include <color_fragment>',
+        `#include <color_fragment>
+vec4 dec = decalAt(vKit);
+diffuseColor.rgb = mix(kitColor(vKit), dec.rgb, dec.a);`,
+      );
   };
-  mat.customProgramCacheKey = () => 'kit-v2';
+  mat.customProgramCacheKey = () => 'kit-v3';
   return mat;
 }

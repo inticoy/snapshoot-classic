@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import type { HairStyle } from '../data/Appearance';
+import type { DecalSpec } from './KitDecal';
 import { visualRandom } from '../core/Random';
 
 /**
@@ -42,6 +44,15 @@ export interface ModelColors {
   socks: number;
   skin?: number;
   hair?: number;
+  /** 유니폼 디자인: 0 무지, 1 어깨 라인, 2 세로 줄무늬 */
+  style?: number;
+  trim?: number;
+  /** 키퍼: 긴소매 + 장갑 */
+  keeper?: boolean;
+  gloves?: number;
+  hairStyle?: HairStyle;
+  /** 등번호·이름·얼굴 데칼 */
+  decal?: DecalSpec;
 }
 
 const SKIN_TONES = [0xf1c7a5, 0xd9a47e, 0xb07a52, 0x7d5236, 0xe8b894];
