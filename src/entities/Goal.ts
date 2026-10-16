@@ -33,8 +33,8 @@ export class Goal {
     visuals = true,
   ) {
     const x0 = side * PITCH.halfL;
-    const hw = GOAL.width / 2;
-    const h = GOAL.height;
+    const hw = GOAL.width / 2 + GOAL.postRadius;
+    const h = GOAL.height + GOAL.postRadius;
     const r = GOAL.postRadius;
     const out = side; // 그물이 뻗어나가는 방향
 
@@ -56,13 +56,13 @@ export class Goal {
       physics.world.addBody(body);
       this.postBodies.push(body);
     }
-    const bar = new THREE.Mesh(new THREE.CylinderGeometry(r, r, GOAL.width + r * 2, 16), postMat);
+    const bar = new THREE.Mesh(new THREE.CylinderGeometry(r, r, GOAL.width + r * 4, 16), postMat);
     bar.rotation.x = Math.PI / 2;
     bar.position.set(x0 + out * r, h, 0);
     bar.castShadow = true;
     this.group.add(bar);
     const barBody = new CANNON.Body({ mass: 0, material: physics.materials.post });
-    const barShape = new CANNON.Cylinder(r, r, GOAL.width + r * 2, 12);
+    const barShape = new CANNON.Cylinder(r, r, GOAL.width + r * 4, 12);
     const barQ = new CANNON.Quaternion();
     barQ.setFromEuler(Math.PI / 2, 0, 0);
     barBody.addShape(barShape, new CANNON.Vec3(0, 0, 0), barQ);

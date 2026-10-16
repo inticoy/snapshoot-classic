@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { PITCH } from '../src/config';
 import { Random } from '../src/core/Random';
 import { Match, type MatchOptions, type UserCommand } from '../src/gameplay/Match';
 import type { CharacterModel, AnimState } from '../src/entities/PlayerModel';
@@ -38,7 +39,7 @@ export function parkPlayers(match: Match): void {
   match.phaseTimer = 0;
   match.ball.reset();
   match.players.forEach((p, i) => {
-    p.pos.set(-23 + i * 2, 0, 16);
+    p.pos.set(-PITCH.halfL + 2 + i * 2, 0, PITCH.halfW - 2);
     p.vel.set(0, 0, 0);
     p.actionLock = 60;
   });

@@ -5,7 +5,7 @@ export interface PlayerProfile {
   name: string;
   short: string; // 하단 이름 바에 표시
   number: number;
-  pos: 'GK' | 'CB' | 'CM' | 'ST';
+  pos: 'GK' | 'LB' | 'CB' | 'RB' | 'CM' | 'LW' | 'ST' | 'RW';
   ovr: number;
   foot: 'L' | 'R';
   weakFoot: number; // 약발 (1~5)
@@ -16,7 +16,7 @@ export interface PlayerProfile {
 export interface TeamProfile {
   name: string;
   abbr: string;
-  /** 포메이션 슬롯 순서와 같다 (GK, LCB, RCB, CM, ST) */
+  /** 4-3-3 슬롯 순서와 같다 (GK, LB, LCB, RCB, RB, LCM, CM, RCM, LW, ST, RW) */
   players: PlayerProfile[];
 }
 
@@ -45,6 +45,10 @@ export const TEAMS: [TeamProfile, TeamProfile] = [
         stats: keeper({ reactions: 82, strength: 74, diving: 84, handling: 80, kicking: 76, reflexes: 86, positioning: 82 }),
       }),
       make({
+        name: 'Seo Ha-ram', short: 'H. SEO', number: 22, pos: 'LB', foot: 'L', weakFoot: 3, skill: 3,
+        stats: base({ sprintSpeed: 85, acceleration: 84, stamina: 89, shortPassing: 78, longPassing: 76, curve: 75, defAwareness: 78, standingTackle: 80, slidingTackle: 78, interceptions: 78, finishing: 42 }),
+      }),
+      make({
         name: 'Kang Min-jae', short: 'M. KANG', number: 4, pos: 'CB', foot: 'R', weakFoot: 3, skill: 2,
         stats: base({
           sprintSpeed: 84, acceleration: 76, finishing: 40, shotPower: 74, longShots: 48, shortPassing: 76,
@@ -62,6 +66,14 @@ export const TEAMS: [TeamProfile, TeamProfile] = [
         }),
       }),
       make({
+        name: 'Lim Geon', short: 'G. LIM', number: 2, pos: 'RB', foot: 'R', weakFoot: 3, skill: 3,
+        stats: base({ sprintSpeed: 83, acceleration: 82, stamina: 87, shortPassing: 76, longPassing: 74, defAwareness: 80, standingTackle: 82, slidingTackle: 79, interceptions: 79, finishing: 40 }),
+      }),
+      make({
+        name: 'Jang Yu-bin', short: 'Y. JANG', number: 6, pos: 'CM', foot: 'L', weakFoot: 4, skill: 3,
+        stats: base({ shortPassing: 84, longPassing: 82, vision: 83, ballControl: 82, dribbling: 78, longShots: 76, finishing: 66, defAwareness: 74, standingTackle: 76, interceptions: 78, stamina: 88 }),
+      }),
+      make({
         name: 'Baek Si-woo', short: 'S. BAEK', number: 8, pos: 'CM', foot: 'R', weakFoot: 4, skill: 4,
         stats: base({
           sprintSpeed: 76, acceleration: 80, finishing: 72, shotPower: 82, longShots: 84, curve: 82, volleys: 74,
@@ -69,6 +81,14 @@ export const TEAMS: [TeamProfile, TeamProfile] = [
           balance: 80, reactions: 85, composure: 86, defAwareness: 68, standingTackle: 70, slidingTackle: 62,
           interceptions: 74, strength: 70, jumping: 64, stamina: 90,
         }),
+      }),
+      make({
+        name: 'Oh Da-on', short: 'D. OH', number: 16, pos: 'CM', foot: 'R', weakFoot: 3, skill: 3,
+        stats: base({ shortPassing: 81, longPassing: 79, vision: 80, ballControl: 80, dribbling: 76, finishing: 70, longShots: 78, defAwareness: 76, standingTackle: 77, interceptions: 80, stamina: 90 }),
+      }),
+      make({
+        name: 'Chae Ro-un', short: 'R. CHAE', number: 11, pos: 'LW', foot: 'R', weakFoot: 4, skill: 4,
+        stats: base({ sprintSpeed: 91, acceleration: 90, agility: 88, dribbling: 87, ballControl: 84, finishing: 79, shotPower: 79, curve: 82, shortPassing: 80, vision: 78, defAwareness: 38, standingTackle: 36, interceptions: 40, stamina: 83 }),
       }),
       make({
         name: 'Son Ji-hoon', short: 'J. SON', number: 7, pos: 'ST', foot: 'L', weakFoot: 5, skill: 4,
@@ -79,6 +99,10 @@ export const TEAMS: [TeamProfile, TeamProfile] = [
           interceptions: 38, strength: 68, jumping: 72, stamina: 86,
         }),
       }),
+      make({
+        name: 'Nam I-jun', short: 'I. NAM', number: 17, pos: 'RW', foot: 'L', weakFoot: 4, skill: 4,
+        stats: base({ sprintSpeed: 88, acceleration: 91, agility: 89, dribbling: 88, ballControl: 85, finishing: 80, shotPower: 82, curve: 85, shortPassing: 79, vision: 80, defAwareness: 39, standingTackle: 37, interceptions: 41, stamina: 84 }),
+      }),
     ],
   },
   {
@@ -88,6 +112,10 @@ export const TEAMS: [TeamProfile, TeamProfile] = [
       make({
         name: 'Luca Ferreira', short: 'L. FERREIRA', number: 13, pos: 'GK', foot: 'R', weakFoot: 3, skill: 1,
         stats: keeper({ shortPassing: 66, longPassing: 70, strength: 78, diving: 82, handling: 83, kicking: 74, reflexes: 81, positioning: 84 }),
+      }),
+      make({
+        name: 'Nilo Varen', short: 'N. VAREN', number: 3, pos: 'LB', foot: 'L', weakFoot: 3, skill: 3,
+        stats: base({ sprintSpeed: 82, acceleration: 80, stamina: 88, shortPassing: 79, longPassing: 78, defAwareness: 81, standingTackle: 80, slidingTackle: 77, interceptions: 80, finishing: 44 }),
       }),
       make({
         name: 'Ruben Castell', short: 'R. CASTELL', number: 5, pos: 'CB', foot: 'L', weakFoot: 2, skill: 2,
@@ -107,6 +135,14 @@ export const TEAMS: [TeamProfile, TeamProfile] = [
         }),
       }),
       make({
+        name: 'Emil Soren', short: 'E. SOREN', number: 22, pos: 'RB', foot: 'R', weakFoot: 4, skill: 3,
+        stats: base({ sprintSpeed: 86, acceleration: 84, stamina: 86, shortPassing: 77, longPassing: 75, defAwareness: 76, standingTackle: 79, slidingTackle: 80, interceptions: 77, finishing: 46 }),
+      }),
+      make({
+        name: 'Ivo Neris', short: 'I. NERIS', number: 8, pos: 'CM', foot: 'R', weakFoot: 4, skill: 3,
+        stats: base({ shortPassing: 85, longPassing: 81, vision: 84, ballControl: 84, dribbling: 81, finishing: 72, longShots: 79, defAwareness: 70, standingTackle: 72, interceptions: 73, stamina: 87 }),
+      }),
+      make({
         name: 'Mateo Ruiz', short: 'M. RUIZ', number: 6, pos: 'CM', foot: 'L', weakFoot: 3, skill: 3,
         stats: base({
           sprintSpeed: 70, acceleration: 74, finishing: 66, shotPower: 78, longShots: 80, curve: 78, volleys: 70,
@@ -116,6 +152,14 @@ export const TEAMS: [TeamProfile, TeamProfile] = [
         }),
       }),
       make({
+        name: 'Dario Velin', short: 'D. VELIN', number: 16, pos: 'CM', foot: 'R', weakFoot: 3, skill: 3,
+        stats: base({ shortPassing: 80, longPassing: 78, vision: 79, ballControl: 78, dribbling: 73, finishing: 62, longShots: 74, defAwareness: 82, standingTackle: 81, interceptions: 83, stamina: 91 }),
+      }),
+      make({
+        name: 'Elio Taren', short: 'E. TAREN', number: 11, pos: 'LW', foot: 'R', weakFoot: 4, skill: 4,
+        stats: base({ sprintSpeed: 90, acceleration: 88, agility: 87, dribbling: 86, ballControl: 85, finishing: 81, shotPower: 80, curve: 80, shortPassing: 82, vision: 81, defAwareness: 40, standingTackle: 38, interceptions: 42, stamina: 84 }),
+      }),
+      make({
         name: 'Theo Marchand', short: 'T. MARCHAND', number: 10, pos: 'ST', foot: 'R', weakFoot: 4, skill: 5,
         stats: base({
           sprintSpeed: 82, acceleration: 88, finishing: 85, shotPower: 80, longShots: 82, curve: 90, volleys: 80,
@@ -123,6 +167,10 @@ export const TEAMS: [TeamProfile, TeamProfile] = [
           balance: 88, reactions: 85, composure: 84, defAwareness: 36, standingTackle: 38, slidingTackle: 30,
           interceptions: 40, strength: 60, jumping: 66, stamina: 80,
         }),
+      }),
+      make({
+        name: 'Milo Auren', short: 'M. AUREN', number: 7, pos: 'RW', foot: 'L', weakFoot: 5, skill: 4,
+        stats: base({ sprintSpeed: 87, acceleration: 90, agility: 90, dribbling: 90, ballControl: 87, finishing: 78, shotPower: 78, curve: 86, shortPassing: 84, vision: 83, defAwareness: 36, standingTackle: 34, interceptions: 38, stamina: 82 }),
       }),
     ],
   },

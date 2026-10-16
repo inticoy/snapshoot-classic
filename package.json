@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:browser": "node scripts/browser-smoke.mjs",
-    "test:mobile": "node scripts/mobile-smoke.mjs"
+    "test:mobile": "node scripts/mobile-smoke.mjs",
+    "test:phase2": "node scripts/phase-2-smoke.mjs"
   },
   "dependencies": {
     "cannon-es": "0.20.0",

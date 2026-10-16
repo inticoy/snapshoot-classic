@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { BALL, PHYSICS } from '../src/config';
+import { BALL, PHYSICS, PITCH } from '../src/config';
 import { command, parkPlayers, simulation } from './helpers';
 import { Input, type Action } from '../src/core/Input';
 import { cycleAssist, cycleMoveAssist, settings, togglePhysicsPreset } from '../src/core/Settings';
@@ -80,9 +80,9 @@ it('D 차지·뗌 입력으로 슛 → 득점 → 상대 킥오프까지 이어�
   parkPlayers(match);
   const shooter = match.forward(0);
   shooter.actionLock = 0;
-  shooter.pos.set(23, 0, 0);
+  shooter.pos.set(PITCH.halfL - 7, 0, 0);
   shooter.facing.set(1, 0, 0);
-  match.ball.reset(23.35, 0);
+  match.ball.reset(PITCH.halfL - 6.65, 0);
   match.ball.owner = match.ball.lastTouch = shooter;
   match.controlled = shooter;
   const cmd = command();

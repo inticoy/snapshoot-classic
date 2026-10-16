@@ -36,19 +36,20 @@ try {
   // 슛이 빗나가는 우연을 제거하고, 골 판정은 실제 입력·경기 루프·물리로 검증한다.
   await page.evaluate(async () => {
     const { Random } = await import('/src/core/Random.ts');
+    const { PITCH } = await import('/src/config.ts');
     const m = window.__game.match;
     const random = new Random(42);
     m.random.next = () => random.next();
     for (const [i, player] of m.players.entries()) {
-      player.pos.set(-23 + i * 2, 0, 16);
+      player.pos.set(-PITCH.halfL + 2 + i * 2, 0, PITCH.halfW - 2);
       player.vel.set(0, 0, 0);
       player.actionLock = 60;
     }
     const shooter = m.forward(0);
-    shooter.pos.set(23, 0, 0);
+    shooter.pos.set(PITCH.halfL - 7, 0, 0);
     shooter.facing.set(1, 0, 0);
     shooter.actionLock = shooter.kickCooldown = 0;
-    m.ball.reset(23.35, 0);
+    m.ball.reset(PITCH.halfL - 6.65, 0);
     m.ball.owner = m.ball.lastTouch = shooter;
     m.controlled = shooter;
     m.phase = 'playing';

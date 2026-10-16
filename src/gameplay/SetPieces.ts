@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { BALL, PASS, PITCH } from '../config';
+import { CORNER_RUN_SPOTS } from '../data/SetPiecePositions';
 import type { Player } from '../entities/Player';
 import type { Match, UserCommand, KickKind } from './Match';
 
@@ -59,7 +60,7 @@ export class SetPieces {
         const attacking = (1 - defending) as 0 | 1;
         this.begin('corner', attacking, new THREE.Vector3(end * (PITCH.halfL - 0.25), 0, side * (PITCH.halfW - 0.25)));
       } else {
-        this.begin('goalkick', defending, new THREE.Vector3(end * (PITCH.halfL - 3), 0, side * 2.5));
+        this.begin('goalkick', defending, new THREE.Vector3(end * (PITCH.halfL - PITCH.goalAreaDepth), 0, side * 2.5));
       }
       return true;
     }
@@ -84,7 +85,9 @@ export class SetPieces {
     if (kind === 'goalkick') return squad[0];
     // 코너킥은 미드필더(킥이 좋은 선수), 스로인은 가장 가까운 필드 플레이어
     if (kind === 'corner') {
-      const mid = squad.find((p) => p.role === 'MID');
+      const mid = squad.filter((p) => p.role === 'MID').sort((a, b) =>
+        b.profile.stats.longPassing + b.profile.stats.curve - a.profile.stats.longPassing - a.profile.stats.curve,
+      )[0];
       if (mid) return mid;
     }
     let best = squad.find((p) => !p.isKeeper)!;
@@ -188,11 +191,10 @@ export class SetPieces {
       // 공격: 박스 안 지정 위치 / 수비: 가까운 상대를 마크, 남는 선수는 니어 포스트
       const end = Math.sign(spot.x);
       const side = Math.sign(spot.z);
-      const runSpots: [number, number][] = [[6.5, -1.5 * side], [7.5, 2 * side], [11.5, 0], [16, -5 * side]];
       const others = att.filter((p) => p !== taker && !p.isKeeper);
       others.forEach((p, i) => {
-        const [d, z] = runSpots[i % runSpots.length];
-        p.pos.set(end * (PITCH.halfL - d), 0, z);
+        const [d, z] = CORNER_RUN_SPOTS[i];
+        p.pos.set(end * (PITCH.halfL - d), 0, z * side);
       });
       att[0].pos.set(m.ownGoalX(team) + a * 1, 0, 0);
       const markers = def.filter((p) => !p.isKeeper);
@@ -207,14 +209,15 @@ export class SetPieces {
       // 차는 팀은 자기 진영에 넓게, 상대는 페널티 박스 밖에서 대기
       for (const p of att) {
         if (p === taker) continue;
-        p.pos.set(a * (p.slot.fx + 9), 0, p.slot.z * a * 1.4);
+        p.pos.set(a * (p.slot.fx + 5), 0, p.slot.z * a);
       }
       for (const p of def) {
         if (p.isKeeper) {
           p.pos.set(m.ownGoalX(p.team) - a * 0.8, 0, 0);
           continue;
         }
-        p.pos.set(-a * (p.slot.fx + 16), 0, p.slot.z * -a);
+        const fx = Math.max(p.slot.fx + 20, -PITCH.halfL + PITCH.boxDepth + 2);
+        p.pos.set(a * fx, 0, p.slot.z * -a);
       }
     } else {
       // 스로인: 동료 한 명은 가까이 받으러, 상대는 2m 이상 떨어져서 마크
@@ -223,10 +226,11 @@ export class SetPieces {
       const mate = mates[0];
       mate.pos.set(THREE.MathUtils.clamp(spot.x + a * 5, -PITCH.halfL + 2, PITCH.halfL - 2), 0, spot.z - side * 6);
       if (mates[1]) mates[1].pos.set(THREE.MathUtils.clamp(spot.x - a * 4, -PITCH.halfL + 2, PITCH.halfL - 2), 0, spot.z - side * 8);
-      for (const d of def) {
-        if (d.isKeeper) continue;
-        if (d.pos.distanceTo(spot) < 3) d.pos.copy(spot).addScaledVector(new THREE.Vector3(0, 0, -side), 3.5);
-      }
+      def.filter((p) => !p.isKeeper).forEach((d, i) => {
+        if (d.pos.distanceTo(spot) < 3) {
+          d.pos.set(THREE.MathUtils.clamp(spot.x + (i - 4.5) * 1.5, -PITCH.halfL + 1, PITCH.halfL - 1), 0, spot.z - side * 4);
+        }
+      });
       const marker = def.filter((p) => !p.isKeeper).sort((x, y) => x.pos.distanceTo(mate.pos) - y.pos.distanceTo(mate.pos))[0];
       if (marker) marker.pos.set(mate.pos.x + a * 1.2, 0, mate.pos.z + side * 0.8);
     }

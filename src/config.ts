@@ -2,25 +2,32 @@
 // 좌표계: X = 경기장 길이 방향(골대가 ±X 끝), Z = 폭 방향, Y = 위
 
 export const PITCH = {
-  length: 60,
-  width: 38,
+  length: 105,
+  width: 68,
   get halfL() {
     return this.length / 2;
   },
   get halfW() {
     return this.width / 2;
   },
-  boxDepth: 9, // 페널티 박스 깊이
-  boxWidth: 18,
-  centerCircle: 5,
+  boxDepth: 16.5, // 페널티 박스 깊이
+  boxWidth: 40.32,
+  centerCircle: 9.15,
+  goalAreaDepth: 5.5,
+  goalAreaWidth: 18.32,
+  penaltySpot: 11,
+  penaltyArc: 9.15,
+  cornerArc: 1,
+  lineWidth: 0.12,
+  flagHeight: 1.6,
   // 경기장 바깥 여유 공간 (광고판까지)
   runoffSide: 2,
   runoffEnd: 3,
 };
 
 export const GOAL = {
-  width: 6,
-  height: 2.2,
+  width: 7.32,
+  height: 2.44,
   depth: 1.8,
   postRadius: 0.06,
 };
@@ -46,8 +53,8 @@ export const PLAYER = {
   accel: 16,
   decel: 20,
   turnRate: 11,
-  staminaDrain: 0.18, // 초당 (스프린트 시)
-  staminaRegen: 0.1,
+  staminaDrain: 0.045, // 넓은 경기장에서도 약 30초 연속 질주 가능 (능력치로 보정)
+  staminaRegen: 0.025,
   controlRadius: 0.7,
   dribbleOffset: 0.55,
   kickCooldown: 0.3,
@@ -100,7 +107,13 @@ export const AI = {
   reaction: 0.12, // 의사결정 주기
   tackleChancePerSec: 0.9,
   shootRange: 20,
-  speedFactor: 0.96,
+  speedFactor: 1, // 넓은 경기장에서는 양 팀 모두 능력치에 맞는 속도로 뛴다.
+  markLeash: 14,
+  maxPassDistance: 30,
+  pressurePassRange: 2,
+  pressurePassChance: 0.3,
+  forwardPassChance: 0.12,
+  forwardVisionWeight: 0.16,
 };
 
 // 화면 픽셀 기준 입력 임계값: 작은 손떨림은 이동/슛 제스처로 보지 않는다.
@@ -109,3 +122,7 @@ export const GRAPHICS = {
   high: { pixelRatio: 2, shadowSize: 2048, crowdDensity: 1 },
   low: { pixelRatio: 1.25, shadowSize: 1024, crowdDensity: 0.25 },
 };
+
+// 공 주변 약 50m를 보여 주되 터치라인에서도 시야 크기를 유지한다.
+export const CAMERA = { fov: 42, height: 25, distance: 38, endMargin: 10 };
+export const VISUAL = { animationDistance: 32, animationHz: 30, shadowDistance: 24 };

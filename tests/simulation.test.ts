@@ -3,12 +3,12 @@ import { PHYSICS } from '../src/config';
 import { Random } from '../src/core/Random';
 import { command, simulation } from './helpers';
 
-it('Node에서 document/window 없이 Match를 만들고 10명과 공을 진행한다', () => {
+it('Node에서 document/window 없이 Match를 만들고 22명과 공을 진행한다', () => {
   expect(typeof document).toBe('undefined');
   expect(typeof window).toBe('undefined');
   const { match } = simulation();
   for (let i = 0; i < 240; i++) match.update(PHYSICS.step, command());
-  expect(match.players).toHaveLength(10);
+  expect(match.players).toHaveLength(22);
   expect(match.goals.flatMap((g) => g.postBodies)).toHaveLength(6);
   expect(match.phase).toBe('playing');
   expect(match.clock).toBeGreaterThan(0.7);
@@ -83,11 +83,14 @@ it.each([7, 42, 2026])('AI 대 AI 5분: 시드 %i에서 정지·교착 없이 �
     }
     match.events.length = 0;
   }
-  console.info(`AI 5분 seed=${seed}: ${match.score.join(':')}, 재개 ${restarts}, 최장 대기 ${longestPause.toFixed(3)}초`);
+  console.info(`AI 5분 seed=${seed}: ${match.score.join(':')}, 슛 ${match.stats.shots.join('/')}, 패스 ${match.stats.passes.join('/')}, 재개 ${restarts}, 최장 대기 ${longestPause.toFixed(3)}초`);
   expect(match.phase).toBe('fulltime');
   expect(match.clock).toBeGreaterThanOrEqual(300);
   expect(match.clock).toBeLessThan(304);
   expect(goals).toBeGreaterThan(0);
   expect(restarts).toBeGreaterThan(0);
-  expect(match.stats.passes[0] + match.stats.passes[1]).toBeGreaterThan(10);
+  for (const team of [0, 1]) {
+    expect(match.stats.passes[team]).toBeGreaterThan(5);
+    expect(match.stats.shots[team]).toBeGreaterThan(0);
+  }
 });

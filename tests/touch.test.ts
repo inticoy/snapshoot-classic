@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { GRAPHICS, PHYSICS, TOUCH } from '../src/config';
+import { GRAPHICS, PHYSICS, PITCH, TOUCH } from '../src/config';
 import { Input } from '../src/core/Input';
 import { TouchInput, touchBinding, type TouchMode, type TouchSlot } from '../src/core/TouchInput';
 import { cycleGraphics, graphicsQuality, settings } from '../src/core/Settings';
@@ -248,11 +248,11 @@ for (const mode of ['throwin', 'corner', 'goalkick'] as const) {
     match.ball.owner = null;
     if (mode === 'throwin') {
       match.ball.lastTouch = match.teams[1][1];
-      match.ball.position.set(3, 0.11, 20);
+      match.ball.position.set(3, 0.11, PITCH.halfW + 1);
     } else {
       // +X 코너는 상대 수비의 터치, -X 골킥은 상대 공격의 터치다.
       match.ball.lastTouch = match.teams[1][1];
-      match.ball.position.set(mode === 'corner' ? 31 : -31, 0.11, 8);
+      match.ball.position.set((mode === 'corner' ? 1 : -1) * (PITCH.halfL + 1), 0.11, 8);
     }
     expect(match.setPieces.checkOut()).toBe(true);
     expect(match.setPieces.current).toMatchObject({ kind: mode, team: 0 });

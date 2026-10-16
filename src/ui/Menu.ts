@@ -276,7 +276,7 @@ export function playerDetailPanel(team: 0 | 1, index: number): string {
 export function squadPanel(): string {
   return `
     <div class="card">
-      <h3>SQUADS</h3>
+      <h3>SQUADS · 4-3-3 · 11대11</h3>
       ${([0, 1] as const)
         .map(
           (t) => `<div class="squad-row"><div class="squad-team">${TEAMS[t].name.toUpperCase()}</div><div class="squad-cards">${TEAMS[t].players

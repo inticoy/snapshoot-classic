@@ -13,7 +13,7 @@ import { n } from '../data/Stats';
 import { activePhysics } from '../physics/presets';
 import type { ButtonState } from '../core/Input';
 import { TEAMS } from '../data/Teams';
-import { FORMATION_5 } from '../data/Formation';
+import { FORMATION_433 } from '../data/Formation';
 import { SetPieces, type RestartKind } from './SetPieces';
 
 export type Phase = 'kickoff' | 'playing' | 'out' | 'setpiece' | 'goal' | 'fulltime';
@@ -118,7 +118,7 @@ export class Match {
     this.goals = [new Goal(1, physics, options.goalVisuals), new Goal(-1, physics, options.goalVisuals)];
 
     for (const team of [0, 1] as const) {
-      FORMATION_5.forEach((slot, i) => {
+      FORMATION_433.forEach((slot, i) => {
         const profile = TEAMS[team].players[i];
         const p = new Player(team, slot.role, profile.number, profile.short, profile, slot, options.createPlayerModel);
         this.players.push(p);
@@ -137,7 +137,7 @@ export class Match {
 
   /** 팀의 최전방 공격수 */
   forward(team: 0 | 1): Player {
-    return this.teams[team].find((p) => p.role === 'FWD') ?? this.teams[team][this.teams[team].length - 1];
+    return this.teams[team].find((p) => p.slot.label === 'ST') ?? this.teams[team][this.teams[team].length - 1];
   }
 
   ownGoalX(team: 0 | 1): number {
@@ -181,8 +181,8 @@ export class Match {
       // 포메이션 위치 (자기 진영). 킥오프 팀 공격수는 센터 서클 안
       const slot = p.slot;
       if (p.role === 'GK') p.pos.set(this.ownGoalX(p.team) + a * 0.8, 0, 0);
-      else if (p.role === 'FWD') p.pos.set(p.team === team ? -a * 0.6 : -a * 7, 0, p.team === team ? -0.3 : 0);
-      else p.pos.set(a * Math.min(slot.fx, -6), 0, slot.z * a);
+      else if (p === this.forward(team)) p.pos.set(-a * 0.6, 0, -0.3);
+      else p.pos.set(a * Math.min(slot.fx, -PITCH.centerCircle - 1), 0, slot.z * a);
       p.facing.set(a, 0, 0);
     }
     const taker = this.forward(team);

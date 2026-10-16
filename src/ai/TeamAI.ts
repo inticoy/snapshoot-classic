@@ -138,23 +138,24 @@ export class TeamAI {
     const bp = this.match.ball.position;
     const ballF = THREE.MathUtils.clamp(bp.x * a, -PITCH.halfL, PITCH.halfL);
     const slot = p.slot;
-    let fx = slot.fx + 12 + ballF * 0.5 + (teamHasBall ? 5 : -3);
+    const fullback = slot.label === 'LB' || slot.label === 'RB';
+    const winger = slot.label === 'LW' || slot.label === 'RW';
+    let fx = slot.fx + 12 + ballF * 0.45;
     if (p.role === 'DEF') {
-      // 수비 라인: 공보다 항상 뒤에
-      fx = Math.min(fx - 4, ballF - (teamHasBall ? 7 : 4));
+      // 풀백만 공격 시 측면을 따라 올라가고 센터백은 역습에 대비한다.
+      fx = Math.min(fx + (teamHasBall && fullback ? 12 : 0), ballF - (fullback ? 8 : 14));
     } else if (p.role === 'MID') {
-      // 공 근처에서 받을 각도를 만든다
-      fx = teamHasBall ? ballF - 3 : Math.min(fx, ballF - 2);
+      // 세 미드필더가 같은 지점으로 모이지 않게 중앙은 후방, 양쪽은 전방 지원.
+      fx = teamHasBall ? ballF + (slot.label === 'CM' ? -10 : 2) : Math.min(slot.fx + 12 + ballF * 0.35, ballF - 8);
     } else if (p.role === 'FWD') {
-      // 공격 시 수비 뒷공간으로, 수비 시 하프라인 근처에서 역습 대기
-      fx = teamHasBall ? Math.max(fx, ballF + 8) : Math.max(-4, ballF * 0.4);
+      fx = teamHasBall ? ballF + (winger ? 16 : 22) : Math.max(0, ballF * 0.5 + 10);
     }
     fx = THREE.MathUtils.clamp(fx, -PITCH.halfL + 4, PITCH.halfL - 5);
-    const width = teamHasBall ? 1.35 : 0.85;
-    let z = slot.z * a * width + bp.z * 0.35;
-    if (p.role === 'FWD' && teamHasBall) z = -Math.sign(bp.z || 1) * 5 + Math.sin(this.match.elapsed / AI.runSwayPeriod + p.number) * 3;
-    if (p.role === 'MID' && teamHasBall) z = bp.z * 0.5 - Math.sign(bp.z || 1) * 5;
-    z = THREE.MathUtils.clamp(z, -PITCH.halfW + 2, PITCH.halfW - 2);
+    let z = slot.z * a * (teamHasBall ? 1 : 0.8) + bp.z * 0.18;
+    if (p.role === 'FWD' && !winger && teamHasBall) {
+      z = bp.z * 0.15 + Math.sin(this.match.elapsed / AI.runSwayPeriod + p.number) * 3;
+    }
+    z = THREE.MathUtils.clamp(z, -PITCH.halfW + 3, PITCH.halfW - 3);
     return out.set(fx * a, 0, z);
   }
 
@@ -180,6 +181,9 @@ export class TeamAI {
       let best: Player | null = null;
       let bestD = Infinity;
       for (const d of free) {
+        // 맨마크로 센터백까지 하프라인에 끌려가면 22명이 중앙에 뭉친다.
+        const home = this.formationTarget(d, false, new THREE.Vector3());
+        if (home.distanceTo(t.pos) > AI.markLeash) continue;
         const dd = d.pos.distanceTo(t.pos);
         if (dd < bestD) {
           bestD = dd;
@@ -230,9 +234,9 @@ export class TeamAI {
     }
 
     // 2) 압박받으면 패스
-    if (pressure < 2.6) {
+    if (pressure < AI.pressurePassRange) {
       const mate = this.bestPassTarget(p);
-      if (mate && this.match.random.next() < 0.55) {
+      if (mate && this.match.random.next() < AI.pressurePassChance) {
         tmp.copy(mate.pos).sub(p.pos).setY(0).normalize();
         m.pass(p, tmp);
         return;
@@ -241,10 +245,11 @@ export class TeamAI {
 
     // 3) 앞에 있는 열린 동료에게 전진 패스. 공격수가 수비 뒷공간으로 뛰고 있으면 스루 패스
     const forward = this.bestPassTarget(p, true);
-    if (forward && this.match.random.next() < 0.08 + 0.12 * n(p.profile.stats.vision)) {
+    if (forward && this.match.random.next() < AI.forwardPassChance + AI.forwardVisionWeight * n(p.profile.stats.vision)) {
       tmp.copy(forward.pos).sub(p.pos).setY(0).normalize();
       const running = forward.vel.x * a > 3 && forward.role === 'FWD';
-      m.pass(p, tmp, running ? 'through' : 'short', 0.5);
+      const blocked = m.laneBlocked(p, forward);
+      m.pass(p, tmp, blocked ? (running ? 'lobThrough' : 'lob') : running ? 'through' : 'short', 0.5);
       return;
     }
 
@@ -290,10 +295,13 @@ export class TeamAI {
       if (mate === p || mate.isKeeper) continue;
       const gain = (mate.pos.x - p.pos.x) * p.attackDir;
       if (forwardOnly && gain < 5) continue;
-      if (m.laneBlocked(p, mate)) continue;
+      if (!forwardOnly && m.laneBlocked(p, mate)) continue;
       const open = m.nearestOpponentDist(mate);
       if (open < 2.5) continue;
-      const score = open + gain * 0.3;
+      // 공간만 보고 먼 윙어를 고르면 짧은 패스가 도착하지 못한다.
+      const distance = mate.pos.distanceTo(p.pos);
+      if (distance > AI.maxPassDistance) continue;
+      const score = Math.min(open, 12) + gain * 0.8 - Math.abs(distance - 14) * 0.35;
       if (score > bestScore) {
         bestScore = score;
         best = mate;

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
-import { PITCH, PLAYER, TEAM_COLORS } from '../config';
+import { GOAL, PITCH, PLAYER, TEAM_COLORS, VISUAL } from '../config';
 import { PlayerModel, type AnimState, type CharacterModel, type ModelColors } from './PlayerModel';
 import { SkinnedPlayerModel, hasCharacterAsset } from './SkinnedPlayerModel';
 import type { PlayerProfile } from '../data/Teams';
@@ -41,6 +41,8 @@ export class Player {
   /** 이동 중이 아닐 때 기본 자세 (키퍼 공 잡기, 세리머니) */
   basePose: AnimState | null = null;
   private animTimer = 0;
+  private visualTime = 0;
+  private shadowEnabled: boolean | null = null;
 
   constructor(
     readonly team: 0 | 1,
@@ -192,7 +194,7 @@ export class Player {
     this.pos.x = THREE.MathUtils.clamp(this.pos.x, -mx, mx);
     this.pos.z = THREE.MathUtils.clamp(this.pos.z, -mz, mz);
     // 골대 안쪽(그물 뒤)으로는 못 들어간다
-    if (Math.abs(this.pos.x) > PITCH.halfL + 0.2 && Math.abs(this.pos.z) < 3.6) {
+    if (Math.abs(this.pos.x) > PITCH.halfL + 0.2 && Math.abs(this.pos.z) < GOAL.width / 2 + PLAYER.radius) {
       this.pos.x = Math.sign(this.pos.x) * (PITCH.halfL + 0.2);
     }
   }
@@ -203,7 +205,7 @@ export class Player {
     this.animTimer = duration;
   }
 
-  syncVisual(dt: number): void {
+  syncVisual(dt: number, distance = 0): void {
     this.model.root.position.set(this.pos.x, 0, this.pos.z);
     this.model.root.rotation.y = Math.atan2(this.facing.x, this.facing.z);
 
@@ -216,6 +218,16 @@ export class Player {
       const base: AnimState = this.basePose ?? (speed > 0.6 ? 'run' : 'idle');
       if (this.model.current !== base) this.model.play(base);
     }
-    this.model.update(dt);
+    // 위치는 매 프레임 반영하고 멀리 있는 평상시 동작만 30Hz로 갱신한다.
+    this.visualTime += dt;
+    if (distance < VISUAL.animationDistance || inAction || this.visualTime >= 1 / VISUAL.animationHz) {
+      this.model.update(this.visualTime);
+      this.visualTime = 0;
+    }
+    const shadow = distance < VISUAL.shadowDistance;
+    if (shadow !== this.shadowEnabled) {
+      this.shadowEnabled = shadow;
+      this.model.root.traverse((o) => { if ((o as THREE.Mesh).isMesh) o.castShadow = shadow; });
+    }
   }
 }

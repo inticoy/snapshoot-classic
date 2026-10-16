@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { PITCH } from '../config';
+import { pitchMarkings } from '../data/PitchMarkings';
 import type { PhysicsWorld } from '../physics/PhysicsWorld';
 import { visualRandom } from '../core/Random';
 
@@ -16,6 +17,7 @@ export class Stadium {
 
   constructor(physics: PhysicsWorld) {
     this.buildPitch();
+    this.buildCornerFlags();
     this.buildBoards(physics);
     this.buildStands();
     this.buildFloodlights();
@@ -48,42 +50,21 @@ export class Stadium {
     }
     g.putImageData(img, 0, 0);
 
-    // 라인
-    const hl = PITCH.halfL, hw = PITCH.halfW;
+    // 규격 좌표는 단위 테스트에서도 사용하는 데이터에서 읽는다.
     g.strokeStyle = 'rgba(255,255,255,0.92)';
-    g.lineWidth = 0.12 * ppm;
-    const rect = (x0: number, z0: number, x1: number, z1: number) =>
-      g.strokeRect(X(Math.min(x0, x1)), Z(Math.min(z0, z1)), Math.abs(x1 - x0) * ppm, Math.abs(z1 - z0) * ppm);
-    rect(-hl, -hw, hl, hw);
-    g.beginPath();
-    g.moveTo(X(0), Z(-hw));
-    g.lineTo(X(0), Z(hw));
-    g.stroke();
-    g.beginPath();
-    g.arc(X(0), Z(0), PITCH.centerCircle * ppm, 0, Math.PI * 2);
-    g.stroke();
-    for (const s of [-1, 1]) {
-      const bx = s * (hl - PITCH.boxDepth);
-      rect(s * hl, -PITCH.boxWidth / 2, bx, PITCH.boxWidth / 2);
-      rect(s * hl, -4.5, s * (hl - 3), 4.5);
-      // 페널티 아크
-      g.beginPath();
-      const spot = s * (hl - 6.5);
-      const start = s === 1 ? Math.PI * 0.68 : -Math.PI * 0.32;
-      g.arc(X(spot), Z(0), 5 * ppm, start, start + Math.PI * 0.64);
-      g.stroke();
-      // 코너 아크
-      for (const t of [-1, 1]) {
-        g.beginPath();
-        g.arc(X(s * hl), Z(t * hw), 1 * ppm, 0, Math.PI * 2);
-        g.stroke();
-      }
-    }
     g.fillStyle = 'rgba(255,255,255,0.95)';
-    for (const x of [0, -(hl - 6.5), hl - 6.5]) {
+    g.lineWidth = PITCH.lineWidth * ppm;
+    for (const m of pitchMarkings()) {
       g.beginPath();
-      g.arc(X(x), Z(0), 0.15 * ppm, 0, Math.PI * 2);
-      g.fill();
+      if (m.kind === 'rect') g.rect(X(m.x), Z(m.z), m.width * ppm, m.height * ppm);
+      else if (m.kind === 'line') {
+        g.moveTo(X(m.x), Z(m.z));
+        g.lineTo(X(m.endX), Z(m.endZ));
+      } else {
+        g.arc(X(m.x), Z(m.z), m.radius * ppm, m.kind === 'spot' ? 0 : m.start, m.kind === 'spot' ? Math.PI * 2 : m.end);
+      }
+      if (m.kind === 'spot') g.fill();
+      else g.stroke();
     }
 
     const tex = new THREE.CanvasTexture(c);
@@ -106,6 +87,22 @@ export class Stadium {
     track.position.y = -0.01;
     track.receiveShadow = true;
     this.group.add(track);
+  }
+
+  private buildCornerFlags(): void {
+    const poleMaterial = new THREE.MeshStandardMaterial({ color: 0xf5f5ec });
+    const flagMaterial = new THREE.MeshStandardMaterial({ color: 0xf3cd32, side: THREE.DoubleSide });
+    for (const x of [-PITCH.halfL, PITCH.halfL]) {
+      for (const z of [-PITCH.halfW, PITCH.halfW]) {
+        const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, PITCH.flagHeight, 8), poleMaterial);
+        pole.position.set(x, PITCH.flagHeight / 2, z);
+        const cap = new THREE.Mesh(new THREE.SphereGeometry(0.03, 8, 6), poleMaterial);
+        cap.position.set(x, PITCH.flagHeight, z);
+        const flag = new THREE.Mesh(new THREE.PlaneGeometry(0.45, 0.3), flagMaterial);
+        flag.position.set(x + Math.sign(x) * 0.225, PITCH.flagHeight - 0.18, z);
+        this.group.add(pole, cap, flag);
+      }
+    }
   }
 
   private buildBoards(physics: PhysicsWorld): void {

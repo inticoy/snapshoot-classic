@@ -42,10 +42,11 @@ try {
   assert.equal(graphics.crowd, Math.floor(graphics.fullCrowd * 0.25));
 
   // 이동/슛은 실제 포인터 → Input → 경기 루프를 통과한다. AI의 우연한 탈취만 막는다.
-  const start = await page.evaluate(() => {
+  const start = await page.evaluate(async () => {
     const m = window.__game.match;
+    const { PITCH } = await import('/src/config.ts');
     for (const [i, player] of m.players.entries()) {
-      player.pos.set(-23 + i * 2, 0, 16);
+      player.pos.set(-PITCH.halfL + 2 + i * 2, 0, PITCH.halfW - 2);
       player.vel.set(0, 0, 0);
       player.actionLock = 60;
     }

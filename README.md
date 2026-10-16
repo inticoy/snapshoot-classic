@@ -1,6 +1,6 @@
 # SnapShoot Classic
 
-[SnapShoot](https://github.com/inticoy/snapshoot)(스와이프 승부차기)의 클래식 모드. 브라우저에서 키보드로 하는 3D 5대5 축구.
+[SnapShoot](https://github.com/inticoy/snapshoot)(스와이프 승부차기)의 클래식 모드. 브라우저에서 키보드·터치로 하는 3D 11대11 축구. 105×68m 경기장과 4-3-3 포메이션.
 
 **플레이:** https://inticoy.github.io/snapshoot-classic/
 
@@ -18,7 +18,7 @@ pnpm build      # dist/ 에 정적 파일 생성 (GitHub Pages 등에 그대로 
 
 ## 자동 검증
 
-`pnpm typecheck && pnpm test && pnpm build`로 0단계 회귀 검증을 실행한다.
+`pnpm typecheck && pnpm test && pnpm build`로 전체 회귀 검증을 실행한다.
 배포 워크플로도 빌드 전에 타입 검사와 테스트를 실행하며, 실패하면 배포하지 않는다.
 
 테스트는 실제 `Match.update`와 cannon-es 물리를 사용한다. `Match` 생성 옵션으로
@@ -37,6 +37,10 @@ D 키 슛 → 득점을 검사하고 `.artifacts/browser-smoke/`에 캡처를 �
 `pnpm test:browser --update-og`로 실제 경기 화면의 공유 이미지도 다시 생성할 수 있다.
 
 수치와 브라우저 확인 상태는 [0단계 검증 기록](docs/roadmap/phase-0-validation.md)에 정리한다.
+
+2단계 화면·성능 검증은 `pnpm test:phase2`로 실행한다. 중계 화면·전체 경기장·네 코너 확대를
+`.artifacts/phase-2/`에 저장하고, 스킨드 캐릭터 22명의 10초 프레임 측정 결과를 JSON으로 기록한다.
+현재 환경의 실행 제한과 자동 검증 수치는 [2단계 검증 기록](docs/roadmap/phase-2-validation.md)을 참고한다.
 
 ## 조작 (FC 온라인 키보드 기본 배치 기준)
 
@@ -95,6 +99,6 @@ src/
 ## 다음 단계 아이디어
 
 - 킥/태클/헤더 전용 모션 캡처 클립 (Mixamo 등에서 받아 같은 리그로 리타겟)
-- 5대5 → 11대11, 포메이션, 오프사이드
+- 포메이션 선택, 전술 설정, 오프사이드
 - 로빙 패스, 스루 패스, 칩슛
 - 난이도 설정, 게임패드 지원

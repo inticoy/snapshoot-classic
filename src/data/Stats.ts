@@ -109,7 +109,7 @@ export function faceStats(s: Stats, keeper: boolean): [string, number][] {
 }
 
 /** 포지션별 가중치로 계산한 OVR */
-export function overall(s: Stats, pos: 'GK' | 'CB' | 'CM' | 'ST'): number {
+export function overall(s: Stats, pos: 'GK' | 'LB' | 'CB' | 'RB' | 'CM' | 'LW' | 'ST' | 'RW'): number {
   if (pos === 'GK' && s.diving !== undefined) {
     return Math.round(avg(s.diving, s.handling!, s.reflexes!, s.reflexes!, s.positioning!, s.positioning!, s.kicking! * 0.6 + 30));
   }
@@ -118,6 +118,15 @@ export function overall(s: Stats, pos: 'GK' | 'CB' | 'CM' | 'ST'): number {
       s.defAwareness * 0.22 + s.standingTackle * 0.18 + s.slidingTackle * 0.1 + s.interceptions * 0.13 +
         s.heading * 0.1 + s.strength * 0.1 + s.shortPassing * 0.05 + s.sprintSpeed * 0.04 + s.reactions * 0.08,
     );
+  }
+  if (pos === 'LB' || pos === 'RB') {
+    return Math.round(s.defAwareness * 0.16 + s.standingTackle * 0.16 + s.interceptions * 0.12 +
+      s.sprintSpeed * 0.12 + s.acceleration * 0.08 + s.stamina * 0.12 + s.shortPassing * 0.1 +
+      s.longPassing * 0.08 + s.ballControl * 0.06);
+  }
+  if (pos === 'LW' || pos === 'RW') {
+    return Math.round(s.dribbling * 0.19 + s.ballControl * 0.15 + s.sprintSpeed * 0.13 +
+      s.acceleration * 0.12 + s.finishing * 0.13 + s.shortPassing * 0.1 + s.vision * 0.08 + s.curve * 0.1);
   }
   if (pos === 'CM') {
     return Math.round(

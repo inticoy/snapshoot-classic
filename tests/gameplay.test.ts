@@ -16,7 +16,7 @@ function passTrials(assist: AssistLevel, moving: boolean, moveAssist: MoveAssist
     const { match } = simulation(seed);
     parkPlayers(match);
     const passer = match.forward(0);
-    const receiver = match.teams[0][3];
+    const receiver = match.teams[0].find((p) => p.slot.label === 'CM')!;
     passer.actionLock = receiver.actionLock = 0;
     passer.pos.set(-6, 0, 0);
     receiver.pos.set(6, 0, 0);
@@ -62,7 +62,7 @@ describe('패스와 방향 입력 중 받기', () => {
     const passer = match.forward(0);
     passer.pos.set(-6, 0, 0);
     passer.facing.set(1, 0, 0);
-    match.teams[0][3].pos.set(6, 0, 0);
+    match.teams[0].find((p) => p.slot.label === 'CM')!.pos.set(6, 0, 0);
     match.ball.reset(-5.65, 0);
     const r = match.kicks.pass(passer, new THREE.Vector3(1, 0, 1).normalize(), 'short', (11.65 - 6) / 26, assist);
     expect(r.receiver).toBeNull();
@@ -83,7 +83,7 @@ it('골 결정력이 높은 공격수가 수비수보다 실제 궤적의 유효
   for (const role of ['FWD', 'DEF'] as const) {
     const { match, physics } = simulation(194);
     parkPlayers(match);
-    const shooter = role === 'FWD' ? match.forward(0) : match.teams[0][1];
+    const shooter = role === 'FWD' ? match.forward(0) : match.teams[0].find((p) => p.slot.label === 'LCB')!;
     shooter.pos.set(PITCH.halfL - 9, 0, 0);
     shooter.facing.set(1, 0, 0);
     let hits = 0;

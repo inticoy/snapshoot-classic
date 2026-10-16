@@ -504,7 +504,8 @@ kbd {
 
 .squad-row + .squad-row { margin-top: 16px; }
 .squad-team { font-weight: 800; letter-spacing: 0.12em; color: var(--muted); font-size: 13px; margin-bottom: 8px; }
-.squad-cards { display: flex; gap: 10px; overflow-x: auto; }
+.squad-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(145px, 1fr)); gap: 10px; }
+.squad-cards .pcard { width: auto; min-width: 0; }
 .card p b { color: #fff; }
 
 @media (max-width: 860px) {

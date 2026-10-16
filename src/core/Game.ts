@@ -39,7 +39,7 @@ export class Game {
   private accumulator = 0;
   private last = performance.now();
   private durationIndex = 1;
-  private playerIndex = 4;
+  private playerIndex = 9;
   private readonly cmd: UserCommand = {
     move: new THREE.Vector3(),
     sprint: false,
@@ -186,7 +186,7 @@ export class Game {
     this.menu.open({
       eyebrow: 'SNAPSHOOT CLASSIC · 5 VS 5',
       title: 'KICK OFF',
-      panel: () => matchupPanel(null, [`경기 시간 ${lengthLabel()}`, '중계 · 5대5', TEAMS[0].name + ' 홈']),
+      panel: () => matchupPanel(null, [`경기 시간 ${lengthLabel()}`, '중계 · 11대11 · 4-3-3', TEAMS[0].name + ' 홈']),
       items: [
         { id: 'start', label: '경기 시작', onSelect: () => void this.startMatch() },
         {
@@ -305,7 +305,10 @@ export class Game {
     if (!menuWasVisible) this.input.drainPresses();
 
     const live = this.state === 'playing';
-    for (const p of this.match.players) p.syncVisual(live ? dt : 0);
+    for (const p of this.match.players) {
+      const distance = Math.hypot(p.pos.x - this.match.ball.position.x, p.pos.z - this.match.ball.position.z);
+      p.syncVisual(live ? dt : 0, live ? distance : 0);
+    }
     this.match.ball.syncVisual();
     this.stadium.update(dt);
     this.updateMarker(dt);
@@ -313,7 +316,7 @@ export class Game {
     if (this.state === 'menu') {
       // 메인 메뉴: 경기장을 천천히 둘러본다
       const t = performance.now() / 1000;
-      this.rig.camera.position.set(Math.sin(t * 0.06) * 46, 16 + Math.sin(t * 0.1) * 3, Math.cos(t * 0.06) * 38);
+      this.rig.camera.position.set(Math.sin(t * 0.06) * PITCH.halfL, 32 + Math.sin(t * 0.1) * 3, Math.cos(t * 0.06) * (PITCH.halfW + 25));
       this.rig.camera.lookAt(0, 0, 0);
     } else if (live) {
       const celebrate =
@@ -449,16 +452,16 @@ export class Game {
   private setupLights(): void {
     this.scene.add(new THREE.HemisphereLight(0xcfe0ff, 0x2a3b22, 0.9));
     const sun = this.sun;
-    sun.position.set(-25, 45, 20);
+    sun.position.set(-30, 80, 35);
     sun.castShadow = true;
     sun.shadow.mapSize.set(GRAPHICS.high.shadowSize, GRAPHICS.high.shadowSize);
     const s = sun.shadow.camera;
-    s.left = -PITCH.halfL - 6;
-    s.right = PITCH.halfL + 6;
-    s.top = PITCH.halfW + 6;
-    s.bottom = -PITCH.halfW - 6;
+    // 광원 축이 필드와 비스듬하므로 대각선 반경으로 네 모서리까지 덮는다.
+    const extent = Math.hypot(PITCH.halfL, PITCH.halfW) + 6;
+    s.left = s.bottom = -extent;
+    s.right = s.top = extent;
     s.near = 1;
-    s.far = 120;
+    s.far = 180;
     sun.shadow.bias = -0.0005;
     sun.shadow.normalBias = 0.02;
     this.scene.add(sun);

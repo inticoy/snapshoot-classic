@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { PITCH } from '../config';
+import { CAMERA, PITCH } from '../config';
 import { visualRandom } from '../core/Random';
 
 export type CameraMode = 'broadcast' | 'pro';
@@ -11,14 +11,14 @@ export type CameraMode = 'broadcast' | 'pro';
 export class CameraRig {
   readonly camera: THREE.PerspectiveCamera;
   mode: CameraMode = 'broadcast';
-  private readonly pos = new THREE.Vector3(0, 18, PITCH.halfW + 24);
+  private readonly pos = new THREE.Vector3(0, CAMERA.height, CAMERA.distance);
   private readonly look = new THREE.Vector3();
   private readonly desiredPos = new THREE.Vector3();
   private readonly desiredLook = new THREE.Vector3();
   private shake = 0;
 
   constructor(aspect: number) {
-    this.camera = new THREE.PerspectiveCamera(38, aspect, 0.1, 500);
+    this.camera = new THREE.PerspectiveCamera(CAMERA.fov, aspect, 0.1, 500);
     this.camera.position.copy(this.pos);
   }
 
@@ -52,10 +52,10 @@ export class CameraRig {
       this.desiredLook.set(celebrate.x, 1.2, celebrate.z);
     } else if (this.mode === 'broadcast') {
       // 공과 조종 선수 사이를 따라가되, 경기장 끝에서는 멈춘다
-      const fx = THREE.MathUtils.clamp(ball.x * 0.8 + focus.x * 0.2, -PITCH.halfL + 12, PITCH.halfL - 12);
+      const fx = THREE.MathUtils.clamp(ball.x * 0.8 + focus.x * 0.2, -PITCH.halfL + CAMERA.endMargin, PITCH.halfL - CAMERA.endMargin);
       const fz = ball.z * 0.8 + focus.z * 0.2;
-      this.desiredPos.set(fx, 17 + Math.max(0, fz) * 0.15, PITCH.halfW + 21);
-      this.desiredLook.set(fx, 0, fz * 0.55 - 1);
+      this.desiredPos.set(fx, CAMERA.height, fz + CAMERA.distance);
+      this.desiredLook.set(fx, 0, fz);
     } else {
       const fx = focus.x * 0.6 + ball.x * 0.4;
       const fz = focus.z * 0.6 + ball.z * 0.4;
@@ -78,7 +78,7 @@ export class CameraRig {
   resize(aspect: number): void {
     this.camera.aspect = aspect;
     // 세로로 긴 화면에서는 더 넓게
-    this.camera.fov = aspect < 1 ? 60 : 38;
+    this.camera.fov = aspect < 1 ? 60 : CAMERA.fov;
     this.camera.updateProjectionMatrix();
   }
 }
