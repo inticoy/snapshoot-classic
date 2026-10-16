@@ -183,6 +183,7 @@ export function controlsPanel(): string {
             ${row(['D'], '압박 (꾹)')}
             ${row(['Q'], '동료 압박 (꾹)')}
             ${row(['C'], '견제 (꾹)')}
+            ${row(['W'], '키퍼 돌진 (꾹)')}
             ${row(['Space'], '스탠딩 태클')}
             ${row(['A'], '슬라이딩 태클')}
             ${row(['S'], '선수 변경')}

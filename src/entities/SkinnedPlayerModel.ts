@@ -58,7 +58,7 @@ const CLIP_NAMES: Record<Clip, string> = {
 // 클립 원래 속도에 해당하는 이동 속도 (m/s) — 발 미끄러짐을 줄이기 위한 재생 속도 보정
 const CLIP_SPEED = { walk: 1.6, jog: 4.2, sprint: 7.2 };
 
-type Overlay = 'kick' | 'tackle' | 'dive' | 'hold' | 'header';
+type Overlay = 'kick' | 'tackle' | 'dive' | 'hold' | 'header' | 'advance' | 'smother';
 
 const HAIR_TONES = [0x1d1510, 0x3a2516, 0x6b4a2a, 0xc9a25a, 0x111111];
 const SKIN_TONES = [0xf1c7a5, 0xd9a47e, 0xb07a52, 0x7d5236, 0xe8b894];
@@ -81,7 +81,7 @@ export class SkinnedPlayerModel implements CharacterModel {
   private actionT = 0;
   private kickSide: 1 | -1 = 1;
   private diveSide: 1 | -1 = 1;
-  private readonly overlay: Record<Overlay, number> = { kick: 0, tackle: 0, dive: 0, hold: 0, header: 0 };
+  private readonly overlay: Record<Overlay, number> = { kick: 0, tackle: 0, dive: 0, hold: 0, header: 0, advance: 0, smother: 0 };
   private danceW = 0;
 
   constructor(colors: ModelColors, private readonly keeper: boolean) {
@@ -119,10 +119,10 @@ export class SkinnedPlayerModel implements CharacterModel {
   }
 
   play(state: AnimState, opts: { side?: 1 | -1 } = {}): void {
-    if (state === 'kick' || state === 'tackle' || state === 'dive' || state === 'header') {
+    if (state === 'kick' || state === 'tackle' || state === 'dive' || state === 'smother' || state === 'header') {
       this.actionT = 0;
       if (state === 'kick') this.kickSide = opts.side ?? 1;
-      if (state === 'dive') this.diveSide = opts.side ?? 1;
+      if (state === 'dive' || state === 'smother') this.diveSide = opts.side ?? 1;
     }
     this.state = state;
   }
@@ -206,10 +206,10 @@ export class SkinnedPlayerModel implements CharacterModel {
   }
 
   private applyOverlays(): void {
-    const { kick, tackle, dive, hold, header } = this.overlay;
+    const { kick, tackle, dive, hold, header, advance, smother } = this.overlay;
     this.pivot.rotation.set(0, 0, 0);
     this.pivot.position.set(0, 0, 0);
-    if (kick + tackle + dive + hold + header < 0.002) return;
+    if (kick + tackle + dive + hold + header + advance + smother < 0.002) return;
     this.root.updateMatrixWorld(true);
 
     if (kick > 0.002) {
@@ -239,6 +239,25 @@ export class SkinnedPlayerModel implements CharacterModel {
       this.rotateBone('DEF-shin.L', X_AXIS, 1.3 * k);
       this.rotateBone('DEF-upper_arm.L', Z_AXIS, 0.9 * k);
       this.rotateBone('DEF-upper_arm.R', Z_AXIS, -0.9 * k);
+    }
+
+    if (advance > 0.002) {
+      // 전진 중에도 팔을 벌리고 상체를 숙여 준비 자세를 유지한다.
+      this.rotateBone('DEF-spine.001', X_AXIS, 0.25 * advance);
+      this.rotateBone('DEF-upper_arm.L', Z_AXIS, 0.6 * advance);
+      this.rotateBone('DEF-upper_arm.R', Z_AXIS, -0.6 * advance);
+    }
+
+    if (smother > 0.002) {
+      const k = Math.min(1, this.actionT / 0.18) * smother;
+      // 발을 기준으로 회전하는 에셋은 중심을 옮겨 잔디 위에 옆으로 눕힌다.
+      this.pivot.rotation.z = this.diveSide * 1.45 * k;
+      this.pivot.position.y = 0.15 * k;
+      this.pivot.position.x = this.diveSide * 0.8 * k;
+      this.rotateBone('DEF-upper_arm.L', X_AXIS, -1.3 * k);
+      this.rotateBone('DEF-upper_arm.R', X_AXIS, -1.3 * k);
+      this.rotateBone('DEF-shin.L', X_AXIS, 0.4 * k);
+      this.rotateBone('DEF-shin.R', X_AXIS, 0.3 * k);
     }
 
     if (dive > 0.002) {

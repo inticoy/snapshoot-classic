@@ -196,3 +196,42 @@ kbd {
 .setting-list li:last-child { border-bottom: 0; }
 .setting-list b { font: 700 14px/1 var(--ui); color: var(--accent); }
 .brand-logo { height: 44px; }
+
+/* ---------- 모바일: 버튼 최소화 (FIFA 모바일식 스와이프) ---------- */
+.touch-device, .touch-device * {
+  -webkit-user-select: none; user-select: none;
+  -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent;
+}
+.touch-device input, .touch-device textarea { -webkit-user-select: text; user-select: text; }
+/* 선수 이름 바·머리 위 정보는 화면을 많이 가려서 모바일에서 숨긴다 */
+.touch-device .nb { display: none !important; }
+.touch-button {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  right: auto; bottom: auto; font-size: 13px;
+}
+.touch-button[data-hint]:not([data-hint=""])::after {
+  content: attr(data-hint); font: 600 9px/1 var(--ui); color: rgba(255, 255, 255, 0.55); letter-spacing: 0;
+}
+.touch-button.hidden { display: none; }
+/* 오른쪽 아래 엄지 반경에 큰 슛 + 패스 + 질주, 수비 때만 태클 추가 */
+.touch-shoot, .touch-lob {
+  width: 84px; height: 84px; font-size: 17px;
+  right: calc(22px + env(safe-area-inset-right)); bottom: calc(34px + env(safe-area-inset-bottom));
+}
+.touch-pass {
+  width: 70px; height: 70px; font-size: 15px;
+  right: calc(122px + env(safe-area-inset-right)); bottom: calc(18px + env(safe-area-inset-bottom));
+}
+.touch-sprint {
+  width: 58px; height: 58px;
+  right: calc(132px + env(safe-area-inset-right)); bottom: calc(110px + env(safe-area-inset-bottom));
+}
+.touch-through {
+  width: 58px; height: 58px;
+  right: calc(36px + env(safe-area-inset-right)); bottom: calc(136px + env(safe-area-inset-bottom));
+}
+.touch-lob { border-color: rgba(255, 212, 0, 0.7); }
+.touch-pause {
+  width: auto; height: 34px; padding: 0 14px; border-radius: 4px; font-size: 12px;
+  right: calc(12px + env(safe-area-inset-right)); top: calc(10px + env(safe-area-inset-top)); bottom: auto;
+}

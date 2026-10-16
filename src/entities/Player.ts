@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
-import { GOAL, PITCH, PLAYER, TEAM_COLORS, VISUAL } from '../config';
+import { GOAL, KEEPER, PITCH, PLAYER, TEAM_COLORS, VISUAL } from '../config';
 import { PlayerModel, type AnimState, type CharacterModel, type ModelColors } from './PlayerModel';
 import { SkinnedPlayerModel, hasCharacterAsset } from './SkinnedPlayerModel';
 import type { PlayerProfile } from '../data/Teams';
@@ -34,6 +34,9 @@ export class Player {
   tackleKind: 'slide' | 'stand' = 'slide';
   stunned = 0;
   diveTimer = 0;
+  diveKind: 'save' | 'smother' = 'save';
+  diveSide: 1 | -1 = 1;
+  keeperAdvancing = false;
   /** 액션 중에는 이동 입력을 무시 */
   actionLock = 0;
   readonly tackleDir = new THREE.Vector3();
@@ -130,7 +133,7 @@ export class Player {
       this.vel.copy(this.diveVel);
       this.diveVel.multiplyScalar(Math.exp(-3 * dt));
       if (this.diveTimer <= 0) {
-        this.stunned = 0.45;
+        this.stunned = KEEPER.recoveryTime;
         this.vel.set(0, 0, 0);
       }
     }
@@ -182,10 +185,12 @@ export class Player {
     return this.tackleKind === 'slide' ? PLAYER.tackleRange : PLAYER.standTackleRange;
   }
 
-  startDive(vel: THREE.Vector3, localSide: 1 | -1): void {
+  startDive(vel: THREE.Vector3, localSide: 1 | -1, kind: 'save' | 'smother' = 'save'): void {
     this.diveVel.copy(vel);
-    this.diveTimer = 0.55;
-    this.model.play('dive', { side: localSide });
+    this.diveKind = kind;
+    this.diveSide = localSide;
+    this.diveTimer = kind === 'smother' ? KEEPER.smotherDuration : KEEPER.diveDuration;
+    this.model.play(kind === 'smother' ? 'smother' : 'dive', { side: localSide });
   }
 
   private clampToArena(): void {
@@ -215,7 +220,7 @@ export class Player {
     this.animTimer = Math.max(0, this.animTimer - dt);
     const inAction = this.animTimer > 0 || this.tackleTimer > 0 || this.diveTimer > 0 || this.stunned > 0;
     if (!inAction) {
-      const base: AnimState = this.basePose ?? (speed > 0.6 ? 'run' : 'idle');
+      const base: AnimState = this.basePose ?? (this.keeperAdvancing ? 'advance' : speed > 0.6 ? 'run' : 'idle');
       if (this.model.current !== base) this.model.play(base);
     }
     // 위치는 매 프레임 반영하고 멀리 있는 평상시 동작만 30Hz로 갱신한다.

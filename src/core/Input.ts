@@ -2,7 +2,7 @@
  * 키 배치: FC 온라인(넥슨) 키보드 기본 배치 기준
  *  공격  방향키 이동 · E 질주 · S 짧은 패스 · W 스루 패스 · A 로빙 패스 · D 슛
  *        Z+D 감아차기 · Q+D 칩슛 · Q+W 로빙 스루 패스
- *  수비  S 선수 변경 · D(꾹) 압박 · Q(꾹) 동료 압박 · C(꾹) 견제 · Space 스탠딩 태클 · A 슬라이딩 태클
+ *  수비  W(꾹) 키퍼 돌진 · S 선수 변경 · D(꾹) 압박 · Q(꾹) 동료 압박 · C(꾹) 견제 · Space 스탠딩 태클 · A 슬라이딩 태클
  */
 export type Action =
   | 'shoot'
@@ -81,6 +81,12 @@ export class Input {
 
   /** 뗄 때 결정한 스와이프 보조키를 다음 고정 스텝까지 보존한다. */
   pulse(action: Action): void { this.pulses.add(action); }
+
+  /** 한 프레임짜리 누름 (스와이프로 결정되는 태클 등) */
+  tap(action: Action): void {
+    this.pulses.add(action);
+    this.virtualPressed.add(action);
+  }
 
   setMove(x: number, y: number): void {
     const scale = Math.max(1, Math.hypot(x, y));

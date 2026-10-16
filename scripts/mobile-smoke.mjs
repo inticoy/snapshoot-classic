@@ -93,7 +93,9 @@ try {
   await page.screenshot({ path: `${output}/play.png` });
 
   const overlap = (a, b) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
-  for (const hud of ['#radar', '#nb-left', '#nb-right']) {
+  // 모바일은 선수 이름 바를 숨긴다
+  for (const nb of ['#nb-left', '#nb-right']) assert.equal(await page.locator(nb).isVisible(), false, `${nb}가 보임`);
+  for (const hud of ['#radar', '.sb']) {
     const box = await page.locator(hud).boundingBox();
     for (const button of await page.locator('.touch-button:visible').all()) assert.equal(overlap(box, await button.boundingBox()), false, `${hud}와 버튼 겹침`);
   }

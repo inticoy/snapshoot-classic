@@ -2,13 +2,11 @@ import { TOUCH } from '../config';
 import { Input, type Action } from './Input';
 
 export type TouchMode = 'attack' | 'defence' | 'throwin' | 'corner' | 'goalkick';
-export type TouchSlot = 'shoot' | 'pass' | 'through' | 'lob' | 'sprint' | 'support' | 'contain' | 'pause';
+export type TouchSlot = 'shoot' | 'pass' | 'through' | 'lob' | 'sprint' | 'pause';
 
 export function touchBinding(mode: TouchMode, slot: TouchSlot): { label: string; action: Action } {
   if (slot === 'pause') return { label: '일시정지', action: 'pause' };
   if (slot === 'sprint') return { label: '질주', action: 'sprint' };
-  if (slot === 'support') return { label: '동료 압박', action: 'modifier' };
-  if (slot === 'contain') return { label: '견제', action: 'contain' };
   if (mode === 'defence') {
     if (slot === 'shoot') return { label: '압박', action: 'shoot' };
     if (slot === 'pass') return { label: '선수 변경', action: 'pass' };
@@ -20,7 +18,22 @@ export function touchBinding(mode: TouchMode, slot: TouchSlot): { label: string;
   return { label: slot === 'shoot' ? '슛' : '스루', action: slot };
 }
 
-interface Contact { x: number; y: number; slot?: TouchSlot; action?: Action }
+interface Contact { x: number; y: number; slot?: TouchSlot; action?: Action; flicked?: boolean }
+
+/** 화면에 보이는 버튼. 나머지 동작은 스와이프로 낸다 (FIFA 모바일식) */
+export function visibleSlots(mode: TouchMode): TouchSlot[] {
+  if (mode === 'attack') return ['shoot', 'pass', 'sprint', 'pause'];
+  if (mode === 'defence') return ['shoot', 'pass', 'through', 'sprint', 'pause'];
+  return ['pass', 'lob', 'pause'];
+}
+
+/** 버튼 아래 작게 표시하는 스와이프 안내 */
+export function swipeHint(mode: TouchMode, slot: TouchSlot): string {
+  if (mode === 'attack' && slot === 'pass') return '↑스루 ↓로빙';
+  if (mode === 'attack' && slot === 'shoot') return '↑칩 ↔감아';
+  if (mode === 'defence' && slot === 'shoot') return '밀면 슬라이딩';
+  return '';
+}
 
 /** DOM과 분리해 멀티터치/취소/스와이프를 실제 경기 시뮬레이션에서도 검증한다. */
 export class TouchInput {
@@ -51,7 +64,11 @@ export class TouchInput {
 
   move(id: number, x: number, y: number): void {
     const start = this.contacts.get(id);
-    if (!start || id !== this.moveId) return;
+    if (!start) return;
+    if (id !== this.moveId) {
+      this.swipe(id, start, x - start.x, y - start.y);
+      return;
+    }
     const dx = (x - start.x) / TOUCH.joystickRadius;
     const dy = (y - start.y) / TOUCH.joystickRadius;
     const length = Math.hypot(dx, dy);
@@ -76,6 +93,18 @@ export class TouchInput {
       this.input.setActions(`touch:${id}`, []);
     }
     this.contacts.delete(id);
+  }
+
+  /** 누른 채 미는 동작: 패스 → 스루/로빙, 압박 → 슬라이딩 */
+  private swipe(id: number, c: Contact, dx: number, dy: number): void {
+    const far = Math.hypot(dx, dy) >= TOUCH.swipeDistance;
+    if (this.mode === 'attack' && c.slot === 'pass') {
+      // 한 번 정한 킥은 손가락을 되돌려도 유지한다 (중간 해제로 오발사 방지)
+      if (far && Math.abs(dy) > Math.abs(dx)) this.input.setActions(`touch:${id}`, ['pass', dy < 0 ? 'through' : 'lob']);
+    } else if (this.mode === 'defence' && c.slot === 'shoot' && far && !c.flicked) {
+      c.flicked = true;
+      this.input.tap('lob');
+    }
   }
 
   setMode(mode: TouchMode): void {

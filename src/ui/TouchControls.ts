@@ -1,7 +1,8 @@
 import { Input } from '../core/Input';
-import { TouchInput, touchBinding, type TouchMode, type TouchSlot } from '../core/TouchInput';
+import { TouchInput, swipeHint, touchBinding, visibleSlots, type TouchMode, type TouchSlot } from '../core/TouchInput';
 
-const SLOTS: TouchSlot[] = ['shoot', 'pass', 'through', 'lob', 'sprint', 'support', 'contain', 'pause'];
+// 동료 압박·견제는 버튼을 줄이려고 모바일에서 뺐다. 나머지는 스와이프로 낸다
+const SLOTS: TouchSlot[] = ['shoot', 'pass', 'through', 'lob', 'sprint', 'pause'];
 
 /** 포인터 캡처로 버튼 바깥 스와이프와 손가락별 입력 수명을 보존한다. */
 export class TouchControls {
@@ -40,6 +41,13 @@ export class TouchControls {
     guide.setAttribute('role', 'status');
     guide.innerHTML = '<b>↻</b><span>가로로 돌려주세요</span><small>두 손으로 조이스틱과 버튼을 함께 조작하세요</small>';
     document.body.append(this.root, guide);
+    // iOS: 길게 누르면 뜨는 텍스트 선택·돋보기·공유 메뉴를 경기 화면 전체에서 막는다
+    const blockGesture = (event: Event) => {
+      if (this.enabled && !(event.target instanceof HTMLInputElement)) event.preventDefault();
+    };
+    document.addEventListener('selectstart', blockGesture);
+    document.addEventListener('contextmenu', blockGesture);
+    this.root.addEventListener('touchstart', blockGesture, { passive: false });
     this.renderLabels();
     const detect = () => {
       if (this.enabled) return;
@@ -92,12 +100,14 @@ export class TouchControls {
   private renderLabels(): void {
     const mode = this.touch.mode;
     this.root.dataset.mode = mode;
+    const shown = visibleSlots(mode);
     for (const [slot, button] of this.buttons) {
       const { label } = touchBinding(mode, slot);
-      button.textContent = label;
-      button.setAttribute('aria-label', label);
-      button.classList.toggle('hidden', (slot === 'support' || slot === 'contain') && mode !== 'defence'
-        || (slot === 'shoot' || slot === 'through') && mode !== 'attack' && mode !== 'defence');
+      const hint = swipeHint(mode, slot);
+      button.textContent = slot === 'through' && mode === 'defence' ? '태클' : label;
+      button.dataset.hint = hint;
+      button.setAttribute('aria-label', hint ? `${label} (${hint})` : label);
+      button.classList.toggle('hidden', !shown.includes(slot));
     }
   }
 

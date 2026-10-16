@@ -117,15 +117,17 @@ it('DOM 공격/수비·세트피스 전환은 라벨과 보이는 버튼을 갱�
   const label = (slot: string) => document.querySelector(`[data-touch="${slot}"]`)!;
   controls.update(true, 'defence');
   expect(label('shoot').textContent).toBe('압박');
-  expect(label('through').textContent).toBe('스탠딩 태클');
-  expect(label('support').classList.contains('hidden')).toBe(false);
+  expect(label('through').textContent).toBe('태클');
+  expect(label('through').classList.contains('hidden')).toBe(false);
+  expect(label('lob').classList.contains('hidden')).toBe(true);
+  expect(document.querySelector('[data-touch="support"]')).toBeNull();
   pointer(label('through'), 'pointerdown', 2, 700, 210);
   expect(input.button('tackle').pressed).toBe(true);
   controls.update(true, 'throwin');
   expect(label('pass').textContent).toBe('짧은 스로인');
   expect(label('lob').textContent).toBe('롱 스로인');
   expect(label('shoot').classList.contains('hidden')).toBe(true);
-  expect(label('support').classList.contains('hidden')).toBe(true);
+  expect(label('sprint').classList.contains('hidden')).toBe(true);
 });
 
 it('터치 메뉴 좌우 버튼·뒤로 버튼과 기존 키보드 조작이 같은 설정을 변경한다', () => {
@@ -171,4 +173,11 @@ it('같은 버튼의 멀티터치에서 한 손의 정상 캡처 해제는 남�
   expect(cancel).not.toHaveBeenCalled();
   pointer(shoot, 'pointerup', 2, 745, 210);
   expect(input.button('shoot').released).toBe(true);
+});
+
+it('공격 모드는 슛·패스·질주만 보이고 스와이프 안내를 단다', () => {
+  ui();
+  const shown = [...document.querySelectorAll('.touch-button:not(.hidden)')].map((b) => (b as HTMLElement).dataset.touch);
+  expect(shown.sort()).toEqual(['pass', 'pause', 'shoot', 'sprint']);
+  expect((document.querySelector('[data-touch="pass"]') as HTMLElement).dataset.hint).toBe('↑스루 ↓로빙');
 });

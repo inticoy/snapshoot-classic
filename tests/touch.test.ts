@@ -98,7 +98,6 @@ it.each([
   ['attack', 'through', 'through', '스루'], ['attack', 'lob', 'lob', '로빙'],
   ['defence', 'shoot', 'shoot', '압박'], ['defence', 'pass', 'pass', '선수 변경'],
   ['defence', 'through', 'tackle', '스탠딩 태클'], ['defence', 'lob', 'lob', '슬라이딩'],
-  ['defence', 'support', 'modifier', '동료 압박'], ['defence', 'contain', 'contain', '견제'],
   ['throwin', 'pass', 'pass', '짧은 스로인'], ['throwin', 'lob', 'lob', '롱 스로인'],
   ['corner', 'lob', 'lob', '크로스'], ['goalkick', 'lob', 'lob', '롱킥'],
 ] as const)('%s의 %s 버튼은 키보드와 같은 %s 명령을 만든다', (mode, slot, action, label) => {
@@ -283,4 +282,37 @@ it('슛 release 직후 고정 스텝 전에 취소해도 탭이나 스와이프�
   step();
   expect(match.charge).toBeNull();
   expect(match.stats.shots[0]).toBe(0);
+});
+
+it.each([[-60, 'through'], [60, 'lob']] as const)('패스 버튼을 누른 채 세로로 밀면(%i px) %s 킥이 된다', (dy, kind) => {
+  const { match, touch, step } = fixture();
+  touch.startButton(2, 'pass', 700, 210);
+  for (let i = 0; i < 6; i++) step();
+  touch.move(2, 700, 210 + dy);
+  for (let i = 0; i < 12; i++) step();
+  expect(match.charge?.kind).toBe(kind);
+  touch.move(2, 700, 210); // 되돌려도 유지
+  step();
+  expect(match.charge?.kind).toBe(kind);
+  touch.end(2, 700, 210);
+  step();
+  expect(match.stats.passes[0]).toBe(1);
+});
+
+it('수비 압박 버튼을 밀면 슬라이딩 태클이 한 번 나간다', () => {
+  const { match, player, touch, step } = fixture();
+  const opponent = match.forward(1);
+  opponent.pos.set(18, 0, 0);
+  match.ball.reset(18.35, 0);
+  match.ball.owner = opponent;
+  touch.setMode('defence');
+  const tackle = vi.spyOn(player, 'startTackle');
+  touch.startButton(2, 'shoot', 700, 210);
+  step();
+  touch.move(2, 760, 210);
+  step();
+  touch.move(2, 790, 200);
+  step();
+  expect(tackle).toHaveBeenCalledOnce();
+  expect(tackle.mock.calls[0][1]).toBe('slide');
 });

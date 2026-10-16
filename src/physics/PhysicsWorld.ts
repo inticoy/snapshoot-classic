@@ -8,6 +8,7 @@ export interface Materials {
   post: CANNON.Material;
   net: CANNON.Material;
   board: CANNON.Material;
+  keeper: CANNON.Material;
 }
 
 export class PhysicsWorld {
@@ -16,6 +17,7 @@ export class PhysicsWorld {
   readonly ground: CANNON.Body;
   private readonly groundContact: CANNON.ContactMaterial;
   private readonly postContact: CANNON.ContactMaterial;
+  private readonly keeperContact: CANNON.ContactMaterial;
 
   constructor() {
     this.world = new CANNON.World({ gravity: new CANNON.Vec3(0, PHYSICS.gravity, 0) });
@@ -29,6 +31,7 @@ export class PhysicsWorld {
       post: new CANNON.Material('post'),
       net: new CANNON.Material('net'),
       board: new CANNON.Material('board'),
+      keeper: new CANNON.Material('keeper'),
     };
 
     const { ball, ground, post, net, board } = this.materials;
@@ -36,6 +39,8 @@ export class PhysicsWorld {
     this.postContact = new CANNON.ContactMaterial(ball, post, { restitution: 0.75, friction: 0.1 });
     this.world.addContactMaterial(this.groundContact);
     this.world.addContactMaterial(this.postContact);
+    this.keeperContact = new CANNON.ContactMaterial(ball, this.materials.keeper, { restitution: 0.28, friction: 0.35 });
+    this.world.addContactMaterial(this.keeperContact);
     // 골망: 공을 흡수하도록 낮은 반발, 높은 마찰
     this.world.addContactMaterial(new CANNON.ContactMaterial(ball, net, { restitution: 0.05, friction: 0.9 }));
     this.world.addContactMaterial(new CANNON.ContactMaterial(ball, board, { restitution: 0.55, friction: 0.2 }));
@@ -52,6 +57,8 @@ export class PhysicsWorld {
     this.groundContact.restitution = p.groundRestitution;
     this.groundContact.friction = p.groundFriction;
     this.postContact.restitution = p.postRestitution;
+    this.keeperContact.restitution = p.keeperRestitution;
+    this.keeperContact.friction = p.keeperFriction;
   }
 
   addStaticBox(

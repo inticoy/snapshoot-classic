@@ -19,6 +19,7 @@ const ATTACK_HINTS: [string, string][] = [
   ['E', '질주'],
 ];
 const DEFENCE_HINTS: [string, string][] = [
+  ['W', '키퍼 돌진'],
   ['D', '압박'],
   ['Q', '동료 압박'],
   ['C', '견제'],

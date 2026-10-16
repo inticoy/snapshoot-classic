@@ -35,6 +35,9 @@ export interface PhysicsPreset {
   groundFriction: number;
   /** 공 ↔ 골대 반발 계수 */
   postRestitution: number;
+  /** 공 ↔ 키퍼 몸: 손 선방과 별개인 충돌 반발·마찰 */
+  keeperRestitution: number;
+  keeperFriction: number;
   /** 지면에서 사이드스핀이 줄어드는 비율 (스텝당 유지율) */
   groundSpinKeep: number;
 }
@@ -59,7 +62,21 @@ export const REAL: PhysicsPreset = {
   groundRestitution: 0.72,
   groundFriction: 0.45,
   postRestitution: 0.75,
+  keeperRestitution: 0.28,
+  keeperFriction: 0.35,
   groundSpinKeep: 0.985,
+};
+
+// 몸통·다리·머리를 합친 운동학적 충돌체. 손은 확률 선방이 담당한다.
+export const KEEPER_BODY = {
+  torso: [0.24, 0.3, 0.16] as const,
+  legs: [0.18, 0.35, 0.14] as const,
+  headRadius: 0.12,
+  standingHeight: 0.95,
+  lyingHeight: 0.27,
+  poseTime: 0.18,
+  roll: 1.45,
+  blockCooldown: 0.15,
 };
 
 /** 게임 감각을 위한 보정. REAL 대비 무엇을 왜 바꿨는지 함께 적는다 */

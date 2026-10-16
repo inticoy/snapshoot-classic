@@ -7,7 +7,7 @@ import { visualRandom } from '../core/Random';
  * 나중에 Mixamo 캐릭터 + AnimationMixer로 교체할 때도 같은 상태 머신을 그대로 쓸 수 있다.
  */
 
-export type AnimState = 'idle' | 'run' | 'kick' | 'tackle' | 'dive' | 'celebrate' | 'hold' | 'header';
+export type AnimState = 'idle' | 'run' | 'kick' | 'tackle' | 'dive' | 'celebrate' | 'hold' | 'header' | 'advance' | 'smother';
 
 type Joint =
   | 'hipL' | 'hipR' | 'kneeL' | 'kneeR'
@@ -24,7 +24,7 @@ const JOINTS: Joint[] = [
 
 // 상태 전환 속도 (클수록 빠르게 크로스페이드)
 const FADE_SPEED: Record<AnimState, number> = {
-  idle: 8, run: 10, kick: 22, tackle: 18, dive: 16, celebrate: 6, hold: 10, header: 20,
+  idle: 8, run: 10, kick: 22, tackle: 18, dive: 16, celebrate: 6, hold: 10, header: 20, advance: 12, smother: 20,
 };
 
 /** 선수 모델 공통 인터페이스 (절차적 모델 / 스킨드 캐릭터) */
@@ -56,7 +56,7 @@ export class PlayerModel implements CharacterModel {
     THREE.Group
   >;
   private readonly weights: Record<AnimState, number> = {
-    idle: 1, run: 0, kick: 0, tackle: 0, dive: 0, celebrate: 0, hold: 0, header: 0,
+    idle: 1, run: 0, kick: 0, tackle: 0, dive: 0, celebrate: 0, hold: 0, header: 0, advance: 0, smother: 0,
   };
   private state: AnimState = 'idle';
   private runPhase = visualRandom.next() * Math.PI * 2;
@@ -171,10 +171,10 @@ export class PlayerModel implements CharacterModel {
 
   /** 상태 전환. 일회성 동작은 처음부터 다시 재생된다 */
   play(state: AnimState, opts: { side?: 1 | -1 } = {}): void {
-    if (state === 'kick' || state === 'tackle' || state === 'dive' || state === 'header') {
+    if (state === 'kick' || state === 'tackle' || state === 'dive' || state === 'smother' || state === 'header') {
       this.actionT = 0;
       if (state === 'kick') this.kickSide = opts.side ?? 1;
-      if (state === 'dive') this.diveSide = opts.side ?? 1;
+      if (state === 'dive' || state === 'smother') this.diveSide = opts.side ?? 1;
     }
     this.state = state;
   }
@@ -242,6 +242,24 @@ export class PlayerModel implements CharacterModel {
           armSpreadL: 0.1, armSpreadR: 0.1,
           spine: 0.12 + 0.12 * amp,
           bodyDrop: Math.abs(Math.cos(p)) * 0.05 * amp,
+        };
+      }
+      case 'advance': {
+        const s = Math.sin(this.runPhase) * Math.min(1, this.speed / 5);
+        return {
+          hipL: s * 0.65, hipR: -s * 0.65, kneeL: 0.4, kneeR: 0.4,
+          shoulderL: -0.4, shoulderR: -0.4, elbowL: -0.8, elbowR: -0.8,
+          armSpreadL: 0.65, armSpreadR: 0.65, spine: 0.3, bodyDrop: 0.12,
+        };
+      }
+      case 'smother': {
+        // 발밑으로 던질 때는 낮게 옆으로 눕고 양팔을 공 쪽으로 뻗는다.
+        const k = Math.min(1, this.actionT / 0.18);
+        return {
+          hipL: 0.3, hipR: 0.15, kneeL: 0.5, kneeR: 0.3,
+          shoulderL: -1.3 * k, shoulderR: -1.3 * k, elbowL: -0.2, elbowR: -0.2,
+          armSpreadL: 0.3, armSpreadR: 0.3,
+          bodyRoll: this.diveSide * 1.45 * k, bodyDrop: 0.68 * k,
         };
       }
       case 'kick': {

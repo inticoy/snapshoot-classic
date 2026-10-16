@@ -74,6 +74,16 @@ export const KEEPER = {
   reach: 1.0,
   diveReach: 2.1,
   holdTime: 1.1,
+  threatRange: 28,
+  maxRushDepth: 10,
+  reactionTime: 0.3,
+  smotherRange: 2.4,
+  smotherDuration: 0.65,
+  diveDuration: 0.55,
+  crossReach: 2.65,
+  crossRange: 11,
+  crossCrowdRadius: 2.5,
+  recoveryTime: 0.45,
 };
 
 export const SHOT = {
