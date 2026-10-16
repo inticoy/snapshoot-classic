@@ -223,7 +223,19 @@ export const GRAPHICS = {
 
 // 공 주변 약 50m를 보여 주되 터치라인에서도 시야 크기를 유지한다.
 export const CAMERA = { fov: 42, height: 25, distance: 38, endMargin: 10 };
-export const VISUAL = { animationDistance: 32, animationHz: 30, shadowDistance: 24 };
+export const VISUAL = {
+  // 중거리 선수까지 매 프레임 갱신하고, 아주 먼 선수는 기존 30Hz 계약을 유지한다.
+  animationDistance: 48,
+  animationHz: 30,
+  shadowDistance: 24,
+  // 판정 방향은 즉시 반영하되 화면에서는 한 프레임에 약 7.5도 이하로 돌린다.
+  maxYawRate: 8,
+  // 속도 경계와 구운 동작 진입·복귀에 약 0.25초의 시각적 혼합 시간을 준다.
+  locomotionFade: 0.24,
+  motionFade: 0.26,
+  // 구운 클립의 프레임 경계와 클립 혼합으로 생기는 관절 회전 스파이크를 낮춘다.
+  boneSmoothTime: 0.05,
+};
 
 /** 플레이그라운드도 경기와 같은 고정 스텝을 쓰고, 시간창은 시뮬레이션 초로 센다. */
 export const PLAYGROUND = {

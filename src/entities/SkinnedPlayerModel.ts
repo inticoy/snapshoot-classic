@@ -6,6 +6,7 @@ import type { AnimState, CharacterModel, Gesture, ModelColors } from './PlayerMo
 import { visualRandom } from '../core/Random';
 import { makeDecalTexture } from './KitDecal';
 import { MotionClips } from '../anim/MotionLibrary';
+import { VISUAL } from '../config';
 
 /**
  * 스킨드 캐릭터 (Quaternius Universal Animation Library, CC0).
@@ -101,6 +102,7 @@ export class SkinnedPlayerModel implements CharacterModel {
   private readonly mixer: THREE.AnimationMixer;
   private readonly actions = {} as Record<Clip, THREE.AnimationAction>;
   private readonly bones = new Map<string, THREE.Bone>();
+  private readonly visualBones = new Map<string, THREE.Quaternion>();
   private state: AnimState = 'idle';
   private speed = 0;
   private sprint = false;
@@ -112,7 +114,10 @@ export class SkinnedPlayerModel implements CharacterModel {
   private gesture: Gesture = 'none';
   private readonly gestureW = { raise: 0, point: 0 };
   /** 재생 중인 한 번짜리 동작 (킥·슬라이딩·다이빙 등) */
-  private motion: { action: THREE.AnimationAction; w: number; loop: boolean; fadeOut: number; then?: { id: string; speed: number } } | null = null;
+  private motion: { action: THREE.AnimationAction; w: number; loop: boolean; stopping?: boolean; fadeOut: number; then?: { id: string; speed: number } } | null = null;
+  private outgoing: { action: THREE.AnimationAction; w: number } | null = null;
+  private readonly locoW = { idle: 1, walk: 0, jog: 0, sprint: 0 };
+  private stridePhase = visualRandom.next();
 
   constructor(colors: ModelColors, private readonly keeper: boolean) {
     if (!asset) throw new Error('character asset not loaded');
@@ -138,8 +143,8 @@ export class SkinnedPlayerModel implements CharacterModel {
       const action = this.mixer.clipAction(clip);
       action.play();
       action.setEffectiveWeight(key === 'idle' ? 1 : 0);
-      // 클립마다 시작 위상을 다르게 해서 선수들이 똑같이 움직이지 않게
-      action.time = visualRandom.next() * clip.duration;
+      // 선수마다 시작 위상은 다르되 걷기·조깅·질주는 같은 발 디딤 위상을 쓴다.
+      action.time = (key === 'walk' || key === 'jog' || key === 'sprint' ? this.stridePhase : visualRandom.next()) * clip.duration;
       this.actions[key] = action;
     }
   }
@@ -153,15 +158,16 @@ export class SkinnedPlayerModel implements CharacterModel {
     if (!clip) return false;
     const prev = this.motion;
     const action = this.mixer.clipAction(clip);
-    if (prev && prev.action !== action) prev.action.stop();
+    if (this.outgoing) this.outgoing.action.stop();
+    this.outgoing = prev && prev.action !== action ? { action: prev.action, w: prev.w } : null;
     action.reset();
     action.setLoop(opts.loop ? THREE.LoopRepeat : THREE.LoopOnce, Infinity);
     action.clampWhenFinished = true;
     action.time = Math.max(0, opts.startAt ?? 0);
     action.timeScale = opts.speed ?? 1;
-    action.setEffectiveWeight(prev ? prev.w : 0);
+    action.setEffectiveWeight(0);
     action.play();
-    this.motion = { action, w: prev ? prev.w : 0, loop: !!opts.loop, fadeOut: 0.18, then: opts.then };
+    this.motion = { action, w: 0, loop: !!opts.loop, fadeOut: VISUAL.motionFade, then: opts.then };
     // 같은 부위를 움직이는 오버레이는 끈다
     this.state = 'run';
     return true;
@@ -171,9 +177,10 @@ export class SkinnedPlayerModel implements CharacterModel {
     const m = this.motion;
     if (!m) return;
     m.loop = false;
-    // 액션 자체도 한 번 재생으로 바꿔야 끝에서 멈춘다 (LoopRepeat로 두면 처음으로 되감겨 세리머니가 계속 반복된다)
+    // 세리머니 종료 시 재생 위치를 끝으로 건너뛰면 포즈가 한 프레임에 튄다.
+    m.stopping = true;
     m.action.setLoop(THREE.LoopOnce, Infinity);
-    m.action.time = Math.max(m.action.time, m.action.getClip().duration - m.fadeOut);
+    m.action.clampWhenFinished = true;
   }
 
   get currentMotionId(): string | null { return this.motion?.action.getClip().name ?? null; }
@@ -190,9 +197,13 @@ export class SkinnedPlayerModel implements CharacterModel {
 
   resetAnimation(): void {
     this.motion?.action.stop();
+    this.outgoing?.action.stop();
     this.motion = null;
+    this.outgoing = null;
+    this.visualBones.clear();
     this.state = 'idle';
     this.actionT = this.danceW = this.speed = 0;
+    Object.assign(this.locoW, { idle: 1, walk: 0, jog: 0, sprint: 0 });
     this.sprint = false;
     for (const key of Object.keys(this.overlay) as Overlay[]) this.overlay[key] = 0;
     this.pivot.position.set(0, 0, 0);
@@ -236,7 +247,22 @@ export class SkinnedPlayerModel implements CharacterModel {
     this.actionT += dt;
     this.updateMotionWeight(dt);
     this.updateClipWeights(dt);
+    // 서로 다른 이동 클립의 발 디딤 시점을 맞춰 가중치 경계에서 발이 튀지 않게 한다.
+    this.stridePhase = (this.stridePhase + dt * Math.max(0.6, this.speed / CLIP_SPEED.jog) / this.actions.jog.getClip().duration) % 1;
+    for (const key of ['walk', 'jog', 'sprint'] as const) {
+      const action = this.actions[key];
+      if (action) action.time = this.stridePhase * action.getClip().duration;
+    }
     this.mixer.update(dt);
+    const boneBlend = 1 - Math.exp(-dt / VISUAL.boneSmoothTime);
+    for (const [name, bone] of this.bones) {
+      const previous = this.visualBones.get(name);
+      if (previous) {
+        qA.copy(bone.quaternion);
+        bone.quaternion.slerpQuaternions(previous, qA, boneBlend);
+        previous.copy(bone.quaternion);
+      } else this.visualBones.set(name, bone.quaternion.clone());
+    }
 
     // 오버레이 동작 가중치 크로스페이드
     const fadeIn = 1 - Math.exp(-22 * dt);
@@ -257,8 +283,13 @@ export class SkinnedPlayerModel implements CharacterModel {
     }
   }
 
-  /** 동작 가중치: 시작 0.08초에 걸쳐 들어오고, 끝나기 fadeOut 전부터 이동 클립으로 섞여 나간다 */
+  /** 동작 가중치: 이전 동작을 유지하며 새 동작으로 섞고, 끝에서는 이동 자세로 복귀한다. */
   private updateMotionWeight(dt: number): void {
+    if (this.outgoing) {
+      this.outgoing.w = Math.max(0, this.outgoing.w - dt / VISUAL.motionFade);
+      this.outgoing.action.setEffectiveWeight(this.outgoing.w);
+      if (this.outgoing.w <= 0) { this.outgoing.action.stop(); this.outgoing = null; }
+    }
     const m = this.motion;
     if (!m) return;
     const clip = m.action.getClip();
@@ -269,10 +300,10 @@ export class SkinnedPlayerModel implements CharacterModel {
       m.then = undefined;
       if (this.playMotion(next.id, { speed: next.speed })) return;
     }
-    const target = !m.loop && left < m.fadeOut ? Math.max(0, left / m.fadeOut) : 1;
-    m.w = target < m.w ? target : Math.min(1, m.w + dt / 0.08);
+    const target = m.stopping ? 0 : !m.loop && left < m.fadeOut ? Math.max(0, left / m.fadeOut) : 1;
+    m.w = target < m.w ? Math.max(target, m.w - dt / VISUAL.motionFade) : Math.min(1, m.w + dt / VISUAL.motionFade);
     m.action.setEffectiveWeight(m.w);
-    if (!m.loop && left <= 0.001 && m.w <= 0.001) {
+    if (!m.loop && (m.stopping || left <= 0.001) && m.w <= 0.001) {
       m.action.stop();
       this.motion = null;
     }
@@ -304,29 +335,31 @@ export class SkinnedPlayerModel implements CharacterModel {
 
     const celebrate = this.state === 'celebrate';
     this.danceW += ((celebrate ? 1 : 0) - this.danceW) * (1 - Math.exp(-5 * dt));
-    const rest = (1 - this.danceW) * (1 - (this.motion?.w ?? 0));
+    const rest = (1 - this.danceW) * Math.max(0, 1 - (this.motion?.w ?? 0) - (this.outgoing?.w ?? 0));
     const idleClip: Clip = this.keeper && this.state !== 'hold' ? 'crouch' : 'idle';
 
     const set = (k: Clip, w: number) => this.actions[k]?.setEffectiveWeight(w);
-    set('idle', idleClip === 'idle' ? loco.idle * rest : 0);
-    set('crouch', idleClip === 'crouch' ? loco.idle * rest : 0);
-    set('walk', loco.walk * rest);
-    set('jog', loco.jog * rest);
-    set('sprint', loco.sprint * rest);
-    set('dance', this.danceW * (1 - (this.motion?.w ?? 0)));
+    const blend = 1 - Math.exp(-dt / VISUAL.locomotionFade);
+    for (const key of Object.keys(this.locoW) as (keyof typeof this.locoW)[]) {
+      this.locoW[key] += (loco[key] - this.locoW[key]) * blend;
+    }
+    set('idle', idleClip === 'idle' ? this.locoW.idle * rest : 0);
+    set('crouch', idleClip === 'crouch' ? this.locoW.idle * rest : 0);
+    set('walk', this.locoW.walk * rest);
+    set('jog', this.locoW.jog * rest);
+    set('sprint', this.locoW.sprint * rest);
+    set('dance', this.danceW * Math.max(0, 1 - (this.motion?.w ?? 0) - (this.outgoing?.w ?? 0)));
 
     // 실제 이동 속도에 맞춰 재생 속도 조절
-    const scale = (k: 'walk' | 'jog' | 'sprint') => THREE.MathUtils.clamp(s / CLIP_SPEED[k], 0.6, 1.5);
-    this.actions.walk?.setEffectiveTimeScale(scale('walk'));
-    this.actions.jog?.setEffectiveTimeScale(scale('jog'));
-    this.actions.sprint?.setEffectiveTimeScale(scale('sprint'));
+    // 세 클립을 같은 stridePhase에서 직접 샘플링하므로 믹서가 별도 속도로 진행시키지 않는다.
+    this.actions.walk?.setEffectiveTimeScale(0);
+    this.actions.jog?.setEffectiveTimeScale(0);
+    this.actions.sprint?.setEffectiveTimeScale(0);
   }
 
   /** 모델 좌표계 기준 축으로 뼈를 회전 (애니메이션 위에 덧입힘) */
   private rotateBone(name: string, axis: THREE.Vector3, angle: number): void {
-    // 주의: GLB를 읽을 때 뼈 이름의 '.'이 빠진다('DEF-thigh.L' → 'DEF-thighL'). 그래서 지금은 목·척추 외
-    // 팔다리 오버레이가 적용되지 않는다. 이름만 고치면 슬라이딩 자세가 뒤틀리므로, 모션캡처 클립으로
-    // 바꿀 때 함께 정리한다 (모션 랩: motions.html).
+    // GLTFLoader가 이름의 점을 제거하므로 실제 GLB 뼈 이름을 사용한다.
     const bone = this.bones.get(name);
     if (!bone || !bone.parent || Math.abs(angle) < 1e-4) return;
     // local' = parentWorld⁻¹ · R_world · parentWorld · local, R_world = rootWorld · R_model · rootWorld⁻¹
@@ -355,11 +388,11 @@ export class SkinnedPlayerModel implements CharacterModel {
       const knee = (1.3 * back * (1 - swing) + 0.15) * kick;
       const side = this.kickSide === 1 ? 'R' : 'L';
       const other = side === 'R' ? 'L' : 'R';
-      this.rotateBone(`DEF-thigh.${side}`, X_AXIS, -leg);
-      this.rotateBone(`DEF-shin.${side}`, X_AXIS, knee);
+      this.rotateBone(`DEF-thigh${side}`, X_AXIS, -leg);
+      this.rotateBone(`DEF-shin${side}`, X_AXIS, knee);
       // 반대 팔을 벌려 균형
-      this.rotateBone(`DEF-upper_arm.${other}`, Z_AXIS, (other === 'L' ? 0.7 : -0.7) * swing * kick);
-      this.rotateBone('DEF-spine.001', X_AXIS, -0.2 * swing * kick);
+      this.rotateBone(`DEF-upper_arm${other}`, Z_AXIS, (other === 'L' ? 0.7 : -0.7) * swing * kick);
+      this.rotateBone('DEF-spine001', X_AXIS, -0.2 * swing * kick);
     }
 
     if (tackle > 0.002) {
@@ -367,19 +400,19 @@ export class SkinnedPlayerModel implements CharacterModel {
       const k = Math.min(1, this.actionT / 0.12) * tackle;
       this.pivot.rotation.x = -1.05 * k;
       this.pivot.position.y = -0.05 * k;
-      this.rotateBone('DEF-thigh.R', X_AXIS, -1.3 * k);
-      this.rotateBone('DEF-shin.R', X_AXIS, 0.05 * k);
-      this.rotateBone('DEF-thigh.L', X_AXIS, -0.5 * k);
-      this.rotateBone('DEF-shin.L', X_AXIS, 1.3 * k);
-      this.rotateBone('DEF-upper_arm.L', Z_AXIS, 0.9 * k);
-      this.rotateBone('DEF-upper_arm.R', Z_AXIS, -0.9 * k);
+      this.rotateBone('DEF-thighR', X_AXIS, -1.3 * k);
+      this.rotateBone('DEF-shinR', X_AXIS, 0.05 * k);
+      this.rotateBone('DEF-thighL', X_AXIS, -0.5 * k);
+      this.rotateBone('DEF-shinL', X_AXIS, 1.3 * k);
+      this.rotateBone('DEF-upper_armL', Z_AXIS, 0.9 * k);
+      this.rotateBone('DEF-upper_armR', Z_AXIS, -0.9 * k);
     }
 
     if (advance > 0.002) {
       // 전진 중에도 팔을 벌리고 상체를 숙여 준비 자세를 유지한다.
-      this.rotateBone('DEF-spine.001', X_AXIS, 0.25 * advance);
-      this.rotateBone('DEF-upper_arm.L', Z_AXIS, 0.6 * advance);
-      this.rotateBone('DEF-upper_arm.R', Z_AXIS, -0.6 * advance);
+      this.rotateBone('DEF-spine001', X_AXIS, 0.25 * advance);
+      this.rotateBone('DEF-upper_armL', Z_AXIS, 0.6 * advance);
+      this.rotateBone('DEF-upper_armR', Z_AXIS, -0.6 * advance);
     }
 
     if (smother > 0.002) {
@@ -388,10 +421,10 @@ export class SkinnedPlayerModel implements CharacterModel {
       this.pivot.rotation.z = this.diveSide * 1.45 * k;
       this.pivot.position.y = 0.15 * k;
       this.pivot.position.x = this.diveSide * 0.8 * k;
-      this.rotateBone('DEF-upper_arm.L', X_AXIS, -1.3 * k);
-      this.rotateBone('DEF-upper_arm.R', X_AXIS, -1.3 * k);
-      this.rotateBone('DEF-shin.L', X_AXIS, 0.4 * k);
-      this.rotateBone('DEF-shin.R', X_AXIS, 0.3 * k);
+      this.rotateBone('DEF-upper_armL', X_AXIS, -1.3 * k);
+      this.rotateBone('DEF-upper_armR', X_AXIS, -1.3 * k);
+      this.rotateBone('DEF-shinL', X_AXIS, 0.4 * k);
+      this.rotateBone('DEF-shinR', X_AXIS, 0.3 * k);
     }
 
     if (dive > 0.002) {
@@ -400,8 +433,11 @@ export class SkinnedPlayerModel implements CharacterModel {
       this.pivot.position.y = 0.25 * k;
       this.pivot.position.x = this.diveSide * 0.15 * k;
       // 양팔을 머리 위로 뻗음
-      this.rotateBone('DEF-upper_arm.L', Z_AXIS, 2.6 * k);
-      this.rotateBone('DEF-upper_arm.R', Z_AXIS, -2.6 * k);
+      // 구운 선방에는 팔 자세가 들어 있으므로 몸통 기울기만 더한다.
+      if (!this.motion) {
+        this.rotateBone('DEF-upper_armL', Z_AXIS, 2.6 * k);
+        this.rotateBone('DEF-upper_armR', Z_AXIS, -2.6 * k);
+      }
     }
 
     if (header > 0.002) {
@@ -410,21 +446,21 @@ export class SkinnedPlayerModel implements CharacterModel {
       const jump = Math.sin(t * Math.PI) * header;
       this.pivot.position.y = 0.45 * jump;
       const nod = (-0.25 + 0.6 * Math.min(1, t * 2)) * header;
-      this.rotateBone('DEF-spine.002', X_AXIS, nod * 0.6);
+      this.rotateBone('DEF-spine002', X_AXIS, nod * 0.6);
       this.rotateBone('DEF-neck', X_AXIS, nod * 0.5);
-      this.rotateBone('DEF-thigh.L', X_AXIS, -0.3 * jump);
-      this.rotateBone('DEF-shin.L', X_AXIS, 0.9 * jump);
-      this.rotateBone('DEF-shin.R', X_AXIS, 0.5 * jump);
-      this.rotateBone('DEF-upper_arm.L', Z_AXIS, 0.9 * header);
-      this.rotateBone('DEF-upper_arm.R', Z_AXIS, -0.9 * header);
+      this.rotateBone('DEF-thighL', X_AXIS, -0.3 * jump);
+      this.rotateBone('DEF-shinL', X_AXIS, 0.9 * jump);
+      this.rotateBone('DEF-shinR', X_AXIS, 0.5 * jump);
+      this.rotateBone('DEF-upper_armL', Z_AXIS, 0.9 * header);
+      this.rotateBone('DEF-upper_armR', Z_AXIS, -0.9 * header);
     }
 
     if (hold > 0.002) {
       // 공을 가슴에 안기
-      this.rotateBone('DEF-upper_arm.L', X_AXIS, -1.1 * hold);
-      this.rotateBone('DEF-upper_arm.R', X_AXIS, -1.1 * hold);
-      this.rotateBone('DEF-forearm.L', X_AXIS, -1.2 * hold);
-      this.rotateBone('DEF-forearm.R', X_AXIS, -1.2 * hold);
+      this.rotateBone('DEF-upper_armL', X_AXIS, -1.1 * hold);
+      this.rotateBone('DEF-upper_armR', X_AXIS, -1.1 * hold);
+      this.rotateBone('DEF-forearmL', X_AXIS, -1.2 * hold);
+      this.rotateBone('DEF-forearmR', X_AXIS, -1.2 * hold);
     }
   }
 }

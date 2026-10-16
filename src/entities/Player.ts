@@ -49,6 +49,7 @@ export class Player {
   basePose: AnimState | null = null;
   private animTimer = 0;
   private visualTime = 0;
+  private visualYaw: number | null = null;
   private shadowEnabled: boolean | null = null;
 
   constructor(
@@ -265,6 +266,7 @@ export class Player {
   /** 연습 재시작에서 직전 킥·세리머니의 시각 타이머까지 비운다. */
   resetAnimation(): void {
     this.animTimer = this.visualTime = 0;
+    this.visualYaw = null;
     this.celebrating = false;
     this.model.resetAnimation?.();
     this.model.play('idle');
@@ -272,7 +274,11 @@ export class Player {
 
   syncVisual(dt: number, distance = 0): void {
     this.model.root.position.set(this.pos.x, 0, this.pos.z);
-    this.model.root.rotation.y = Math.atan2(this.facing.x, this.facing.z);
+    const targetYaw = Math.atan2(this.facing.x, this.facing.z);
+    if (this.visualYaw === null) this.visualYaw = targetYaw;
+    const yawDelta = Math.atan2(Math.sin(targetYaw - this.visualYaw), Math.cos(targetYaw - this.visualYaw));
+    this.visualYaw += THREE.MathUtils.clamp(yawDelta, -VISUAL.maxYawRate * dt, VISUAL.maxYawRate * dt);
+    this.model.root.rotation.y = this.visualYaw;
 
     const speed = Math.hypot(this.vel.x, this.vel.z);
     this.model.setLocomotion(speed, this.sprinting);
