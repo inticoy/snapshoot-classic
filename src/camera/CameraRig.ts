@@ -5,7 +5,7 @@ import { visualRandom } from '../core/Random';
 // TV 중계 (FIFA 기본 카메라 느낌): 관중석 높은 곳에서 망원(좁은 화각)으로 당겨 찍는다.
 // 원근 왜곡이 적고 선수가 크게 보인다. 카메라는 터치라인 밖에 고정, 좌우로만 공을 따라간다.
 // CAMERA(config.ts)는 '넓은 중계' 설정.
-const TELE_CAMERA = { fov: 24, height: 27, backFromTouchline: 44, endMargin: 9, followX: 0.85 };
+const TELE_CAMERA = { fov: 24, height: 20, backFromTouchline: 22, endMargin: 9, followX: 0.9 };
 
 export type CameraMode = 'tele' | 'broadcast' | 'pro';
 
