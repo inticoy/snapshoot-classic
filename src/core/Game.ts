@@ -159,7 +159,7 @@ export class Game {
     this.hud.show(false);
     const lengthLabel = () => `${DURATIONS[this.durationIndex] / 60}분`;
     this.menu.open({
-      eyebrow: 'FOOTBALL GAME · 5 VS 5',
+      eyebrow: 'SNAPSHOOT CLASSIC · 5 VS 5',
       title: 'KICK OFF',
       panel: () => matchupPanel(null, [`경기 시간 ${lengthLabel()}`, '중계 · 5대5', TEAMS[0].name + ' 홈']),
       items: [
@@ -172,6 +172,12 @@ export class Game {
           onRight: () => (this.durationIndex = (this.durationIndex + 1) % DURATIONS.length),
         },
         ...this.settingsItems(),
+        {
+          id: 'snapshoot',
+          label: 'SnapShoot 승부차기 ↗',
+          onSelect: () => window.open('https://inticoy.github.io/snapshoot', '_blank', 'noopener'),
+          panel: () => `<div class="card"><h3>SNAPSHOOT</h3><p>스와이프 한 번으로 차는 승부차기 게임. 같은 SnapShoot 시리즈예요. 나중에 이 게임의 승부차기 모드로 합쳐질 예정입니다.</p></div>`,
+        },
       ],
     });
   }

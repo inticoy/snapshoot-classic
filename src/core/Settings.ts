@@ -29,7 +29,7 @@ interface SettingsData {
   moveAssist: MoveAssist;
 }
 
-const KEY = 'football-game:settings';
+const KEY = 'snapshoot-classic:settings';
 
 function load(): SettingsData {
   const fallback: SettingsData = { passAssist: 'assisted', shotAssist: 'assisted', moveAssist: 'high' };

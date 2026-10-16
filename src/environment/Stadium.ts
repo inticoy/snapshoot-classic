@@ -250,7 +250,7 @@ function makeAdTexture(): THREE.CanvasTexture {
   c.height = 64;
   const g = c.getContext('2d')!;
   const ads = [
-    { bg: '#11151d', fg: '#ffffff', text: 'FOOTBALL GAME' },
+    { bg: '#11151d', fg: '#ffffff', text: 'SNAPSHOOT CLASSIC' },
     { bg: '#d8323f', fg: '#ffffff', text: 'SNAPSHOOT' },
     { bg: '#f2c230', fg: '#11151d', text: 'INTICOY' },
     { bg: '#1d2a5b', fg: '#ffffff', text: 'THREE.JS' },

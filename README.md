@@ -1,6 +1,10 @@
-# Football Game (가칭)
+# SnapShoot Classic
 
-브라우저에서 키보드로 하는 3D 5대5 축구 게임. Three.js + cannon-es + Vite + TypeScript.
+[SnapShoot](https://github.com/inticoy/snapshoot)(스와이프 승부차기)의 클래식 모드. 브라우저에서 키보드로 하는 3D 5대5 축구.
+
+**플레이:** https://inticoy.github.io/snapshoot-classic/
+
+Three.js + cannon-es + Vite + TypeScript.
 
 ## 실행
 
