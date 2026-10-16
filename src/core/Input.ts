@@ -56,6 +56,7 @@ export interface ButtonState {
  */
 export class Input {
   private readonly down = new Set<string>();
+  private readonly scripted = new Set<string>();
   private readonly pressedQueue = new Set<string>();
   private readonly releasedQueue = new Set<string>();
   /** 메뉴 조작용: 눌린 순서 그대로 (같은 키 연타도 보존) */
@@ -106,6 +107,15 @@ export class Input {
     this.pulses.clear();
   }
 
+  /** DOM 없이도 같은 키 코드와 눌림·뗌 엣지로 고정 스텝을 재생한다. */
+  setVirtualKeys(keys: readonly string[]): void {
+    const next = new Set(keys);
+    for (const key of this.scripted) if (!next.has(key)) this.releasedQueue.add(key);
+    for (const key of next) if (!this.scripted.has(key)) this.pressedQueue.add(key);
+    this.scripted.clear();
+    for (const key of next) this.scripted.add(key);
+  }
+
   constructor(target: Window = window) {
     target.addEventListener('keydown', (e) => {
       if (GAME_KEYS.has(e.code)) e.preventDefault();
@@ -125,7 +135,7 @@ export class Input {
   }
 
   isDown(action: Action): boolean {
-    if (ACTION_KEYS[action].some((k) => this.down.has(k)) || this.pulses.has(action)) return true;
+    if (ACTION_KEYS[action].some((k) => this.down.has(k) || this.scripted.has(k)) || this.pulses.has(action)) return true;
     for (const actions of this.virtual.values()) if (actions.has(action)) return true;
     return false;
   }
@@ -149,7 +159,7 @@ export class Input {
 
   /** 화면 기준 이동 입력. x = 오른쪽, y = 위쪽 (-1..1), 대각선 정규화 */
   moveAxis(): { x: number; y: number } {
-    const has = (keys: string[]) => keys.some((k) => this.down.has(k));
+    const has = (keys: string[]) => keys.some((k) => this.down.has(k) || this.scripted.has(k));
     let x = (has(MOVE_KEYS.right) ? 1 : 0) - (has(MOVE_KEYS.left) ? 1 : 0);
     let y = (has(MOVE_KEYS.up) ? 1 : 0) - (has(MOVE_KEYS.down) ? 1 : 0);
     x += this.touchAxis.x;

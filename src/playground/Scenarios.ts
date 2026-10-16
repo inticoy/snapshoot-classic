@@ -1,19 +1,20 @@
 import * as THREE from 'three';
 import { BALL, PITCH, PLAYGROUND } from '../config';
 import type { Player } from '../entities/Player';
-import type { Match } from '../gameplay/Match';
+import type { Match, PracticeOpponent } from '../gameplay/Match';
 import type { PlaygroundScenario } from '../data/Playground';
 
 /** 새 경기 객체를 만들지 않아 Game의 카메라·물리·터치와 같은 선수를 계속 사용한다. */
 export class PlaygroundScenarios {
   private readonly roster: Player[];
   current: PlaygroundScenario = 'free';
+  opponent: PracticeOpponent = 'press';
 
   constructor(private readonly match: Match) {
     this.roster = [...match.players];
   }
 
-  reset(id: PlaygroundScenario = this.current): void {
+  reset(id: PlaygroundScenario = this.current, seed = PLAYGROUND.seed, opponent: PracticeOpponent = this.opponent, control: 'user' | 'opponent' = 'user'): void {
     this.current = id;
     const m = this.match;
     const attacker = this.roster.find((p) => p.team === 0 && p.slot.label === 'ST')!;
@@ -28,7 +29,15 @@ export class PlaygroundScenarios {
       : id === 'pressure' ? [user, ...opponents]
       : id === 'receive' ? [user, mate]
       : id === 'slide' ? [user, runner] : [user, keeper];
-    m.startPractice(active, user, PLAYGROUND.seed);
+    m.startPractice(active, user, seed);
+    this.opponent = opponent;
+    m.practiceOpponent = opponent;
+    if (control === 'opponent') {
+      const target = active.find((p) => p.team === 1 && !p.isKeeper);
+      if (!target) throw new Error('조작할 상대 필드 선수가 없습니다');
+      m.controlled = target;
+      m.practiceControlLocked = true;
+    }
     m.duration = PLAYGROUND.duration;
     user.pos.set(-20, 0, 0);
     user.facing.set(1, 0, 0);

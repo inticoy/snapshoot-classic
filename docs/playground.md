@@ -12,7 +12,7 @@
 
 전환 시간은 입력 목표 방향이 30° 이상 바뀐 스텝 시작부터 공의 수평 진행 방향이 현재 입력 ±30° 안에 들어올 때까지다. 정지한 공에는 방향을 만들지 않는다. 작은 아날로그 방향 변화도 마지막 목표 대비 누적한다. 입력을 놓거나 조작 선수가 바뀌면 미완료 전환을 취소한다. 터치 빈도는 최근 1초 창이며, 헤비 터치·소유 상실은 조작 선수 기준 누적이다. 의도적 패스·슛 방출은 소유 상실에서 제외한다.
 
-JSON/CSV에는 매 스텝의 월드 XZ 이동 입력, 버튼 held/pressed/released, 선수·공 상태, 소유자, 동작/높이, 터치 사건 수, 계산 수치, 시드, 당시 파라미터와 보정 설정이 담긴다. CSV의 중첩 데이터 셀은 JSON이며 따옴표와 줄바꿈을 인용한다. 기록은 메모리에 쌓이므로 긴 실험은 나눠 내보내고 리셋한다. 재생기는 포함하지 않는다. 골·아웃·휘슬 뒤에는 재개 배치 없이 동작과 물리를 마저 진행하고 R을 기다린다.
+JSON/CSV에는 매 스텝의 월드 XZ 이동 입력, 버튼 held/pressed/released, 선수·공 상태, 소유자, 동작/높이, 터치 사건 수, 계산 수치, 시드, 당시 파라미터와 보정 설정이 담긴다. CSV의 중첩 데이터 셀은 JSON이며 따옴표와 줄바꿈을 인용한다. 기록은 메모리에 쌓이므로 긴 실험은 나눠 내보내고 리셋한다. 스크립트 재생은 아래 JSON 형식으로 한다. 골·아웃·휘슬 뒤에는 재개 배치 없이 동작과 물리를 마저 진행하고 R을 기다린다.
 
 ## 높이 수정
 
@@ -46,3 +46,40 @@ pnpm test:playground
 이번 환경의 Chrome은 실행 직후 SIGABRT로 종료되어 브라우저 스모크는 **미실행**이다. DOM 동작과 실제 Match/GLB의 수치는 Vitest로 검증했지만, WebGL 화면과 모바일 기기에서의 시각 확인은 남아 있다.
 
 최종 검증: `pnpm install`, `pnpm typecheck`, `pnpm test`, `pnpm build` 통과. 17개 테스트 파일, **201개 테스트 통과**. 기존 테스트 기대값은 변경하지 않았다. 빌드에는 기존 500KB 초과 청크 경고가 남아 있다. 커밋은 샌드박스의 `.git/index.lock` 생성 차단으로 만들지 못했으며 푸시는 수행하지 않았다.
+
+## JSON 스크립트 재생
+
+`playground/scripts/`의 JSON을 패널의 **스크립트 실행**에 붙여넣거나 파일 입력/텍스트 영역에 놓은 뒤 실행한다. 화면은 같은 시드와 고정 120Hz 스텝으로 재생한다. **결과 JSON 다운로드**에는 `frames`, `events`, `summary`가 담긴다. 개발자 콘솔에서는 `window.__playground.run(script)`로 같은 결과를 얻는다. 스크립트가 끝나면 화면 조작을 다시 하려면 R로 리셋한다.
+
+헤드리스 실행 예:
+
+```bash
+npx vite-node scripts/playground-run.ts playground/scripts/duel.json
+npx vite-node scripts/playground-run.ts playground/scripts/duel.json /tmp/duel-result.json
+npx vite-node scripts/playground-run.ts 'playground/scripts/*.json' /tmp/playground-results/
+```
+
+출력을 지정하지 않으면 파일별 `summary`만 표준 출력에 남긴다. 여러 파일 또는 글롭에 출력 디렉터리를 주면 각 결과를 별도 JSON으로 저장한다. JSON의 `scenario`는 `free`, `duel`, `pressure`, `receive`, `slide`, `keeper` 중 하나다. `seed`는 정수, `duration`은 초, `sampleHz` 기본값은 30이다. `inputs`의 `keys`는 그 시각부터 유지할 **전체 키 목록**이고 `tap`은 한 120Hz 스텝만 누른다. 키 코드는 FC 온라인 배치에 따라 방향키, `KeyE`, `KeyS`, `KeyW`, `KeyA`, `KeyD`, `KeyQ`, `KeyZ`, `KeyC`, `Space` 등을 쓴다. `params`는 `DRIBBLE.touchPeriod`처럼 슬라이더 이름을 접두어와 함께 적는다. `opponent`는 `stand`, `follow`, `press`, `tackle`이며 기본은 `press`다. `control: "opponent"`는 duel, pressure, slide에서 상대 필드 선수를 조작한다. 화면에서 Tab으로도 조작 팀을 바꿀 수 있다.
+
+`summary.possession`은 조작 선수가 공을 소유한 스텝의 비율이다. `progress`는 월드 입력 방향별 투영 이동 거리(m), `alignment`는 해당 방향으로 속도가 30° 이내에 들어올 때까지의 누적 시간(s)이다. `nearestOpponent`는 상대와의 최단 거리(m), `firstWithin2m`는 첫 접근 시각(s)이다. 상대가 없는 시나리오는 각각 0과 `null`이다. `tackleAttempts`는 상대의 태클 동작 시작 횟수, `tackleSuccesses`는 성공 이벤트 수다. 이벤트의 선수 참조는 이름과 번호로 저장한다.
+
+시드 318, 기본 파라미터, 각 예제의 입력으로 측정한 결과:
+
+| 예제 | 소유율 | 입력 방향 진행 거리 합(m) | 터치 | 소유 상실 | 태클 시도/성공 | 최단 상대 거리(m) |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 4방향 전환 | 100% | 29.28 | 43 | 0 | 0/0 | 상대 없음 |
+| 180° 반전 | 100% | 23.86 | 33 | 0 | 0/0 | 상대 없음 |
+| 1대1 돌파 | 100% | 36.42 | 30 | 0 | 1/0 | 0.02 |
+| 압박 탈출 | 28.3% | 30.35 | 8 | 1 | 3/1 | 0.02 |
+| 슬라이딩 태클 | 0% | 3.74 | 0 | 0 | 0/0 | 0.18 |
+| 패스 받기 첫 터치 | 67.7% | 18.62 | 22 | 0 | 0/0 | 상대 없음 |
+
+같은 `ArrowUp` 0–2초, `ArrowRight+KeyE` 2–4초, `ArrowUp+KeyE` 4–6초 입력으로 시나리오만 바꾼 비교:
+
+| 시나리오 | 소유율 | 진행 거리 합(m) | 터치 | 소유 상실 | 태클 시도/성공 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| free | 100% | 36.88 | 28 | 0 | 0/0 |
+| duel (press) | 100% | 36.42 | 30 | 0 | 1/0 |
+| pressure (press) | 72.9% | 30.89 | 23 | 1 | 3/1 |
+
+`duel`에서는 수비수가 접근해 태클을 시도하지만 이 입력과 시드에서는 성공하지 않는다. `pressure`는 세 수비수가 실제로 움직여 소유율과 진행 거리를 낮춘다. 이 수치는 한 시드의 재현 가능한 사례이며 여러 시드의 평균은 아니다.

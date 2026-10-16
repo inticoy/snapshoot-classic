@@ -1,0 +1,1 @@
+{"scenario":"pressure","seed":318,"duration":6,"opponent":"press","inputs":[{"t":0,"keys":["ArrowUp"]},{"t":1.5,"keys":["ArrowLeft","KeyE"]},{"t":3,"keys":["ArrowUp","KeyE"]},{"t":4.5,"keys":["ArrowRight"]}]}

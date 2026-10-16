@@ -49,6 +49,10 @@ export class TeamAI {
     const m = this.match;
     for (const p of m.players) {
       if (p.isKeeper || m.isUserControlled(p)) continue;
+      if (m.practice && p.team === 1 && m.practiceOpponent) {
+        this.practiceDefender(p, dt);
+        continue;
+      }
       // 소유가 바뀌면 이전 공격의 회피 방향을 새 드리블에 이어 쓰지 않는다.
       if (m.ball.owner !== p) this.intents.get(p)!.dribbleDir = null;
       let t = this.timers.get(p)! - dt;
@@ -59,6 +63,35 @@ export class TeamAI {
       }
       this.timers.set(p, t);
       this.move(p, dt);
+    }
+  }
+
+  /** 소수 인원 연습에서는 포메이션 슬롯이 경기장 반대편에 있으므로 공 주변 임무를 직접 준다. */
+  private practiceDefender(p: Player, dt: number): void {
+    const m = this.match;
+    const mode = m.practiceOpponent!;
+    if (mode === 'stand') {
+      p.steer(tmp.set(0, 0, 0), false, false, dt);
+      return;
+    }
+    const carrier = m.ball.owner?.team === 0 ? m.ball.owner : m.teams[0][0];
+    if (!carrier) return;
+    const peers = m.teams[1].filter((q) => !q.isKeeper);
+    const index = peers.indexOf(p);
+    const offset = mode === 'follow' ? 2.5 : index === 0 ? 0.75 : 1.1;
+    const side = index === 1 ? 0.9 : index === 2 ? -0.9 : 0;
+    tmp.set(carrier.pos.x + offset - p.pos.x, 0, carrier.pos.z + side - p.pos.z);
+    const distance = tmp.length();
+    if (distance > 0.15) tmp.multiplyScalar(Math.min(1, distance / 1.2) / distance);
+    else tmp.set(0, 0, 0);
+    if (!p.busy) p.steer(tmp, distance > 2 && mode !== 'follow', false, dt);
+    if (distance < 3 && !p.busy) p.faceTowards(carrier.pos.x, carrier.pos.z);
+    if ((mode === 'press' || mode === 'tackle') && m.ball.owner === carrier && !p.busy && p.tackleCooldown <= 0) {
+      const d = p.pos.distanceTo(carrier.pos);
+      if (d < (mode === 'tackle' ? 1.9 : 1.45)) {
+        tmp.copy(carrier.pos).sub(p.pos).setY(0).normalize();
+        p.startTackle(tmp, mode === 'tackle' ? 'slide' : 'stand');
+      }
     }
   }
 

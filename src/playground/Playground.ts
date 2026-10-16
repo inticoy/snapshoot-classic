@@ -1,10 +1,12 @@
 import * as THREE from 'three';
 import { PLAYGROUND } from '../config';
 import { settings } from '../core/Settings';
+import { Input } from '../core/Input';
 import type { Match, UserCommand } from '../gameplay/Match';
 import { PLAYGROUND_PARAMETERS, PLAYGROUND_SCENARIOS, type PlaygroundScenario } from '../data/Playground';
 import { PlaygroundScenarios } from './Scenarios';
 import { parameterSnapshot, setParameter } from './Parameters';
+import { runScript, scriptCommand, validateScript, type PlaygroundScript, type ScriptResult } from './Script';
 import { initialTelemetry, recentHistory, recordsToCsv, updateTelemetry, type TelemetryMetrics, type TelemetrySample, type Vec3 } from './Telemetry';
 import './style.css';
 
@@ -30,6 +32,11 @@ export class Playground {
   private nextRender = 0;
   private readonly toe = new THREE.Vector3();
   private readonly ball = new THREE.Vector3();
+  private script: PlaygroundScript | null = null;
+  private scriptResult: ScriptResult | null = null;
+  private scriptInput = new Input({ addEventListener() {} } as unknown as Window);
+  private scriptRows = 0;
+  private scriptHeld: string[] = [];
 
   constructor(private readonly match: Match, private readonly onReset: () => void) {
     this.scenarios = new PlaygroundScenarios(match);
@@ -41,6 +48,8 @@ export class Playground {
         <nav aria-label="시나리오">${PLAYGROUND_SCENARIOS.map((s) => `<button data-scenario="${s.id}">${s.label}</button>`).join('')}</nav>
         <p id="pg-hint"></p><p class="pg-help">방향키 이동 · E 질주 · S 패스 · W 스루 · A 로빙/슬라이딩 · D 슛 · Space 스탠딩 · V 카메라 · Esc 일시정지 · R 리셋. 모바일: 기존 조이스틱·버튼·스와이프.</p>
         <button id="pg-reset">R · 같은 시나리오 리셋</button>
+        <label class="pg-parameter">상대 행동 <select id="pg-opponent"><option value="stand">정지</option><option value="follow">따라가기</option><option value="press" selected>압박</option><option value="tackle">태클</option></select></label>
+        <details><summary>스크립트 실행</summary><textarea id="pg-script" aria-label="스크립트 JSON" placeholder="JSON을 붙여넣거나 파일을 놓으세요"></textarea><input id="pg-script-file" type="file" accept=".json,application/json"><button id="pg-script-run">실행</button><button id="pg-script-download" disabled>결과 JSON 다운로드</button></details>
         <p id="pg-status" role="status"></p>
         <p class="pg-help">그래프: 최근 5초 / 각 항목 자동 축척. 방향 없는 정지는 —. 전환 완료는 공 방향이 입력 ±30° 안에 들어온 시점.</p>
         <div class="pg-metrics">${metrics.map(([key, label, unit]) => `<div><label>${label}</label><output data-metric="${key}">—</output><small>${unit}</small><canvas width="100" height="24" data-graph="${key}" aria-label="${label} 최근 5초"></canvas></div>`).join('')}</div>
@@ -61,6 +70,19 @@ export class Playground {
       button.onclick = () => this.reset(button.dataset.scenario as PlaygroundScenario);
     });
     this.root.querySelector<HTMLButtonElement>('#pg-reset')!.onclick = () => this.reset();
+    this.root.querySelector<HTMLSelectElement>('#pg-opponent')!.onchange = (e) => this.reset(this.scenarios.current, (e.target as HTMLSelectElement).value as typeof this.scenarios.opponent);
+    const scriptText = this.root.querySelector<HTMLTextAreaElement>('#pg-script')!;
+    const readFile = async (file?: File) => { if (file) scriptText.value = await file.text(); };
+    this.root.querySelector<HTMLInputElement>('#pg-script-file')!.onchange = (e) => void readFile((e.target as HTMLInputElement).files?.[0]);
+    scriptText.ondragover = (e) => e.preventDefault();
+    scriptText.ondrop = (e) => { e.preventDefault(); void readFile(e.dataTransfer?.files[0]); };
+    this.root.querySelector<HTMLButtonElement>('#pg-script-run')!.onclick = () => {
+      try { this.run(JSON.parse(scriptText.value)); }
+      catch (error) { this.output.textContent = error instanceof Error ? error.message : String(error); }
+    };
+    this.root.querySelector<HTMLButtonElement>('#pg-script-download')!.onclick = () => {
+      if (this.scriptResult) this.downloadResult(this.scriptResult);
+    };
     this.root.querySelectorAll<HTMLInputElement>('[data-param]').forEach((input) => {
       input.oninput = () => {
         setParameter(input.dataset.param as typeof PLAYGROUND_PARAMETERS[number]['key'], Number(input.value));
@@ -75,6 +97,14 @@ export class Playground {
     this.root.querySelector<HTMLButtonElement>('#pg-json')!.onclick = () => this.download('json');
     this.root.querySelector<HTMLButtonElement>('#pg-csv')!.onclick = () => this.download('csv');
     window.addEventListener('keydown', (e) => {
+      if (e.code === 'Tab' && !e.repeat && !(e.target && this.root.contains(e.target as Node))) {
+        e.preventDefault();
+        const next = this.match.controlled.team === 0 ? this.match.players.find((p) => p.team === 1 && !p.isKeeper) : this.match.players.find((p) => p.team === 0 && !p.isKeeper);
+        if (next) {
+          this.match.controlled = next;
+          this.match.practiceControlLocked = next.team === 1;
+        }
+      }
       if (e.code === 'KeyR' && !e.repeat && !(e.target instanceof HTMLTextAreaElement)) {
         e.preventDefault();
         this.reset();
@@ -82,13 +112,16 @@ export class Playground {
     });
     this.syncParameters();
     this.reset('free');
+    (window as unknown as { __playground: { run: (script: unknown) => ScriptResult } }).__playground = { run: (script) => this.run(script) };
   }
 
   get running(): boolean { return this.match.phase === 'playing'; }
 
-  reset(id?: PlaygroundScenario): void {
+  reset(id?: PlaygroundScenario, opponent = this.scenarios.opponent): void {
     this.onReset();
-    this.scenarios.reset(id);
+    this.script = null;
+    this.scenarios.reset(id, PLAYGROUND.seed, opponent);
+    this.root.querySelector<HTMLSelectElement>('#pg-opponent')!.value = opponent;
     this.state = initialTelemetry();
     this.history = [];
     this.records.length = 0;
@@ -97,6 +130,50 @@ export class Playground {
     this.root.querySelector('#pg-hint')!.textContent = PLAYGROUND_SCENARIOS.find((s) => s.id === this.scenarios.current)!.hint;
     for (const button of this.root.querySelectorAll<HTMLButtonElement>('[data-scenario]')) button.setAttribute('aria-pressed', String(button.dataset.scenario === this.scenarios.current));
     this.render();
+  }
+
+  /** JSON 결과와 화면 재생은 같은 시드·입력·시나리오 설정을 공유한다. */
+  run(source: unknown): ScriptResult {
+    const script = validateScript(source);
+    const result = runScript(script);
+    this.reset(script.scenario, script.opponent ?? 'press');
+    this.scenarios.reset(script.scenario, script.seed, script.opponent ?? 'press', script.control ?? 'user');
+    for (const [key, value] of Object.entries(script.params ?? {})) setParameter(key.split('.')[1] as typeof PLAYGROUND_PARAMETERS[number]['key'], value);
+    this.syncParameters();
+    this.script = script;
+    this.scriptResult = result;
+    this.scriptRows = 0;
+    this.scriptHeld = [];
+    this.scriptInput = new Input({ addEventListener() {} } as unknown as Window);
+    this.root.querySelector<HTMLButtonElement>('#pg-script-download')!.disabled = false;
+    return result;
+  }
+
+  commandForStep(): UserCommand | null {
+    if (!this.script) return null;
+    if (this.match.elapsed >= this.script.duration) {
+      this.scriptInput.setVirtualKeys([]);
+      return scriptCommand(this.scriptInput);
+    }
+    const taps: string[] = [];
+    while (this.scriptRows < this.script.inputs.length && this.script.inputs[this.scriptRows].t <= this.match.elapsed + 1e-9) {
+      const row = this.script.inputs[this.scriptRows++];
+      if (row.keys) this.scriptHeld = [...row.keys];
+      if (row.tap) taps.push(...row.tap);
+    }
+    this.scriptInput.setVirtualKeys([...new Set([...this.scriptHeld, ...taps])]);
+    return scriptCommand(this.scriptInput);
+  }
+
+  endScriptStep(): void { this.scriptInput.endFrame(); }
+
+  private downloadResult(result: ScriptResult): void {
+    const url = URL.createObjectURL(new Blob([JSON.stringify(result, null, 2)], { type: 'application/json' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `playground-script-${this.scenarios.current}.json`;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
   /** Match.events가 Game의 사운드 처리에서 비워지기 전에 호출해야 한다. */

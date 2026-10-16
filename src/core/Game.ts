@@ -380,14 +380,16 @@ export class Game {
         let steps = 0;
         while (this.accumulator >= PHYSICS.step && steps < 12) {
           this.buildCommand();
-          this.match.update(PHYSICS.step, this.cmd);
+          const stepCommand = this.playground?.commandForStep() ?? this.cmd;
+          this.match.update(PHYSICS.step, stepCommand);
           if (this.playground) {
             // 텔레메트리의 뼈 높이도 같은 스텝의 애니메이션에서 읽는다.
             for (const p of this.match.players) {
               const distance = Math.hypot(p.pos.x - this.match.ball.position.x, p.pos.z - this.match.ball.position.z);
               p.syncVisual(PHYSICS.step, distance);
             }
-            this.playground.step(PHYSICS.step, this.cmd);
+            this.playground.step(PHYSICS.step, stepCommand);
+            this.playground.endScriptStep();
             this.handleEvents();
           }
           this.input.endFrame();

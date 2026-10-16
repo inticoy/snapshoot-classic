@@ -23,6 +23,7 @@ import { planKick } from './Motions';
 import type { MotionKind } from '../anim/MotionLibrary';
 
 export type Phase = 'kickoff' | 'playing' | 'out' | 'setpiece' | 'goal' | 'halftime' | 'shootout' | 'fulltime';
+export type PracticeOpponent = 'stand' | 'follow' | 'press' | 'tackle';
 
 export type MatchEvent =
   | { type: 'kick'; speed: number; player: Player }
@@ -140,6 +141,9 @@ export class Match {
   elapsed = 0;
   clock = 0; // 경기 진행 시간 (실제 초)
   controlled: Player;
+  /** 고립 연습에만 적용한다. 일반 경기 AI의 의사결정은 그대로 둔다. */
+  practiceOpponent: PracticeOpponent | null = null;
+  practiceControlLocked = false;
   /** 슛/패스 파워 게이지 (0..1), 차지 중이 아니면 null */
   charge: { kind: KickKind; value: number; finesse: boolean; chip: boolean } | null = null;
   /** 공이 오기 전에 미리 입력한 원터치 동작 */
@@ -612,7 +616,7 @@ export class Match {
         this.stats.passes[p.team]++;
         this.pendingPass = p.team;
         if (r.receiver && p.team === 0 && !r.receiver.isKeeper) {
-      this.controlled = r.receiver;
+      if (!this.practiceControlLocked) this.controlled = r.receiver;
       this.receiveTimer = 0;
     }
       }
@@ -637,7 +641,7 @@ export class Match {
     this.stats.passes[p.team]++;
     this.pendingPass = p.team;
     if (receiver && p.team === 0 && !receiver.isKeeper) {
-      this.controlled = receiver;
+      if (!this.practiceControlLocked) this.controlled = receiver;
       this.receiveTimer = 0;
     }
   }
@@ -835,7 +839,7 @@ export class Match {
   switchToNearest(): void {
     let best: Player | null = null;
     let bestD = Infinity;
-    for (const p of this.teams[0]) {
+    for (const p of this.teams[this.practiceControlLocked ? this.controlled.team : 0]) {
       if (p.isKeeper || p === this.controlled) continue;
       const d = p.pos.distanceToSquared(tmp.set(this.ball.position.x, 0, this.ball.position.z));
       if (d < bestD) {
@@ -843,7 +847,7 @@ export class Match {
         best = p;
       }
     }
-    if (best) this.controlled = best;
+    if (best && !this.practiceControlLocked) this.controlled = best;
   }
 
   // ---------------------------------------------------------------- 액션
@@ -875,7 +879,7 @@ export class Match {
       this.stats.passes[p.team]++;
       this.pendingPass = p.team;
       if (r.receiver && p.team === 0 && !r.receiver.isKeeper) {
-        this.controlled = r.receiver;
+        if (!this.practiceControlLocked) this.controlled = r.receiver;
         this.receiveTimer = 0;
       }
     });
@@ -1228,7 +1232,7 @@ export class Match {
       if (best.team === this.pendingPass) this.stats.passesDone[best.team]++;
       this.pendingPass = null;
     }
-    if (best.team === 0 && !best.isKeeper) this.controlled = best;
+    if (best.team === 0 && !best.isKeeper && !this.practiceControlLocked) this.controlled = best;
     // 방향 첫 터치: 받는 순간 누르고 있던 방향으로 공을 잡아 놓는다
     if (best === this.controlled && this.lastMove.lengthSq() > 0.01) best.facing.copy(this.lastMove).setY(0).normalize();
     // 터치 드리블에서는 받은 공의 속도를 죽여 발 앞에 놓아야 한다 (안 그러면 패스 속도 그대로 굴러가 버린다)
@@ -1372,6 +1376,8 @@ export class Match {
   startPractice(active: readonly Player[], controlled: Player, seed: number): void {
     if (!this.practice) throw new Error('practice 옵션이 필요합니다');
     this.restart();
+    this.practiceOpponent = null;
+    this.practiceControlLocked = false;
     this.random.reset(seed);
     this.events.length = 0;
     this.touchGap = this.dribbleTouch = this.aerialLock = this.receiveTimer = 0;

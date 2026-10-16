@@ -20,7 +20,7 @@ beforeEach(() => {
   vi.stubGlobal('HTMLInputElement', win.HTMLInputElement);
   vi.stubGlobal('HTMLTextAreaElement', win.HTMLTextAreaElement);
   vi.spyOn(win.HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
-    clearRect() {}, beginPath() {}, moveTo() {}, lineTo() {}, stroke() {},
+    clearRect() {}, fillRect() {}, beginPath() {}, moveTo() {}, lineTo() {}, stroke() {},
   } as never);
   pg = new Playground(match, vi.fn());
 });
@@ -85,4 +85,28 @@ it('기록은 매 스텝 입력·선수·공·설정을 담고 수치 패널은 
   expect(document.querySelector('[data-metric="playerSpeed"]')!.textContent).not.toBe('—');
   expect(pg.records[29].time).toBeCloseTo(30 * PHYSICS.step);
   expect(pg.latest?.playerSpeed).toBeGreaterThan(1);
+});
+
+it('스크립트 실행은 결과를 노출하고 같은 입력을 화면 Match에 재생한다', () => {
+  const result = pg.run({ scenario: 'duel', seed: 42, duration: 1, opponent: 'stand', inputs: [{ t: 0, keys: ['ArrowUp'] }] });
+  expect(result.frames.length).toBeGreaterThan(1);
+  expect(button('#pg-script-download').disabled).toBe(false);
+  expect(pg.scenarios.current).toBe('duel');
+  const cmd = pg.commandForStep()!;
+  expect(cmd.move.x).toBe(1);
+  match.update(PHYSICS.step, cmd);
+  pg.endScriptStep();
+  expect(match.elapsed).toBeCloseTo(PHYSICS.step);
+  expect(match.practiceOpponent).toBe('stand');
+});
+
+it('Tab은 상대 수비수 조작을 전환하고 상대 모드 선택을 유지한다', () => {
+  button('[data-scenario="duel"]').click();
+  document.body.dispatchEvent(new win.KeyboardEvent('keydown', { code: 'Tab', bubbles: true }) as unknown as Event);
+  expect(match.controlled.team).toBe(1);
+  expect(match.practiceControlLocked).toBe(true);
+  const select = document.querySelector<HTMLSelectElement>('#pg-opponent')!;
+  select.value = 'stand';
+  select.dispatchEvent(new win.Event('change') as unknown as Event);
+  expect(match.practiceOpponent).toBe('stand');
 });
