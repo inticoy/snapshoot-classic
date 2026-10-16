@@ -168,7 +168,12 @@ export class SkinnedPlayerModel implements CharacterModel {
   }
 
   stopMotion(): void {
-    if (this.motion) this.motion.loop = false, (this.motion.action.time = Math.max(this.motion.action.time, this.motion.action.getClip().duration - this.motion.fadeOut));
+    const m = this.motion;
+    if (!m) return;
+    m.loop = false;
+    // 액션 자체도 한 번 재생으로 바꿔야 끝에서 멈춘다 (LoopRepeat로 두면 처음으로 되감겨 세리머니가 계속 반복된다)
+    m.action.setLoop(THREE.LoopOnce, Infinity);
+    m.action.time = Math.max(m.action.time, m.action.getClip().duration - m.fadeOut);
   }
 
   get currentMotionId(): string | null { return this.motion?.action.getClip().name ?? null; }
