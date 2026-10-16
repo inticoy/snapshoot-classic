@@ -12,6 +12,7 @@
  4) MPFB 가중치를 기존 뼈 이름으로 옮기고, 유니폼 영역을 살짝 부풀려 옷 느낌을 준다
 MPFB 생성 메시는 CC0.
 """
+import os
 import sys
 import bpy
 import bmesh
@@ -25,6 +26,7 @@ HEIGHT = 1.82  # 기존 캐릭터 키(1.83)와 맞춰 셰이더 유니폼 영역
 bpy.ops.wm.read_factory_settings(use_empty=True)
 addon_utils.enable('bl_ext.blender_org.mpfb')
 from bl_ext.blender_org.mpfb.services.humanservice import HumanService  # noqa: E402
+from bl_ext.blender_org.mpfb.services.targetservice import TargetService  # noqa: E402
 
 # MPFB 뼈 → 기존 뼈 (부모 먼저)
 MAP = [('pelvis', 'DEF-hips'), ('spine_01', 'DEF-spine.001'), ('spine_02', 'DEF-spine.002'), ('spine_03', 'DEF-spine.003'),
@@ -56,6 +58,19 @@ qdir = {b.name: (qrig.matrix_world @ b.tail_local - qrig.matrix_world @ b.head_l
 macro = {'gender': 1.0, 'age': 0.5, 'muscle': 0.72, 'weight': 0.42, 'proportions': 0.85, 'height': 0.55,
          'cupsize': 0.5, 'firmness': 0.5, 'race': {'asian': 0.34, 'caucasian': 0.33, 'african': 0.33}}
 human = HumanService.create_human(macro_detail_dict=macro)
+# 부위 보정 (뼈대를 붙이기 전에 적용해야 관절 위치가 따라온다)
+#  - 목: 기존 달리기 클립은 목이 짧은 마네킹에 맞춰 고개를 숙인다 → 긴 목이면 거북목처럼 보여 짧게·뒤로
+#  - 엉덩이: 상의·반바지를 칠하면 뒤로 튀어나와 보여 줄인다
+#  - 어깨·머리: 운동선수 체형, 먼 카메라에서도 머리가 읽히게
+TARGETS = {
+    'neck/measure-neck-height-decr': 0.7, 'neck/neck-trans-backward': 0.6, 'neck/neck-scale-depth-decr': 0.2,
+    'buttocks/buttocks-volume-decr': 0.6, 'hip/hip-scale-depth-decr': 0.35,
+    'torso/measure-shoulder-dist-incr': 0.35,
+    'head/head-scale-vert-incr': 0.15, 'head/head-scale-horiz-incr': 0.12, 'head/head-scale-depth-incr': 0.1,
+}
+TDIR = os.path.join(os.path.dirname(HumanService.__module__ and sys.modules[HumanService.__module__].__file__), '..', 'data', 'targets')
+for name, weight in TARGETS.items():
+    TargetService.load_target(human, os.path.normpath(os.path.join(TDIR, name + '.target.gz')), weight=weight)
 mrig = HumanService.add_builtin_rig(human, 'game_engine')
 
 # 모양 키(체형)를 메시에 굳힌다
@@ -122,6 +137,39 @@ for mb, qb in MAP:
         eb[qb].tail = eb[qb].head + d * (t - h).length
         eb[qb].roll = roll
 bpy.ops.object.mode_set(mode='OBJECT')
+
+# ---------------------------------------------------------------- 3-1) 기존 이동 클립의 윗등·목 숙임 줄이기
+# MPFB 척추 뼈는 허리 쪽에 몰려 있어 맨 위 척추(spine.003) 회전 중심에서 목까지가 기존 마네킹의 두 배쯤 길다.
+# 같은 각도로 숙이면 목·머리가 훨씬 앞으로 나가 거북목처럼 보이므로 그만큼 각도를 줄인다.
+# (모션캡처·GRF 동작은 관절 위치로 다시 구워서 해당 없음 — 여기서는 GLB에 든 이동 클립만)
+SOFTEN = {'DEF-spine.003': 0.5, 'DEF-neck': 0.45, 'DEF-head': 0.6}
+from mathutils import Quaternion  # noqa: E402
+for act in bpy.data.actions:
+    for bone, keep in SOFTEN.items():
+        path = f'pose.bones["{bone}"].rotation_quaternion'
+        curves = [act.fcurves.find(path, index=i) for i in range(4)] if hasattr(act, 'fcurves') else []
+        if not curves or not all(curves):
+            # Blender 5: 슬롯·레이어 구조의 채널백
+            curves = []
+            for layer in getattr(act, 'layers', []):
+                for strip in layer.strips:
+                    for bag in strip.channelbags:
+                        found = [bag.fcurves.find(path, index=i) for i in range(4)]
+                        if all(found):
+                            curves = found
+            if not curves:
+                continue
+        n = min(len(c.keyframe_points) for c in curves)
+        for k in range(n):
+            q = Quaternion([curves[i].keyframe_points[k].co[1] for i in range(4)])
+            q = Quaternion().slerp(q, keep)
+            for i in range(4):
+                curves[i].keyframe_points[k].co[1] = q[i]
+                curves[i].keyframe_points[k].handle_left[1] = q[i]
+                curves[i].keyframe_points[k].handle_right[1] = q[i]
+        for c in curves:
+            c.update()
+        print('SOFTEN', act.name, bone, n)
 
 # ---------------------------------------------------------------- 4) 가중치 이름 바꾸기 + 바인딩
 names = dict(MAP)

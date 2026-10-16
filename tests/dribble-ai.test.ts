@@ -2,10 +2,12 @@ import { expect, it } from 'vitest';
 import { PHYSICS } from '../src/config';
 import { command, simulation } from './helpers';
 
-/** 같은 시드 10경기를 각각 300초 진행해, 필드 소유자의 공격 방향 이동과 추격 시간을 비교한다. */
+// 10경기(슛 50개 안팎)는 우연 편차가 기준선만큼 커서, 개인기 접촉 위치처럼 작은 변화에도 결과가 뒤집힌다 → 20경기
+const SEEDS = Number(process.env.DRIBBLE_AI_SEEDS ?? 20);
+/** 같은 시드 SEEDS경기를 각각 300초 진행해, 필드 소유자의 공격 방향 이동과 추격 시간을 비교한다. */
 function measure(touches: boolean) {
   let progress = 0, ownedTime = 0, chasingTime = 0, shots = 0, heavy = 0;
-  for (let seed = 0; seed < 10; seed++) {
+  for (let seed = 0; seed < SEEDS; seed++) {
     const { match } = simulation(seed, { kickMotion: true, userControl: false, dribbleTouches: touches });
     match.duration = 300;
     const cmd = command();
@@ -33,7 +35,7 @@ function measure(touches: boolean) {
   return { forwardSpeed: progress / ownedTime, shots, heavy, chasingRatio: chasingTime / ownedTime };
 }
 
-it('AI 터치 드리블 10경기: 예전 대비 전진 85%·슛 80% 이상, 헤비 터치 10회·추격 15% 이하', () => {
+it('AI 터치 드리블 20경기: 예전 대비 전진 85%·슛 80% 이상, 헤비 터치 10회·추격 15% 이하', () => {
   const glued = measure(false);
   const touch = measure(true);
   console.info('AI 드리블 측정', JSON.stringify({ glued, touch }));
@@ -43,4 +45,4 @@ it('AI 터치 드리블 10경기: 예전 대비 전진 85%·슛 80% 이상, 헤�
   expect.soft(touch.shots).toBeGreaterThanOrEqual(glued.shots * 0.8);
   expect.soft(touch.heavy).toBeLessThanOrEqual(10);
   expect.soft(touch.chasingRatio).toBeLessThanOrEqual(0.15);
-}, 120_000);
+}, 300_000);

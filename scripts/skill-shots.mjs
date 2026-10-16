@@ -31,6 +31,10 @@ const SCRIPTS = {
   stop_turn_r: { inputs: [{ t: 0, keys: ['ArrowUp'] }, { t: 1, keys: ['ShiftLeft'] }, { t: 1.03, keys: ['ShiftLeft', 'ArrowUp'] }, { t: 1.09, keys: ['ShiftLeft'] }, { t: 1.12, keys: ['ShiftLeft', 'ArrowRight'] }, { t: 1.18, keys: [] }], at: [1.35, 1.45, 1.55, 1.65, 1.8] },
   elastico: { inputs: [{ t: 0, keys: ['ArrowUp'] }, { t: 1, keys: ['ShiftLeft'] }, ...[['ArrowRight'], ['ArrowDown', 'ArrowRight'], ['ArrowDown'], ['ArrowDown', 'ArrowLeft'], ['ArrowLeft']].map((k, i) => ({ t: 1.03 + i * 0.06, keys: ['ShiftLeft', ...k] })), { t: 1.33, keys: [] }], at: [1.5, 1.6, 1.7, 1.8, 1.95] },
   rainbow: { inputs: [{ t: 0, keys: ['ArrowUp'] }, { t: 1, keys: ['ShiftLeft'] }, { t: 1.03, keys: ['ShiftLeft', 'ArrowDown'] }, { t: 1.09, keys: ['ShiftLeft'] }, { t: 1.12, keys: ['ShiftLeft', 'ArrowUp'] }, { t: 1.18, keys: ['ShiftLeft'] }, { t: 1.21, keys: ['ShiftLeft', 'ArrowUp'] }, { t: 1.27, keys: [] }], at: [1.55, 1.7, 1.85, 2.0, 2.15] },
+  idle: { inputs: [{ t: 0, keys: [] }], at: [0.8] },
+  face: { face: true, inputs: [{ t: 0, keys: [] }], at: [0.8] },
+  run: { inputs: [{ t: 0, keys: ['ArrowUp'] }], at: [1.2, 1.35] },
+  sprint: { inputs: [{ t: 0, keys: ['ArrowUp', 'KeyE'] }], at: [1.6, 1.75] },
 };
 const base = new URL(process.env.SNAPSHOOT_URL ?? 'http://127.0.0.1:5180/');
 const url = new URL('index.html?playground', base);
@@ -45,13 +49,20 @@ await page.waitForFunction(() => window.__playground && window.__game?.match);
 const ids = process.argv[2] ? [process.argv[2]] : Object.keys(SCRIPTS);
 for (const id of ids) {
   const s = SCRIPTS[id];
-  await page.evaluate(({ inputs }) => {
+  await page.evaluate(({ inputs, face }) => {
+    window.__face = !!face;
     const { game, match } = window.__game;
     const cam = game.rig.camera;
     // 옆(오른쪽)에서 조작 선수를 따라 본다
     game.rig.update = () => {
       const u = match.controlled.pos;
       cam.fov = 35; cam.updateProjectionMatrix();
+      if (window.__face) {
+        // 얼굴 확대: 플레이그라운드 전진(+X) 쪽 앞에서
+        cam.position.set(u.x + 1.1, 1.75, u.z + 0.25);
+        cam.lookAt(u.x, 1.68, u.z);
+        return;
+      }
       cam.position.set(u.x + 0.5, 1.6, u.z + 5);
       cam.lookAt(u.x + 0.5, 0.8, u.z);
     };

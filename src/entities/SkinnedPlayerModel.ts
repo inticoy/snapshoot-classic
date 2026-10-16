@@ -506,10 +506,10 @@ uniform sampler2D uDecal;
 
 bool isHair(vec3 p) {
   if (uHairStyle > 2.5) return false;                                   // 민머리
-  // 머리 중심은 z ≈ +0.05 (얼굴이 앞으로 나와 있다)
-  if (uHairStyle > 1.5) return p.y > 1.75 || (p.y > 1.6 && p.z < 0.04) || (p.y > 1.68 && abs(p.x) > 0.07); // 긴 머리
-  if (uHairStyle > 0.5) return p.y > 1.79 || (p.y > 1.68 && p.z < 0.0);  // 버즈컷
-  return p.y > 1.77 || (p.y > 1.64 && p.z < 0.02);                      // 짧은 머리
+  // 머리 실측: 정수리 1.88, 눈 1.761, 앞이마 머리선 ≈ 1.825, 머리 중심 z ≈ +0.055 (얼굴이 앞으로 나와 있다)
+  if (uHairStyle > 1.5) return p.y > 1.81 || (p.y > 1.64 && p.z < 0.06) || (p.y > 1.72 && abs(p.x) > 0.072); // 긴 머리
+  if (uHairStyle > 0.5) return p.y > 1.845 || (p.y > 1.73 && p.z < 0.0); // 버즈컷
+  return p.y > 1.825 || (p.y > 1.7 && p.z < 0.03) || (p.y > 1.78 && abs(p.x) > 0.075 && p.z < 0.1); // 짧은 머리 (귀 위 옆머리)
 }
 
 // 데칼 아틀라스 투영. 영역 밖이면 알파 0
@@ -528,9 +528,14 @@ vec4 decalAt(vec3 p) {
 vec3 kitColor(vec3 p) {
   float ax = abs(p.x);
   if (p.y > 1.54) {
-    // 눈알 (MPFB 눈 메시, 중심 x ±0.031, y 1.748, z 0.135): 앞쪽은 홍채
-    vec3 e = vec3(ax - 0.031, p.y - 1.748, p.z - 0.135);
-    if (length(e) < 0.014) return e.z > 0.006 ? vec3(0.16, 0.11, 0.08) : vec3(0.86, 0.84, 0.8);
+    // 눈알 (MPFB 눈 메시, 중심 x ±0.033, y 1.761, z 0.138): 앞쪽은 홍채
+    vec3 e = vec3(ax - 0.033, p.y - 1.761, p.z - 0.138);
+    if (length(e) < 0.014) return e.z > 0.003 ? vec3(0.16, 0.11, 0.08) : vec3(0.86, 0.84, 0.8);
+    // 눈썹: 눈 위 얼굴 앞면에 머리색 띠 (멀리서도 얼굴 방향이 읽히게)
+    // 가운데가 3~4mm 높은 완만한 아치
+    if (p.z > 0.12 && ax > 0.012 && ax < 0.058 && abs(p.y - (1.79 - 7.0 * (ax - 0.035) * (ax - 0.035))) < 0.005) return mix(uSkin, uHair, 0.85);
+    // 입술: 살짝 붉고 어둡게
+    if (p.z > 0.12 && ax < 0.022 && abs(p.y - 1.683) < 0.006) return uSkin * vec3(0.78, 0.6, 0.58);
     if (isHair(p)) return uHair;
     return uSkin;
   }
@@ -562,6 +567,6 @@ vec4 dec = decalAt(vKit);
 diffuseColor.rgb = mix(kitColor(vKit), dec.rgb, dec.a);`,
       );
   };
-  mat.customProgramCacheKey = () => 'kit-v5';
+  mat.customProgramCacheKey = () => 'kit-v7';
   return mat;
 }
