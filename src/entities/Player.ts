@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 import { PITCH, PLAYER, TEAM_COLORS } from '../config';
 import { PlayerModel, type AnimState } from './PlayerModel';
+import type { PlayerProfile } from '../data/Teams';
 
 export type Role = 'GK' | 'DEF' | 'FWD';
 
@@ -21,6 +22,7 @@ export class Player {
   tackleCooldown = 0;
   /** 이번 태클이 이미 판정됐는지 (한 번의 태클 = 한 번의 판정) */
   tackleResolved = false;
+  tackleKind: 'slide' | 'stand' = 'slide';
   stunned = 0;
   diveTimer = 0;
   /** 액션 중에는 이동 입력을 무시 */
@@ -36,6 +38,7 @@ export class Player {
     readonly role: Role,
     readonly number: number,
     readonly name: string,
+    readonly profile: PlayerProfile,
   ) {
     const c = TEAM_COLORS[team];
     this.model = new PlayerModel(
@@ -90,11 +93,12 @@ export class Player {
 
     if (this.tackleTimer > 0) {
       this.tackleTimer -= dt;
-      const k = Math.max(0, this.tackleTimer / PLAYER.tackleDuration);
-      this.vel.copy(this.tackleDir).multiplyScalar(PLAYER.tackleSpeed * (0.3 + 0.7 * k));
+      const slide = this.tackleKind === 'slide';
+      const k = Math.max(0, this.tackleTimer / (slide ? PLAYER.tackleDuration : PLAYER.standTackleDuration));
+      this.vel.copy(this.tackleDir).multiplyScalar((slide ? PLAYER.tackleSpeed : PLAYER.standTackleSpeed) * (0.3 + 0.7 * k));
       if (this.tackleTimer <= 0) {
-        this.stunned = 0.35; // 일어나는 시간
-        this.vel.multiplyScalar(0.3);
+        this.stunned = slide ? 0.35 : 0.08; // 일어나는 시간
+        this.vel.multiplyScalar(slide ? 0.3 : 0.6);
       }
     }
     if (this.diveTimer > 0) {
@@ -132,13 +136,24 @@ export class Player {
     if (d.lengthSq() > 1e-4) this.facing.copy(d.normalize());
   }
 
-  startTackle(dir: THREE.Vector3): void {
+  startTackle(dir: THREE.Vector3, kind: 'slide' | 'stand' = 'slide'): void {
     this.tackleDir.copy(dir).setY(0).normalize();
     this.facing.copy(this.tackleDir);
-    this.tackleTimer = PLAYER.tackleDuration;
+    this.tackleKind = kind;
     this.tackleResolved = false;
-    this.tackleCooldown = PLAYER.tackleCooldown;
-    this.model.play('tackle');
+    if (kind === 'slide') {
+      this.tackleTimer = PLAYER.tackleDuration;
+      this.tackleCooldown = PLAYER.tackleCooldown;
+      this.model.play('tackle');
+    } else {
+      this.tackleTimer = PLAYER.standTackleDuration;
+      this.tackleCooldown = PLAYER.standTackleCooldown;
+      this.model.play('kick', { side: 1 });
+    }
+  }
+
+  get tackleRange(): number {
+    return this.tackleKind === 'slide' ? PLAYER.tackleRange : PLAYER.standTackleRange;
   }
 
   startDive(vel: THREE.Vector3, localSide: 1 | -1): void {

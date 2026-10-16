@@ -107,6 +107,8 @@ export class Ball {
   kick(velocity: CANNON.Vec3, spin: CANNON.Vec3, by: Player): void {
     this.owner = null;
     this.lastTouch = by;
+    // 띄우는 킥은 지면 접촉을 떼어야 첫 프레임 마찰로 속도를 잃지 않는다
+    if (velocity.y > 1 && this.body.position.y < BALL.radius + 0.03) this.body.position.y = BALL.radius + 0.03;
     this.body.velocity.copy(velocity);
     // 사이드스핀만 준다 (굴림 회전은 지면 마찰이 만들어 준다)
     this.body.angularVelocity.copy(spin);

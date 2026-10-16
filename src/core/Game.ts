@@ -1,14 +1,19 @@
 import * as THREE from 'three';
-import { PHYSICS, PITCH, TEAM_COLORS } from '../config';
+import { PHYSICS, PITCH } from '../config';
 import { Input } from './Input';
 import { PhysicsWorld } from '../physics/PhysicsWorld';
 import { Stadium } from '../environment/Stadium';
 import { Match, type UserCommand } from '../gameplay/Match';
 import { CameraRig } from '../camera/CameraRig';
 import { Hud } from '../ui/Hud';
+import { Menu, controlsPanel, matchupPanel, statsPanel, type MenuScreen } from '../ui/Menu';
 import { Sound } from '../audio/Sound';
+import { TEAMS } from '../data/Teams';
 
-type AppState = 'title' | 'playing' | 'paused';
+type AppState = 'menu' | 'playing' | 'paused' | 'result';
+
+const DURATIONS = [120, 240, 360, 480];
+const MENU_KEYS = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Enter', 'Escape', 'Backspace'];
 
 export class Game {
   private readonly renderer: THREE.WebGLRenderer;
@@ -19,26 +24,25 @@ export class Game {
   private readonly match: Match;
   private readonly rig: CameraRig;
   private readonly hud = new Hud();
+  private readonly menu = new Menu();
   private readonly sound = new Sound();
   private readonly marker: THREE.Group;
-  private readonly overlay = document.getElementById('overlay')!;
-  private readonly overlaySub = document.getElementById('overlay-sub')!;
-  private readonly startBtn = document.getElementById('start-btn')!;
 
-  private state: AppState = 'title';
+  private state: AppState = 'menu';
   private accumulator = 0;
   private last = performance.now();
+  private durationIndex = 1;
   private readonly cmd: UserCommand = {
     move: new THREE.Vector3(),
     sprint: false,
-    shootHeld: false,
-    shootPressed: false,
-    shootReleased: false,
-    finesseHeld: false,
-    finessePressed: false,
-    finesseReleased: false,
-    passPressed: false,
-    switchPressed: false,
+    shoot: { held: false, pressed: false, released: false },
+    pass: { held: false, pressed: false, released: false },
+    through: { held: false, pressed: false, released: false },
+    lob: { held: false, pressed: false, released: false },
+    modifier: { held: false, pressed: false, released: false },
+    tackle: { held: false, pressed: false, released: false },
+    finesse: { held: false, pressed: false, released: false },
+    contain: { held: false, pressed: false, released: false },
   };
 
   constructor(canvas: HTMLCanvasElement) {
@@ -70,11 +74,11 @@ export class Game {
     this.rig = new CameraRig(window.innerWidth / window.innerHeight);
     this.resize();
     window.addEventListener('resize', () => this.resize());
-
-    this.startBtn.addEventListener('click', () => this.start());
     window.addEventListener('keydown', (e) => {
-      if (e.code === 'KeyM') this.hud.flash(this.sound.toggleMute() ? '소리 끔' : '소리 켬', 1, true);
+      if (e.code === 'KeyM' && this.state === 'playing') this.hud.tick(this.toggleSound() ? '사운드 끔' : '사운드 켬');
     });
+
+    this.openMainMenu();
   }
 
   run(): void {
@@ -87,68 +91,153 @@ export class Game {
     requestAnimationFrame(loop);
   }
 
-  private async start(): Promise<void> {
-    if (this.state === 'playing') return;
-    const fresh = this.state === 'title' || this.match.phase === 'fulltime';
+  // ---------------------------------------------------------------- 메뉴
+
+  private settingsItems(): MenuScreen['items'] {
+    return [
+      {
+        id: 'camera',
+        label: '카메라',
+        value: () => (this.rig.mode === 'broadcast' ? '중계 카메라' : '선수 뒤 카메라'),
+        onLeft: () => this.rig.toggle(),
+        onRight: () => this.rig.toggle(),
+        panel: () => `<div class="card"><h3>CAMERA</h3><p>중계 카메라는 옆에서 경기장 전체를 보여주고, 선수 뒤 카메라는 공격 방향을 정면으로 봅니다. 경기 중 <kbd>V</kbd> 로도 바꿀 수 있어요.</p></div>`,
+      },
+      {
+        id: 'sound',
+        label: '사운드',
+        value: () => (this.sound.muted ? '끔' : '켬'),
+        onLeft: () => this.toggleSound(),
+        onRight: () => this.toggleSound(),
+        panel: () => `<div class="card"><h3>AUDIO</h3><p>효과음과 관중 소리를 켜거나 끕니다. 경기 중 <kbd>M</kbd> 키로도 바꿀 수 있어요.</p></div>`,
+      },
+      { id: 'controls', label: '조작법', panel: controlsPanel, onSelect: () => {} },
+    ];
+  }
+
+  private openMainMenu(): void {
+    this.state = 'menu';
+    this.hud.show(false);
+    const lengthLabel = () => `${DURATIONS[this.durationIndex] / 60}분`;
+    this.menu.open({
+      eyebrow: 'FOOTBALL GAME · 3 VS 3',
+      title: 'KICK OFF',
+      panel: () => matchupPanel(null, [`경기 시간 ${lengthLabel()}`, '중계 · 3대3', TEAMS[0].name + ' 홈']),
+      items: [
+        { id: 'start', label: '경기 시작', onSelect: () => void this.startMatch() },
+        {
+          id: 'length',
+          label: '경기 시간',
+          value: lengthLabel,
+          onLeft: () => (this.durationIndex = (this.durationIndex + DURATIONS.length - 1) % DURATIONS.length),
+          onRight: () => (this.durationIndex = (this.durationIndex + 1) % DURATIONS.length),
+        },
+        ...this.settingsItems(),
+      ],
+    });
+  }
+
+  private openPauseMenu(): void {
+    this.state = 'paused';
+    const [h, a] = this.match.score;
+    this.menu.open({
+      eyebrow: `PAUSED · ${this.clockText()}`,
+      title: 'PAUSE',
+      panel: () => statsPanel(this.match.stats, [h, a], `경기 진행 ${this.clockText()}`),
+      onBack: () => this.resume(),
+      items: [
+        { id: 'resume', label: '계속하기', onSelect: () => this.resume() },
+        { id: 'restart', label: '다시 시작', onSelect: () => void this.startMatch() },
+        ...this.settingsItems(),
+        { id: 'quit', label: '메인 메뉴', onSelect: () => this.openMainMenu() },
+      ],
+    });
+  }
+
+  private openResult(): void {
+    this.state = 'result';
+    this.hud.show(false);
+    const [h, a] = this.match.score;
+    const verdict = h > a ? '승리' : h < a ? '패배' : '무승부';
+    this.menu.open({
+      eyebrow: `FULL TIME · ${verdict}`,
+      title: h > a ? 'VICTORY' : h < a ? 'DEFEAT' : 'DRAW',
+      panel: () => statsPanel(this.match.stats, [h, a], `경기 종료 · ${verdict}`),
+      items: [
+        { id: 'again', label: '다시 하기', onSelect: () => void this.startMatch() },
+        { id: 'menu', label: '메인 메뉴', onSelect: () => this.openMainMenu() },
+      ],
+    });
+  }
+
+  private clockText(): string {
+    return `${Math.min(90, Math.floor((this.match.clock / this.match.duration) * 90))}'`;
+  }
+
+  private async startMatch(): Promise<void> {
+    this.menu.close();
     this.state = 'playing';
-    this.overlay.classList.add('hidden');
     this.hud.show(true);
+    this.match.duration = DURATIONS[this.durationIndex];
+    this.match.restart();
+    this.hud.tick(`${TEAMS[0].name} vs ${TEAMS[1].name}`, 2.2);
     await this.sound.unlock();
     this.sound.startAmbience();
-    if (fresh) {
-      this.match.restart();
-      this.hud.flash('KICK OFF', 1.4, true);
-    }
   }
 
-  private pause(): void {
-    this.state = 'paused';
-    this.overlaySub.textContent = '일시정지';
-    this.startBtn.textContent = 'Enter 또는 클릭해서 계속';
-    this.overlay.classList.remove('hidden');
+  private resume(): void {
+    this.menu.close();
+    this.state = 'playing';
+    this.hud.show(true);
+    void this.sound.unlock();
   }
+
+  private toggleSound(): boolean {
+    return this.sound.toggleMute();
+  }
+
+  // ---------------------------------------------------------------- 루프
 
   private frame(dt: number): void {
-    // 메뉴 조작
-    if (this.input.wasPressed('start') && this.state !== 'playing') void this.start();
-    if (this.input.wasPressed('pause') && this.state === 'playing' && this.match.phase !== 'fulltime') this.pause();
-    if (this.input.wasPressed('camera')) {
-      this.hud.flash(this.rig.toggle() === 'pro' ? '선수 뒤 카메라' : '중계 카메라', 1, true);
-    }
-    if (this.state === 'playing' && this.match.phase === 'fulltime' && this.input.wasPressed('start')) {
-      this.match.restart();
-    }
-
-    if (this.state === 'playing') {
-      this.accumulator += dt;
-      let steps = 0;
-      while (this.accumulator >= PHYSICS.step && steps < 12) {
-        this.buildCommand();
-        this.match.update(PHYSICS.step, this.cmd);
-        this.input.endFrame();
-        this.accumulator -= PHYSICS.step;
-        steps++;
-      }
-      this.handleEvents();
-    } else {
+    const menuWasVisible = this.menu.visible;
+    if (menuWasVisible) {
+      for (const code of this.input.drainPresses()) if (MENU_KEYS.includes(code)) this.menu.handleKey(code);
       this.input.endFrame();
-      // 타이틀 화면에서는 경기장을 천천히 둘러본다
-      if (this.state === 'title') {
-        const t = performance.now() / 1000;
-        this.rig.camera.position.set(Math.sin(t * 0.08) * 48, 22, Math.cos(t * 0.08) * 40);
-        this.rig.camera.lookAt(0, 0, 0);
+    } else if (this.state === 'playing') {
+      if (this.input.wasPressed('pause') && this.match.phase !== 'fulltime') {
+        this.input.endFrame();
+        this.openPauseMenu();
+      } else {
+        if (this.input.wasPressed('camera')) this.hud.tick(this.rig.toggle() === 'pro' ? '선수 뒤 카메라' : '중계 카메라', 1);
+        this.accumulator += dt;
+        let steps = 0;
+        while (this.accumulator >= PHYSICS.step && steps < 12) {
+          this.buildCommand();
+          this.match.update(PHYSICS.step, this.cmd);
+          this.input.endFrame();
+          this.accumulator -= PHYSICS.step;
+          steps++;
+        }
+        this.handleEvents();
       }
     }
+    if (!menuWasVisible) this.input.drainPresses();
 
-    // 시각 동기화
-    for (const p of this.match.players) p.syncVisual(this.state === 'playing' ? dt : 0);
+    const live = this.state === 'playing';
+    for (const p of this.match.players) p.syncVisual(live ? dt : 0);
     this.match.ball.syncVisual();
     this.stadium.update(dt);
     this.updateMarker(dt);
 
-    if (this.state !== 'title') {
-      const celebrate = this.match.phase === 'goal' && this.match.phaseTimer < 2.6 ? this.match.lastScorer?.pos ?? null : null;
-      if (this.state === 'playing') this.rig.update(dt, this.match.ball.position, this.match.controlled.pos, celebrate);
+    if (this.state === 'menu') {
+      // 메인 메뉴: 경기장을 천천히 둘러본다
+      const t = performance.now() / 1000;
+      this.rig.camera.position.set(Math.sin(t * 0.06) * 46, 16 + Math.sin(t * 0.1) * 3, Math.cos(t * 0.06) * 38);
+      this.rig.camera.lookAt(0, 0, 0);
+    } else if (live) {
+      const celebrate =
+        this.match.phase === 'goal' && this.match.phaseTimer < 2.6 ? (this.match.lastScorer?.pos ?? null) : null;
+      this.rig.update(dt, this.match.ball.position, this.match.controlled.pos, celebrate);
       this.hud.update(dt, this.match, this.rig.camera);
     }
     this.renderer.render(this.scene, this.rig.camera);
@@ -160,14 +249,14 @@ export class Game {
     const r = this.rig.right(new THREE.Vector3());
     this.cmd.move.set(0, 0, 0).addScaledVector(f, axis.y).addScaledVector(r, axis.x);
     this.cmd.sprint = this.input.isDown('sprint');
-    this.cmd.shootHeld = this.input.isDown('shoot');
-    this.cmd.shootPressed = this.input.wasPressed('shoot');
-    this.cmd.shootReleased = this.input.wasReleased('shoot');
-    this.cmd.finesseHeld = this.input.isDown('finesse');
-    this.cmd.finessePressed = this.input.wasPressed('finesse');
-    this.cmd.finesseReleased = this.input.wasReleased('finesse');
-    this.cmd.passPressed = this.input.wasPressed('pass');
-    this.cmd.switchPressed = this.input.wasPressed('switch');
+    this.cmd.shoot = this.input.button('shoot');
+    this.cmd.pass = this.input.button('pass');
+    this.cmd.through = this.input.button('through');
+    this.cmd.lob = this.input.button('lob');
+    this.cmd.modifier = this.input.button('modifier');
+    this.cmd.tackle = this.input.button('tackle');
+    this.cmd.finesse = this.input.button('finesse');
+    this.cmd.contain = this.input.button('contain');
   }
 
   private handleEvents(): void {
@@ -182,7 +271,7 @@ export class Game {
           break;
         case 'post':
           this.sound.play('post', Math.min(1, e.speed / 15));
-          this.hud.flash('골대!', 1.2, true);
+          this.hud.tick('골대 강타!');
           this.rig.addShake(0.25);
           break;
         case 'net':
@@ -190,7 +279,7 @@ export class Game {
           break;
         case 'save':
           this.sound.play('save', 0.8);
-          this.hud.flash(e.caught ? '선방!' : '쳐냈다!', 1.2, true);
+          this.hud.tick(e.caught ? '골키퍼 선방 · 캐치' : '골키퍼 선방 · 펀칭');
           this.stadium.cheer(0.4);
           break;
         case 'tackle':
@@ -203,24 +292,20 @@ export class Game {
           setTimeout(() => this.sound.setAmbienceLevel(0.18), 4000);
           this.stadium.cheer(1);
           this.rig.addShake(0.4);
-          const who = e.scorer ? `${e.scorer.number} ${e.scorer.name}` : '';
-          this.hud.flash(e.ownGoal ? 'OWN GOAL' : 'GOAL!', 2.6);
-          if (who && !e.ownGoal) setTimeout(() => this.hud.flash(`${TEAM_COLORS[e.team].name} · ${who}`, 1.4, true), 1500);
+          const sub = e.scorer
+            ? `${e.scorer.profile.number}  ${e.scorer.profile.name}  ${this.clockText()}`
+            : `${TEAMS[e.team].name}  ${this.clockText()}`;
+          this.hud.goal(e.team, e.ownGoal ? 'OWN GOAL' : 'GOAL', sub, [...this.match.score] as [number, number]);
           break;
         }
         case 'whistle':
           if (e.kind === 'kickoff') this.sound.whistle([0.45]);
           else {
             this.sound.whistle([0.3, 0.3, 0.9]);
-            const [h, a] = this.match.score;
-            this.hud.flash(h > a ? 'YOU WIN' : h < a ? 'YOU LOSE' : 'DRAW', 4);
+            this.hud.tick('경기 종료', 3);
             setTimeout(() => {
-              if (this.match.phase !== 'fulltime') return;
-              this.overlaySub.textContent = `경기 종료 · HOME ${h} - ${a} AWAY`;
-              this.startBtn.textContent = 'Enter 또는 클릭해서 다시 하기';
-              this.overlay.classList.remove('hidden');
-              this.state = 'paused';
-            }, 3500);
+              if (this.match.phase === 'fulltime' && this.state === 'playing') this.openResult();
+            }, 3000);
           }
           break;
       }
@@ -228,29 +313,26 @@ export class Game {
     this.match.events.length = 0;
   }
 
+  // ---------------------------------------------------------------- 씬
+
   private createMarker(): THREE.Group {
     const g = new THREE.Group();
-    const ring = new THREE.Mesh(
-      new THREE.RingGeometry(0.5, 0.62, 32),
-      new THREE.MeshBasicMaterial({ color: 0xf2c230, transparent: true, opacity: 0.9, depthWrite: false }),
-    );
+    const mat = new THREE.MeshBasicMaterial({ color: 0x2ef59a, transparent: true, opacity: 0.85, depthWrite: false });
+    const ring = new THREE.Mesh(new THREE.RingGeometry(0.52, 0.6, 40), mat);
     ring.rotation.x = -Math.PI / 2;
     ring.position.y = 0.02;
     g.add(ring);
     // 바라보는 방향 표시
-    const arrow = new THREE.Mesh(
-      new THREE.ConeGeometry(0.16, 0.36, 3),
-      new THREE.MeshBasicMaterial({ color: 0xf2c230, transparent: true, opacity: 0.9, depthWrite: false }),
-    );
+    const arrow = new THREE.Mesh(new THREE.ConeGeometry(0.14, 0.3, 3), mat);
     arrow.rotation.x = Math.PI / 2;
-    arrow.position.set(0, 0.02, 0.85);
+    arrow.position.set(0, 0.02, 0.8);
     g.add(arrow);
     return g;
   }
 
   private updateMarker(dt: number): void {
     const p = this.match.controlled;
-    const visible = this.state !== 'title' && this.match.phase !== 'goal';
+    const visible = this.state === 'playing' && this.match.phase !== 'goal';
     this.marker.visible = visible;
     if (!visible) return;
     this.marker.position.set(p.pos.x, 0, p.pos.z);
@@ -293,7 +375,6 @@ export class Game {
     sun.shadow.bias = -0.0005;
     sun.shadow.normalBias = 0.02;
     this.scene.add(sun);
-    // 반대편 보조광 (조명탑 느낌)
     const fill = new THREE.DirectionalLight(0xdfe8ff, 0.6);
     fill.position.set(30, 30, -25);
     this.scene.add(fill);

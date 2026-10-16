@@ -60,6 +60,11 @@ export const PLAYER = {
   tackleDuration: 0.32,
   tackleSpeed: 9,
   tackleCooldown: 0.9,
+  // 스탠딩 태클: 짧고 빠르게 회복, 사거리 짧음
+  standTackleRange: 0.95,
+  standTackleDuration: 0.2,
+  standTackleSpeed: 5.5,
+  standTackleCooldown: 0.5,
 };
 
 export const KEEPER = {
@@ -81,6 +86,7 @@ export const SHOT = {
 export const PASS = {
   minSpeed: 8,
   maxSpeed: 22,
+  chargeTime: 0.7,
 };
 
 export const MATCH = {

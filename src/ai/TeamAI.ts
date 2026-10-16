@@ -229,7 +229,8 @@ export class TeamAI {
     if (Math.random() < chance) {
       const bp = this.match.ball.position;
       tmp.set(bp.x - p.pos.x, 0, bp.z - p.pos.z).normalize();
-      p.startTackle(tmp);
+      // 가까우면 주로 스탠딩 태클, 가끔 슬라이딩
+      p.startTackle(tmp, d < 1.15 && Math.random() < 0.7 ? 'stand' : 'slide');
     }
   }
 
@@ -253,9 +254,9 @@ export class TeamAI {
       }
     }
     // 사용자 팀: 사람이 조종하는 선수가 더 가깝거나 비슷하면 AI 동료는 쫓지 않는다
-    if (team === 0 && userD < bestD + 4) return null;
-    // 상대 공일 때 사용자 팀 AI 동료는 무리하게 압박하지 않는다
-    if (team === 0 && m.ball.owner && m.ball.owner.team !== 0) return null;
+    if (team === 0 && userD < bestD + 4 && !m.teammatePress) return null;
+    // 상대 공일 때 사용자 팀 AI 동료는 동료 압박(S) 중일 때만 압박한다
+    if (team === 0 && m.ball.owner && m.ball.owner.team !== 0) return m.teammatePress ? best : null;
     return best;
   }
 }

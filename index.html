@@ -4,6 +4,12 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Football Game</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,500;0,600;0,700;0,800;1,700;1,800;1,900&display=swap"
+      rel="stylesheet"
+    />
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
@@ -11,40 +17,48 @@
       <canvas id="scene"></canvas>
 
       <div id="hud" class="hidden">
-        <div class="scoreboard">
-          <span class="team home"><i></i>HOME</span>
-          <span class="score" id="score">0 - 0</span>
-          <span class="team away">AWAY<i></i></span>
-          <span class="clock" id="clock">0'</span>
+        <!-- 스코어보드 -->
+        <div class="sb">
+          <div class="sb-clock" id="clock">00:00</div>
+          <div class="sb-main">
+            <span class="sb-team"><i class="chip home"></i><b id="abbr-h">HOM</b></span>
+            <span class="sb-score" id="score-h">0</span>
+            <span class="sb-score" id="score-a">0</span>
+            <span class="sb-team"><b id="abbr-a">AWY</b><i class="chip away"></i></span>
+          </div>
         </div>
-        <div class="player-tag" id="player-tag">
-          <div class="name" id="player-name"></div>
-          <div class="bar stamina"><div id="stamina"></div></div>
-          <div class="bar power" id="power-wrap"><div id="power"></div></div>
+        <div class="ticker" id="ticker"></div>
+
+        <!-- 조종 중인 선수 -->
+        <div class="pi" id="pi">
+          <div class="pi-name" id="pi-name"></div>
+          <div class="pi-stamina"><div id="pi-stamina"></div></div>
+          <div class="pi-arrow"></div>
         </div>
-        <canvas id="minimap" width="200" height="128"></canvas>
-        <div class="banner" id="banner"></div>
-        <div class="hint">J 슛/태클 · K 패스/전환 · L 감아차기 · Shift 스프린트 · Q 전환 · C 카메라 · P 일시정지</div>
+        <div class="power" id="power">
+          <span class="power-label" id="power-label">SHOT</span>
+          <div class="power-track"><div class="power-fill" id="power-fill"></div><i class="power-mark"></i></div>
+        </div>
+
+        <canvas id="radar" width="220" height="140"></canvas>
+        <div class="hints" id="hints"></div>
+
+        <!-- 하단 선수 이름 바 (왼쪽: 내 선수, 오른쪽: 상대 선수) -->
+        <div class="nb nb-left" id="nb-left"></div>
+        <div class="nb nb-right" id="nb-right"></div>
+
+        <div class="goal-word" id="goal-word">GOAL</div>
+        <div class="lower-third" id="lower-third">
+          <div class="lt-strip" id="lt-strip"></div>
+          <div class="lt-body">
+            <div class="lt-title" id="lt-title">GOAL</div>
+            <div class="lt-sub" id="lt-sub"></div>
+          </div>
+          <div class="lt-score" id="lt-score"></div>
+        </div>
       </div>
 
-      <div id="overlay" class="overlay">
-        <div class="panel">
-          <h1>FOOTBALL GAME</h1>
-          <p class="sub" id="overlay-sub">3 vs 3 · 가칭</p>
-          <table class="keys">
-            <tr><td><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> / 방향키</td><td>이동</td></tr>
-            <tr><td><kbd>Shift</kbd></td><td>스프린트</td></tr>
-            <tr><td><kbd>J</kbd> / <kbd>Space</kbd> 꾹 눌렀다 떼기</td><td>슛 (오래 누를수록 강하게, 너무 세면 뜸)</td></tr>
-            <tr><td><kbd>L</kbd> 꾹 눌렀다 떼기</td><td>감아차기 (먼 쪽 포스트)</td></tr>
-            <tr><td><kbd>K</kbd></td><td>패스 (방향키 쪽 동료에게)</td></tr>
-            <tr><td><kbd>J</kbd> (공 없을 때)</td><td>슬라이딩 태클</td></tr>
-            <tr><td><kbd>Q</kbd> / <kbd>K</kbd> (수비 시)</td><td>선수 전환</td></tr>
-            <tr><td><kbd>C</kbd></td><td>카메라 전환 (중계 / 선수 뒤)</td></tr>
-            <tr><td><kbd>M</kbd></td><td>소리 끄기/켜기</td></tr>
-          </table>
-          <button id="start-btn">Enter 또는 클릭해서 시작</button>
-        </div>
-      </div>
+      <div id="overlay" class="overlay"></div>
     </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
