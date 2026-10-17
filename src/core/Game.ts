@@ -453,6 +453,8 @@ export class Game {
     this.cmd.modifier = this.input.button('modifier');
     this.cmd.tackle = this.input.button('tackle');
     this.cmd.finesse = this.input.button('finesse');
+    this.cmd.power = this.input.button('power');
+    this.cmd.keyboardKick = this.input.keyboardKick();
     this.cmd.contain = this.input.button('contain');
     this.cmd.skill = this.input.button('skill');
   }

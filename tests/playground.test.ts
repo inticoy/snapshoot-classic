@@ -134,7 +134,7 @@ describe('실제 Match로 시나리오 검증', () => {
       const { match } = simulation(318, { practice: true, kickMotion: true });
       const scenarios = new PlaygroundScenarios(match);
       scenarios.reset(scenario.id);
-      const count = { free: 1, duel: 2, pressure: 4, receive: 2, slide: 2, keeper: 2 }[scenario.id];
+      const count = { free: 1, duel: 2, pressure: 4, receive: 2, slide: 2, keeper: 2, passing: 2, commands: 3, cross: 3, contact: 2, clearance: 2 }[scenario.id];
       expect(match.players).toHaveLength(count);
       expect(match.teams.flat()).toHaveLength(count);
       const active = new Set(match.players);

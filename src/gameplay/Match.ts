@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
-import { BALL, DRIBBLE, GOAL, KEEPER, MATCH, PASS, PHYSICS, PITCH, PLAYER, SHOT } from '../config';
+import { BALL, COMMAND, DRIBBLE, GOAL, INPUT, KEEPER, MATCH, PASS, PHYSICS, PITCH, PLAYER, SHOT } from '../config';
 import { Ball } from '../entities/Ball';
 import { Goal } from '../entities/Goal';
 import { Random, visualRandom } from '../core/Random';
@@ -29,7 +29,8 @@ export type Phase = 'kickoff' | 'playing' | 'out' | 'setpiece' | 'goal' | 'halft
 export type PracticeOpponent = 'stand' | 'follow' | 'press' | 'tackle';
 
 export type MatchEvent =
-  | { type: 'kick'; speed: number; player: Player }
+  | { type: 'kick'; speed: number; player: Player; kind?: string; receiver?: Player | null; velocity?: number[]; spin?: number[]; target?: number[]; origin?: number[]; aimOrigin?: number[]; receiverPosition?: number[]; timed?: boolean; flair?: boolean }
+  | { type: 'contact'; kind: 'hold' | 'push' | 'shoulder'; success: boolean; player: Player; opponent: Player; duration: number }
   | { type: 'touch'; speed: number; player: Player }
   | { type: 'heavyTouch'; player: Player }
   | { type: 'bounce'; speed: number }
@@ -53,6 +54,11 @@ export type MatchEvent =
   | { type: 'out'; kind: RestartKind; team: 0 | 1 }
   | { type: 'restart'; kind: RestartKind; team: 0 | 1 };
 
+interface UserKick {
+  kind: KickKind; value: number; finesse: boolean; chip: boolean;
+  flair?: boolean; power?: boolean; keyboard?: boolean; started?: number; double?: boolean;
+}
+
 export type KickKind = 'shoot' | 'pass' | 'through' | 'lob';
 const KICK_KINDS: KickKind[] = ['shoot', 'pass', 'through', 'lob'];
 
@@ -60,6 +66,8 @@ const KICK_KINDS: KickKind[] = ['shoot', 'pass', 'through', 'lob'];
 export interface UserCommand {
   move: THREE.Vector3; // XZ, 크기 0..1
   sprint: boolean;
+  power?: ButtonState; // F
+  keyboardKick?: boolean;
   shoot: ButtonState; // D
   pass: ButtonState; // S
   through: ButtonState; // W
@@ -158,12 +166,18 @@ export class Match {
   practiceOpponent: PracticeOpponent | null = null;
   practiceControlLocked = false;
   /** 슛/패스 파워 게이지 (0..1), 차지 중이 아니면 null */
-  charge: { kind: KickKind; value: number; finesse: boolean; chip: boolean } | null = null;
+  charge: UserKick | null = null;
+  private pendingUserKick: { player: Player; kick: UserKick; move: THREE.Vector3 } | null = null;
+  powerTiming: { player: Player; kick: UserKick; move: THREE.Vector3; elapsed: number; timed: boolean; tapped: boolean } | null = null;
+  private holding: Player | null = null;
+  private holdTime = 0;
+  private holdJudge = 0;
   /** 공이 오기 전에 미리 입력한 원터치 동작 */
-  private queued: { kind: KickKind; value: number; finesse: boolean; chip: boolean; ttl: number } | null = null;
+  private queued: (UserKick & { ttl: number }) | null = null;
   stats: MatchStats = emptyStats();
   duration: number = MATCH.durationSeconds;
   private pendingPass: 0 | 1 | null = null;
+  private dinkFlight = false;
   passTarget: Player | null = null;
   lastScorer: Player | null = null;
   private kickoffTeam: 0 | 1 = 0;
@@ -248,6 +262,8 @@ export class Match {
   // ---------------------------------------------------------------- 진행
 
   startKickoff(team: 0 | 1): void {
+    this.cancelUserCharge();
+    this.holding = null; this.holdTime = this.holdJudge = 0;
     this.keeperRush = false;
     this.keepers.reset();
     this.kickoffTeam = team;
@@ -428,6 +444,7 @@ export class Match {
 
   cancelWindups(): void {
     this.windups.clear();
+    this.cancelUserCharge();
   }
 
   /**
@@ -459,7 +476,7 @@ export class Match {
   }
 
   private endHalf(): void {
-    this.charge = null;
+    this.cancelUserCharge();
     this.queued = null;
     this.rules.clearPlay();
     if (this.half === 1) {
@@ -520,6 +537,7 @@ export class Match {
   }
 
   private updatePlaying(dt: number, cmd: UserCommand): void {
+    for (const p of this.players) p.contactScale = 1;
     const holder = this.ball.owner ?? this.ball.lastTouch;
     if (holder) this.stats.possession[holder.team] += dt;
     // W는 상대 공격 중에만 키퍼 지시다. 공격 스루/로빙 스루 입력은 그대로 둔다.
@@ -719,6 +737,8 @@ export class Match {
   cancelUserCharge(): void {
     this.charge = null;
     this.queued = null;
+    this.pendingUserKick = null;
+    this.powerTiming = null;
   }
 
   private handleUser(dt: number, cmd: UserCommand): void {
@@ -728,7 +748,45 @@ export class Match {
     const teamHasBall = owner?.team === p.team;
     const oppHasBall = !!owner && owner.team !== p.team;
     const bp = this.ball.position;
-    const attacking = this.userAttacking;
+    const clearance = !owner && this.ball.lastTouch?.team !== p.team && this.passTarget !== p && Math.hypot(bp.x - p.pos.x, bp.z - p.pos.z) <= COMMAND.clearanceRange && bp.y < 0.8;
+    const attacking = this.userAttacking && !clearance;
+    let consumed = false;
+    const queued = this.queued;
+    if (queued && !hasBall && !oppHasBall && cmd[queued.kind].pressed && this.elapsed - (queued.started ?? -Infinity) <= INPUT.doubleTap + 1e-9) {
+      queued.double = true;
+      consumed = true;
+    }
+    const pending = this.pendingUserKick;
+    if (pending) {
+      if (pending.player !== p || owner !== p) this.pendingUserKick = null;
+      else {
+        const second = cmd[pending.kick.kind].pressed && this.elapsed - (pending.kick.started ?? 0) <= INPUT.doubleTap + 1e-9;
+        if (second || this.elapsed - (pending.kick.started ?? 0) > INPUT.doubleTap) {
+          this.pendingUserKick = null;
+          pending.kick.double = second;
+          this.executeUserKick(p, pending.kick, pending.move);
+          consumed = second;
+        } else if (KICK_KINDS.some((k) => cmd[k].pressed && k !== pending.kick.kind)) this.pendingUserKick = null;
+      }
+    }
+    const timing = this.powerTiming;
+    if (timing) {
+      consumed = true;
+      if (owner !== timing.player || p !== timing.player) this.powerTiming = null;
+      else {
+        timing.elapsed += dt;
+        if (cmd.shoot.pressed && !timing.tapped) {
+          timing.tapped = true;
+          timing.timed = Math.abs(timing.elapsed - COMMAND.powerCenter) <= COMMAND.powerWindow / 2 + 1e-9;
+        }
+        if (timing.elapsed + 1e-9 >= COMMAND.powerWindup) {
+          this.powerTiming = null;
+          const r = this.kicks.shot(p, timing.kick.value, false, timing.move, this.assistFor(p, 'shot'), 'power', timing.timed);
+          this.applyShot(p, r, true, 'powerShot', timing.timed);
+        }
+      }
+    }
+    if (this.charge && !hasBall && oppHasBall) this.cancelUserCharge();
 
     // S (수비 시) = 선수 변경
     if (cmd.pass.pressed && !attacking && !teamHasBall) this.switchToNearest();
@@ -803,7 +861,8 @@ export class Match {
     // Q 꾹 = 동료 압박 (가장 가까운 AI 동료가 같이 붙는다)
     this.teammatePress = oppHasBall && cmd.modifier.held;
     // D 꾹 = 압박 (바짝 붙음) / C 꾹 = 견제 (거리를 두고 길목을 막으며 천천히)
-    const pressing = oppHasBall && cmd.shoot.held;
+    const holding = oppHasBall && cmd.tackle.held;
+    const pressing = oppHasBall && (cmd.shoot.held || holding);
     const containing = oppHasBall && cmd.contain.held && !pressing;
     let speedScale = 1;
     if (pressing || containing) {
@@ -814,7 +873,7 @@ export class Match {
       const auto = d > 0.2 ? tmp2.multiplyScalar(Math.min(1, d / 1.5) / d) : tmp2.set(0, 0, 0);
       move.multiplyScalar(0.35).add(auto.multiplyScalar(0.8));
       if (move.length() > 1) move.normalize();
-      if (containing) speedScale = cmd.sprint ? 0.95 : 0.7;
+      if (containing) speedScale = cmd.sprint ? COMMAND.contactSprintSpeed : COMMAND.contactSpeed;
     }
     // 공을 가진 채 손을 떼면 굴러가는 공까지 걸어가 발로 세운다 (FC처럼)
     this.trapping = hasBall && move.lengthSq() < 0.01;
@@ -827,7 +886,7 @@ export class Match {
       } else this.guideDribble(p, move);
     }
     // C 볼 지키기: 공을 가진 채 C 유지 → 느리게, 가까운 상대에게 등을 돌려 몸으로 공을 가린다
-    p.shielding = hasBall && attacking && cmd.contain.held && !this.charge && !this.skills.isActive(p);
+    p.shielding = hasBall && attacking && cmd.contain.held && !this.pendingUserKick && !this.powerTiming && !this.windups.has(p) && !this.charge && !this.skills.isActive(p) && !KICK_KINDS.some((k) => cmd[k].held || cmd[k].pressed);
     if (p.shielding) {
       speedScale = Math.min(speedScale, 0.55);
       let near: Player | null = null, nd = 3;
@@ -849,14 +908,25 @@ export class Match {
       if (d < 4) p.faceTowards(owner!.pos.x, owner!.pos.z);
     }
 
+    this.handleContact(dt, p, owner, cmd);
+    if (clearance && cmd.shoot.pressed && !p.busy && p.kickCooldown <= 0) {
+      const d = cmd.move.lengthSq() > 0.01 ? cmd.move.clone().normalize() : new THREE.Vector3(p.attackDir, 0, Math.sign(bp.z || 1) * 0.4).normalize();
+      this.withKickMotion(p, 'lob', cv.set(d.x * COMMAND.clearanceSpeed, COMMAND.clearanceLift, d.z * COMMAND.clearanceSpeed), () => {
+        this.kickBall(p, new CANNON.Vec3(d.x * COMMAND.clearanceSpeed, COMMAND.clearanceLift, d.z * COMMAND.clearanceSpeed), new CANNON.Vec3());
+        this.describeKick('clearance', null);
+        this.passTarget = null;
+      }, true);
+      consumed = true;
+    }
+
     // 파워 게이지: D 슛 / S 패스 / W 스루 / A 로빙. Z = 감아차기, Q = 칩슛 / 로빙 스루
     // Z + C + D = 페이크 슛 (FC 온라인 키보드)
-    if (attacking && hasBall && !this.charge && cmd.finesse.held && cmd.contain.held && cmd.shoot.pressed) {
+    if (!consumed && !this.pendingUserKick && !this.powerTiming && attacking && hasBall && !this.charge && cmd.finesse.held && cmd.contain.held && cmd.shoot.pressed) {
       this.startSkill(p, 'fake_shot');
-    } else if (attacking && !this.charge && !this.windups.has(p) && !this.skills.isActive(p)) {
+    } else if (!consumed && !this.pendingUserKick && !this.powerTiming && attacking && !this.charge && !this.windups.has(p) && !this.skills.isActive(p)) {
       for (const kind of KICK_KINDS) {
         if (cmd[kind].pressed && !(kind === 'through' && this.keeperRush)) {
-          this.charge = { kind, value: 0, finesse: cmd.finesse.held, chip: cmd.modifier.held };
+          this.charge = { kind, value: 0, finesse: cmd.finesse.held, chip: cmd.modifier.held, flair: cmd.contain.held, power: kind === 'shoot' && !!cmd.power?.held, keyboard: cmd.keyboardKick, started: this.elapsed };
           break;
         }
       }
@@ -879,11 +949,16 @@ export class Match {
       c.value = Math.min(1, c.value + dt / (c.kind === 'shoot' ? SHOT.chargeTime : PASS.chargeTime));
       if (cmd.finesse.held) c.finesse = true;
       if (cmd.modifier.held) c.chip = true;
+      if (cmd.contain.held) c.flair = true;
       if (oppHasBall) {
         this.charge = null; // 차는 도중 공을 뺏김
       } else if (btn.released || !btn.held) {
-        if (this.ball.owner === p) this.execute(p, c.kind, c.value, c.finesse, c.chip, cmd.move);
-        else this.queued = { kind: c.kind, value: c.value, finesse: c.finesse, chip: c.chip, ttl: bp.y > 1 ? 1.4 : 0.7 };
+        if (this.ball.owner === p) {
+          if (c.power) this.executeUserKick(p, c, cmd.move);
+          else if (c.keyboard && this.elapsed - (c.started ?? 0) < INPUT.doubleTap) this.pendingUserKick = { player: p, kick: c, move: cmd.move.clone() };
+          else this.executeUserKick(p, c, cmd.move);
+        }
+        else this.queued = { ...c, ttl: bp.y > 1 ? 1.4 : 0.7 };
         this.charge = null;
       }
     }
@@ -998,16 +1073,72 @@ export class Match {
   /** S 꾹: 가장 가까운 AI 동료가 공 소유자를 압박 */
   teammatePress = false;
 
-  private execute(p: Player, kind: KickKind, value: number, finesse: boolean, chip: boolean, move: THREE.Vector3): void {
-    if (kind === 'shoot') {
-      if (chip && !finesse) this.chipShot(p, value, move);
-      else this.shoot(p, value, finesse, move);
+  private executeUserKick(p: Player, c: UserKick, move: THREE.Vector3): void {
+    if (c.power && c.kind === 'shoot') {
+      this.powerTiming = { player: p, kick: c, move: move.clone(), elapsed: 0, timed: false, tapped: false };
+      p.actionLock = Math.max(p.actionLock, COMMAND.powerWindup);
+      p.vel.multiplyScalar(0.2);
+      p.playAction('kick', COMMAND.powerWindup);
+      return;
+    }
+    if (c.kind === 'shoot') {
+      if (c.chip && !c.finesse && !c.double && !c.flair) { this.chipShot(p, c.value, move); return; }
+      const style = c.double ? 'driven' : c.flair ? 'flair' : 'normal';
+      if (style === 'normal') { this.shoot(p, c.value, c.finesse, move); return; }
+      const r = this.kicks.shot(p, c.value, c.finesse, move, this.assistFor(p, 'shot'), style);
+      this.applyShot(p, r, false, c.finesse && c.double ? 'finesseDrivenShot' : `${style}Shot`);
       return;
     }
     const dir = move.lengthSq() > 0.01 ? move : p.facing;
-    // Q+W = 로빙 스루 패스
-    if (kind === 'through' && chip) this.pass(p, dir, 'lobThrough', value);
-    else this.pass(p, dir, finesse ? (kind === 'pass' ? 'driven' : kind === 'through' ? 'drivenThrough' : 'lowLob') : kind === 'pass' ? 'short' : kind, value);
+    const cross = c.kind === 'lob' && Math.abs(p.pos.z) > PITCH.boxWidth / 2 && Math.abs(this.oppGoalX(p.team) - p.pos.x) < COMMAND.crossRange;
+    let kind: PassKind;
+    if (cross) kind = c.finesse ? 'fastCross' : c.chip ? 'highCross' : c.flair && p.profile.skill >= 3 ? 'flairCross' : c.double ? 'lowCross' : 'cross';
+    else if (c.kind === 'through') kind = c.chip ? c.finesse ? 'lowLobThrough' : 'highLobThrough' : c.finesse ? 'drivenThrough' : c.double ? 'dinkThrough' : 'through';
+    else if (c.kind === 'pass') kind = c.finesse ? 'driven' : c.chip ? 'oneTwo' : c.flair && p.profile.skill >= 3 ? 'flair' : c.double ? 'dink' : 'short';
+    else kind = c.finesse || c.double ? 'lowLob' : 'lob';
+    this.pass(p, dir, kind, c.value);
+  }
+
+  /** 발사 순간의 종류와 목표를 이벤트에 붙여 JSON 재생에서도 명령을 식별한다. */
+  private describeKick(kind: string, r: KickResult | null, timed?: boolean): void {
+    const event = this.events[this.events.length - 1];
+    if (event?.type !== 'kick') return;
+    Object.assign(event, { kind, receiver: r?.receiver ?? null, origin: [this.ball.position.x, this.ball.position.y, this.ball.position.z], aimOrigin: r?.origin?.toArray(), receiverPosition: r?.receiver?.pos.toArray(), velocity: [this.ball.velocity.x, this.ball.velocity.y, this.ball.velocity.z], spin: r ? [r.spin.x, r.spin.y, r.spin.z] : [0, 0, 0], target: r?.target?.toArray(), timed, flair: r?.flair ?? false });
+  }
+
+  private handleContact(dt: number, p: Player, owner: Player | null, cmd: UserCommand): void {
+    if (!owner || owner.team === p.team || p.stunned > 0 || owner.pos.distanceTo(p.pos) > COMMAND.contactRange) {
+      this.holding = null; this.holdTime = this.holdJudge = 0;
+      return;
+    }
+    const hold = cmd.tackle.held;
+    if (hold) {
+      if (this.holding !== owner) { this.holding = owner; this.holdTime = this.holdJudge = 0; }
+      this.holdTime += dt;
+      owner.contactScale = COMMAND.holdSlow;
+      if (this.holdTime >= this.holdJudge) {
+        this.events.push({ type: 'contact', kind: 'hold', success: true, player: p, opponent: owner, duration: this.holdTime });
+        this.holdJudge = this.holdTime + COMMAND.holdJudgePeriod;
+        // 오래 잡을수록 접촉 한 번의 반칙 위험을 높인다. 실제 파울·카드 처리는 기존 심판 경로다.
+        if (this.holdTime > COMMAND.holdFoulAfter) {
+          p.tackleKind = 'stand';
+          const foul = this.rules.judgeTackle(p, owner, false, Math.min(1, (this.holdTime - COMMAND.holdFoulAfter) / COMMAND.holdFoulAfter));
+          if (foul) this.rules.call(foul, true);
+        }
+      }
+    } else { this.holding = null; this.holdTime = this.holdJudge = 0; }
+    const shoulder = cmd.contain.held && cmd.move.lengthSq() > 0.01;
+    if ((cmd.shoot.pressed || shoulder) && !p.busy && p.tackleCooldown <= 0) {
+      const attack = p.stat('strength') * 0.7 + p.stat('balance') * 0.3;
+      const resist = owner.stat('strength') * 0.5 + owner.stat('balance') * 0.5;
+      const success = this.random.next() < THREE.MathUtils.clamp(0.5 + attack - resist, 0.1, 0.9);
+      p.tackleCooldown = PLAYER.standTackleCooldown;
+      if (success) {
+        owner.stunned = Math.max(owner.stunned, COMMAND.pushStun);
+        owner.vel.multiplyScalar(0.6);
+      }
+      this.events.push({ type: 'contact', kind: cmd.shoot.pressed ? 'push' : 'shoulder', success, player: p, opponent: owner, duration: success ? COMMAND.pushStun : 0 });
+    }
   }
 
   /** 사용자 팀은 설정한 보정, AI는 항상 보조 (오차는 능력치로) */
@@ -1018,7 +1149,7 @@ export class Match {
 
   /** Q+D 칩슛 */
   chipShot(p: Player, charge: number, aim: THREE.Vector3): void {
-    this.applyShot(p, this.kicks.chip(p, charge, aim, this.assistFor(p, 'shot')));
+    this.applyShot(p, this.kicks.chip(p, charge, aim, this.assistFor(p, 'shot')), false, 'chipShot');
   }
 
   switchToNearest(): void {
@@ -1040,12 +1171,14 @@ export class Match {
   /** 슛. charge 0..1, aim = 입력 방향. 파워가 너무 세면 공이 뜬다 (FIFA식) */
   shoot(p: Player, charge: number, finesse: boolean, aim: THREE.Vector3, instant = false): void {
     if (this.windups.has(p)) return;
-    this.applyShot(p, this.kicks.shot(p, charge, finesse, aim, this.assistFor(p, 'shot')), instant);
+    this.applyShot(p, this.kicks.shot(p, charge, finesse, aim, this.assistFor(p, 'shot')), instant, finesse ? 'finesseShot' : 'shot');
   }
 
-  private applyShot(p: Player, r: KickResult, instant = false): void {
+  private applyShot(p: Player, r: KickResult, instant = false, kind = 'shot', timed?: boolean): void {
     this.withKickMotion(p, 'shot', r.vel, () => {
       this.kickBall(p, r.vel, r.spin);
+      if (r.flair) p.playAction('kick', 0.4, { flair: true, side: this.kicks.footFactor(p).side });
+      this.describeKick(kind, r, timed);
       this.ball.newShot(p);
       this.stats.shots[p.team]++;
       this.passTarget = null;
@@ -1056,9 +1189,12 @@ export class Match {
   pass(p: Player, dir: THREE.Vector3, kind: PassKind = 'short', charge = 0.5): void {
     if (this.windups.has(p)) return;
     const r = this.kicks.pass(p, dir, kind, charge, this.assistFor(p, 'pass'));
-    this.withKickMotion(p, kind === 'lob' || kind === 'lobThrough' || kind === 'lowLob' ? 'lob' : 'pass', r.vel, () => {
+    this.withKickMotion(p, ['lob', 'lobThrough', 'lowLob', 'highLobThrough', 'lowLobThrough', 'cross', 'lowCross', 'highCross', 'flairCross', 'fastCross'].includes(kind) ? 'lob' : 'pass', r.vel, () => {
       this.kickBall(p, r.vel, r.spin);
       this.rules.recordPass(p);
+      this.dinkFlight = kind === 'dink' || kind === 'dinkThrough';
+      if (r.flair) p.playAction('kick', 0.4, { flair: true, side: this.kicks.footFactor(p).side });
+      this.describeKick(kind, r);
       this.ball.shot = null;
       this.passTarget = r.receiver;
       this.stats.passes[p.team]++;
@@ -1083,6 +1219,7 @@ export class Match {
       this.ball.body.position.set(p.pos.x + p.facing.x * 0.6, 0.9, p.pos.z + p.facing.z * 0.6);
     }
     this.rules.recordKick(p);
+    this.dinkFlight = false;
     this.ball.kick(vel, spin, p);
     p.kickCooldown = PLAYER.kickCooldown;
     p.basePose = null;
@@ -1309,7 +1446,8 @@ export class Match {
       this.footPoint(p, tmp).addScaledVector(p.facing, 0.25);
       const bp = this.ball.position;
       const d = Math.hypot(bp.x - tmp.x, bp.z - tmp.z);
-      if (d > p.tackleRange || bp.y > 0.8) continue;
+      // 딩크의 발 높이 제한은 소유권 인터셉트와 실제 태클 양쪽에서 같아야 한다.
+      if (d > p.tackleRange || bp.y > 0.8 || (this.dinkFlight && bp.y > PLAYER.dinkInterceptHeight)) continue;
       if (o && o.team !== p.team) {
         // 정면 태클이 성공률이 높다
         const facingDot = -o.facing.dot(p.tackleDir);
@@ -1397,6 +1535,8 @@ export class Match {
       this.footPoint(p, tmp);
       const d = Math.hypot(bp.x - tmp.x, bp.z - tmp.z);
       const intercepting = this.pendingPass !== null && this.pendingPass !== p.team;
+      // 딩크는 수비수의 발·슬라이딩을 넘긴다. 몸통 충돌은 기존 판정을 유지한다.
+      if (intercepting && this.dinkFlight && bp.y > PLAYER.dinkInterceptHeight) continue;
       // 패스 받는 선수는 받으러 몸을 내밀어 범위가 넓다
       const receiving = this.passTarget === p ? 0.35 : 0;
       const radius =
@@ -1454,7 +1594,7 @@ export class Match {
     if (best === this.controlled && this.queued) {
       const q = this.queued;
       this.queued = null;
-      this.execute(best, q.kind, q.value, q.finesse, q.chip, this.lastMove);
+      this.executeUserKick(best, q, this.lastMove);
     }
   }
 

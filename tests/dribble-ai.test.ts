@@ -5,7 +5,7 @@ import { command, simulation } from './helpers';
 // 10경기(슛 50개 안팎)는 우연 편차가 기준선만큼 커서, 개인기 접촉 위치처럼 작은 변화에도 결과가 뒤집힌다 → 20경기
 const SEEDS = Number(process.env.DRIBBLE_AI_SEEDS ?? 20);
 /** 같은 시드 SEEDS경기를 각각 300초 진행해, 필드 소유자의 공격 방향 이동과 추격 시간을 비교한다. */
-function measure(touches: boolean) {
+async function measure(touches: boolean) {
   let progress = 0, ownedTime = 0, chasingTime = 0, shots = 0, heavy = 0;
   for (let seed = 0; seed < SEEDS; seed++) {
     const { match } = simulation(seed, { kickMotion: true, userControl: false, dribbleTouches: touches });
@@ -31,13 +31,15 @@ function measure(touches: boolean) {
       match.events.length = 0;
     }
     shots += match.stats.shots[0] + match.stats.shots[1];
+    // 수치는 고정 스텝으로 그대로 계산하고 경기 사이에만 양보해 Vitest RPC 응답이 60초 이상 밀리지 않게 한다.
+    await new Promise<void>((resolve) => setImmediate(resolve));
   }
   return { forwardSpeed: progress / ownedTime, shots, heavy, chasingRatio: chasingTime / ownedTime };
 }
 
-it('AI 터치 드리블 20경기: 예전 대비 전진 85%·슛 80% 이상, 헤비 터치 10회·추격 15% 이하', () => {
-  const glued = measure(false);
-  const touch = measure(true);
+it('AI 터치 드리블 20경기: 예전 대비 전진 85%·슛 80% 이상, 헤비 터치 10회·추격 15% 이하', async () => {
+  const glued = await measure(false);
+  const touch = await measure(true);
   console.info('AI 드리블 측정', JSON.stringify({ glued, touch }));
   expect(glued.forwardSpeed).toBeGreaterThan(0);
   expect(glued.shots).toBeGreaterThan(0);

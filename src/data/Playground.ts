@@ -1,4 +1,9 @@
 export const PLAYGROUND_SCENARIOS = [
+  { id: 'passing', label: '패스 궤적', hint: '수비 없이 15m 앞 동료에게 패스의 높이·속도·리드를 비교하세요.' },
+  { id: 'commands', label: '패스 커맨드', hint: '15m 앞 동료와 4m 앞 수비수. S·SS·W·WW·Q+S·Z+Q+W를 비교하세요.' },
+  { id: 'cross', label: '측면 크로스', hint: '상대 박스 옆에서 A·AA·Q+A·C+A·Z+A를 비교하세요.' },
+  { id: 'contact', label: '수비 몸싸움', hint: '공 가진 상대 옆에서 Space 유지·D 밀치기·C+방향·C+E를 시험하세요.' },
+  { id: 'clearance', label: '루즈볼 걷어내기', hint: '가까운 루즈볼에 D를 누르면 높고 멀리 걷어냅니다.' },
   { id: 'free', label: '자유 드리블', hint: '공격수 + 공. 방향키·E로 드리블과 급회전을 시험하세요.' },
   { id: 'duel', label: '1대1 압박', hint: '앞의 수비수 한 명이 실제 경기 AI로 압박합니다.' },
   { id: 'pressure', label: '3명 압박', hint: '세 방향에서 시작하는 상대를 피해 드리블하세요.' },

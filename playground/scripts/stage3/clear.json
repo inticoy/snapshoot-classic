@@ -1,0 +1,20 @@
+{
+  "scenario": "clearance",
+  "seed": 3,
+  "duration": 4,
+  "opponent": "stand",
+  "sampleHz": 120,
+  "inputs": [
+    {
+      "t": 0,
+      "keys": [],
+      "tap": [
+        "KeyD"
+      ]
+    },
+    {
+      "t": 0.6,
+      "keys": []
+    }
+  ]
+}

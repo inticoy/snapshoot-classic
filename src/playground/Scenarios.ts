@@ -24,7 +24,11 @@ export class PlaygroundScenarios {
     const runner = this.roster.find((p) => p.team === 1 && p.slot.label === 'ST')!;
     const keeper = this.roster.find((p) => p.team === 1 && p.isKeeper)!;
     const user = id === 'slide' ? defender : attacker;
-    const active = id === 'free' ? [user]
+    const active = id === 'passing' ? [user, mate]
+      : id === 'commands' ? [user, mate, opponents[0]]
+      : id === 'cross' ? [user, mate, opponents[0]]
+      : id === 'contact' || id === 'clearance' ? [user, opponents[0]]
+      : id === 'free' ? [user]
       : id === 'duel' ? [user, opponents[0]]
       : id === 'pressure' ? [user, ...opponents]
       : id === 'receive' ? [user, mate]
@@ -53,6 +57,21 @@ export class PlaygroundScenarios {
     }
     for (const p of active) if (p.team === 1) p.facing.set(-1, 0, 0);
     let owner = user;
+    if (id === 'commands' || id === 'passing') {
+      mate.pos.set(-5, 0, 0); mate.facing.set(1, 0, 0);
+      opponents[0].pos.set(-16, 0, 0.65);
+      mate.actionLock = 0.65;
+    }
+    if (id === 'cross') {
+      user.pos.set(35, 0, 24); user.facing.set(0, 0, -1);
+      mate.pos.set(40, 0, 0); mate.actionLock = 0.65;
+      opponents[0].pos.set(50, 0, 12);
+    }
+    if (id === 'contact' || id === 'clearance') {
+      user.pos.set(-19.6, 0, 1);
+      opponents[0].pos.set(-20, 0, 0); opponents[0].facing.set(1, 0, 0);
+      owner = opponents[0];
+    }
     if (id === 'slide') {
       user.pos.set(-2, 0, -1);
       runner.pos.set(5, 0, 0.5);
@@ -67,6 +86,7 @@ export class PlaygroundScenarios {
     m.ball.reset(owner.pos.x + owner.facing.x * 0.4, owner.pos.z + owner.facing.z * 0.4);
     m.ball.body.position.y = BALL.radius;
     m.ball.owner = m.ball.lastTouch = owner;
+    if (id === 'clearance') m.ball.owner = null;
     // 초기 위치를 정한 뒤 AI 목표도 같은 위치로 초기화해야 첫 프레임에 예전 목표로 달리지 않는다.
     m.ai.reset();
     if (id === 'receive') {

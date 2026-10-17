@@ -108,6 +108,7 @@ export class SkinnedPlayerModel implements CharacterModel {
   private sprint = false;
   private actionT = 0;
   private kickSide: 1 | -1 = 1;
+  private kickFlair = false;
   private diveSide: 1 | -1 = 1;
   private readonly overlay: Record<Overlay, number> = { kick: 0, tackle: 0, dive: 0, hold: 0, header: 0, advance: 0, smother: 0 };
   private danceW = 0;
@@ -231,10 +232,10 @@ export class SkinnedPlayerModel implements CharacterModel {
     return this.state;
   }
 
-  play(state: AnimState, opts: { side?: 1 | -1 } = {}): void {
+  play(state: AnimState, opts: { side?: 1 | -1; flair?: boolean } = {}): void {
     if (state === 'kick' || state === 'tackle' || state === 'dive' || state === 'smother' || state === 'header') {
       this.actionT = 0;
-      if (state === 'kick') this.kickSide = opts.side ?? 1;
+      if (state === 'kick') { this.kickSide = opts.side ?? 1; this.kickFlair = opts.flair ?? false; }
       if (state === 'dive' || state === 'smother') this.diveSide = opts.side ?? 1;
     }
     this.state = state;
@@ -392,6 +393,12 @@ export class SkinnedPlayerModel implements CharacterModel {
       const other = side === 'R' ? 'L' : 'R';
       this.rotateBone(`DEF-thigh${side}`, X_AXIS, -leg);
       this.rotateBone(`DEF-shin${side}`, X_AXIS, knee);
+      if (this.kickFlair) {
+        // 아웃프런트: 차는 다리를 몸 안쪽으로 교차하고 발목·상체를 바깥으로 연다.
+        this.rotateBone(`DEF-thigh${side}`, Z_AXIS, this.kickSide * 0.5 * swing * kick);
+        this.rotateBone(`DEF-foot${side}`, Y_AXIS, this.kickSide * 0.65 * swing * kick);
+        this.rotateBone('DEF-spine001', Y_AXIS, -this.kickSide * 0.4 * swing * kick);
+      }
       // 반대 팔을 벌려 균형
       this.rotateBone(`DEF-upper_arm${other}`, Z_AXIS, (other === 'L' ? 0.7 : -0.7) * swing * kick);
       this.rotateBone('DEF-spine001', X_AXIS, -0.2 * swing * kick);
