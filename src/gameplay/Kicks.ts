@@ -111,7 +111,7 @@ export class Kicks {
         ? SHOT.finesseMinSpeed + (SHOT.finesseMaxSpeed - SHOT.finesseMinSpeed) * charge
         : SHOT.minSpeed + (SHOT.maxSpeed - SHOT.minSpeed) * charge) * power;
     if (style === 'driven') speed *= COMMAND.drivenShotSpeed;
-    if (style === 'power') speed *= COMMAND.powerSpeed;
+    if (style === 'power') speed = Math.min(speed * COMMAND.powerSpeed, COMMAND.powerMaxSpeed);
     // 80% 이상 차지하면 급격히 뜬다 (크로스바 위로 넘어갈 위험). 골 결정력이 높으면 덜 뜬다
     const sky = Math.max(0, charge - 0.8) * (11 - 4 * acc);
     const targetY = THREE.MathUtils.clamp(

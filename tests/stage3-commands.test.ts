@@ -87,9 +87,10 @@ it('중앙의 A·Q+A·Z+A는 측면 크로스와 혼동하지 않는다', () => 
   }
 });
 
-it('DD는 수평 파워 +10%·낮은 수직 속도, ZDD는 약한 감아차기다', () => {
+it('DD는 짧은 두 번 탭이어도 최소 게이지가 보장돼 D보다 확실히 세고 낮다, ZDD는 약한 감아차기다', () => {
   const normal = kick('d'), driven = kick('dd'), finesse = kick('zd'), curled = kick('zdd');
-  expect(driven.horizontal / normal.horizontal).toBeCloseTo(1.1, 5);
+  // 짧게 탭한 D는 게이지가 거의 없지만 DD는 drivenMinCharge 이상 + 10%
+  expect(driven.horizontal / normal.horizontal).toBeGreaterThan(1.3);
   expect((driven.kick.velocity as number[])[1]).toBe(COMMAND.drivenShotLift);
   expect((curled.kick.velocity as number[])[1]).toBe(COMMAND.drivenShotLift);
   expect(Math.abs((curled.kick.spin as number[])[1] / (finesse.kick.spin as number[])[1])).toBeCloseTo(COMMAND.drivenCurl, 5);

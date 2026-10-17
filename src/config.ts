@@ -298,6 +298,10 @@ export const COMMAND = {
   lowThroughHeight: 2.1, lobThroughTime: 1.35, lowThroughSpeed: 1.25,
   oneTwoLead: 0.35, flairError: 1.35,
   drivenShotSpeed: 1.1, drivenShotLift: 0.65, drivenShotError: 1.18, drivenCurl: 0.35,
+  /** D+D 최소 게이지: 빠른 두 번 탭이라 게이지가 거의 0인 채로 나가던 문제 */
+  drivenMinCharge: 0.6,
+  /** 파워슛 상한 (m/s): 실측 최고 슛 ≈ 34 m/s (2022 월드컵 121.7 km/h) */
+  powerMaxSpeed: 35,
   powerSpeed: 1.5, powerWindup: 0.4, powerWindow: 0.1, powerCenter: 0.3,
   powerError: 1.6, timedError: 0.55,
   crossRange: 30, highCrossTime: 1.3, fastCrossSpeed: 1.2,

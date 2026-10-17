@@ -1085,7 +1085,9 @@ export class Match {
       if (c.chip && !c.finesse && !c.double && !c.flair) { this.chipShot(p, c.value, move); return; }
       const style = c.double ? 'driven' : c.flair ? 'flair' : 'normal';
       if (style === 'normal') { this.shoot(p, c.value, c.finesse, move); return; }
-      const r = this.kicks.shot(p, c.value, c.finesse, move, this.assistFor(p, 'shot'), style);
+      // D+D는 첫 D를 짧게 떼야 인식돼 게이지가 거의 안 찬다 → 드리븐은 원래 강하게 깔아 차는 슛이므로 최소 세기를 보장
+      const value = style === 'driven' ? Math.max(c.value, COMMAND.drivenMinCharge) : c.value;
+      const r = this.kicks.shot(p, value, c.finesse, move, this.assistFor(p, 'shot'), style);
       this.applyShot(p, r, false, c.finesse && c.double ? 'finesseDrivenShot' : `${style}Shot`);
       return;
     }
