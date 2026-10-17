@@ -338,3 +338,10 @@ kbd {
 
 /* 터치 기기: 메뉴 값 화살표는 손가락 최소 크기(44px)를 지킨다 */
 .touch-device .menu-item .value button { min-width: 44px; min-height: 44px; }
+
+/* 온라인 대전 대기 화면 */
+.online-wait { display: flex; flex-direction: column; align-items: center; gap: 10px; color: var(--text); text-align: center; padding: 16px; }
+.online-wait b { font: 700 20px var(--ui); }
+.online-wait .code { font: 800 44px/1 var(--num); letter-spacing: 6px; color: var(--accent); }
+.online-wait button { min-height: 44px; padding: 0 18px; border: 0; border-radius: 6px; background: var(--accent); color: #111; font: 700 14px var(--ui); cursor: pointer; }
+.online-wait small { color: var(--muted); word-break: break-all; max-width: 90vw; }

@@ -48,7 +48,8 @@ try {
       await page.waitForTimeout(30);
       await check();
     }
-    await page.getByRole('button', { name: '설정', exact: true }).click();
+    // 포인터를 옮기면 지나가는 항목에 hover가 걸려 메뉴가 다시 그려지고 스크롤이 맨 위로 간다 → 요소를 직접 누른다
+    await page.getByRole('button', { name: '설정', exact: true }).evaluate((el) => { el.scrollIntoView({ block: 'center' }); el.click(); });
     // 마우스를 올리면 메뉴가 다시 그려지므로 매번 번호로 다시 찾는다
     for (let i = 0, n = await page.locator('.menu-item').count(); i < n; i++) {
       // 실제 포인터 이동은 다시 그려지는 순간과 겹쳐 실패하므로 메뉴가 듣는 pointerenter를 직접 보낸다

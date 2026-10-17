@@ -265,6 +265,15 @@ export class Game {
       panel: () => matchupPanel(null, [`경기 시간 ${lengthLabel()}`, '중계 · 11대11 · 4-3-3', TEAMS[0].name + ' 홈']),
       items: [
         { id: 'start', label: '경기 시작', onSelect: () => void this.startMatch() },
+        { id: 'online-create', label: '온라인 대전 · 방 만들기', onSelect: () => { location.search = '?online'; } },
+        {
+          id: 'online-join',
+          label: '온라인 대전 · 코드로 입장',
+          onSelect: () => {
+            const code = window.prompt('방 코드 6자리')?.trim().toUpperCase();
+            if (code && /^[A-Z0-9]{6}$/.test(code)) location.search = `?room=${code}`;
+          },
+        },
         {
           id: 'length',
           label: '경기 시간',

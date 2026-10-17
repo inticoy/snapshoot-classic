@@ -14,7 +14,8 @@ const Playground = new URLSearchParams(location.search).has('playground')
   ? (await import('./playground/Playground')).Playground : undefined;
 // 온라인 1:1: ?room=코드 (없으면 ?online 으로 방을 만든다). 중계 서버는 ?relay= (기본: 로컬 개발 서버)
 const params = new URLSearchParams(location.search);
-const relay = params.get('relay') ?? 'http://127.0.0.1:8787';
+// 기본 중계 서버: Cloudflare Workers (server/). 로컬 개발 서버는 &relay=http://127.0.0.1:8787
+const relay = params.get('relay') ?? 'https://snapshoot-relay.woojoo.workers.dev';
 if (params.has('online') && !params.get('room')) {
   const code = await NetSession.createRoom(relay);
   params.set('room', code);
@@ -22,9 +23,18 @@ if (params.has('online') && !params.get('room')) {
   location.search = params.toString();
 } else if (params.get('room')) {
   const session = new NetSession(relay, params.get('room')!.toUpperCase());
-  const status = (text: string) => { overlay.innerHTML = `<div class="loading"><span>${text}</span></div>`; };
+  const link = `${location.origin}${location.pathname}?room=${session.code}`;
+  const status = (text: string) => {
+    overlay.innerHTML = `<div class="online-wait"><b>온라인 대전</b><span>${text}</span>
+      <div class="code">${session.code}</div>
+      <button type="button" id="copy-room">초대 링크 복사</button><small>${link}</small></div>`;
+    overlay.querySelector('#copy-room')?.addEventListener('click', () => void navigator.clipboard?.writeText(link));
+  };
   status('중계 서버 접속 중');
-  const start = await session.connect(status);
+  const start = await session.connect(status).catch(() => {
+    status('중계 서버에 접속하지 못했어요. 새로고침해 주세요');
+    throw new Error('relay unavailable');
+  });
   overlay.innerHTML = '';
   const game = new Game(canvas, { online: { session, start } });
   game.run();
