@@ -128,12 +128,14 @@ export class Kicks {
       const spinAmt = SHOT.finesseSpin * (0.7 + 0.5 * n(s.curve));
       const aLat = magnusAccel(activePhysics(), BALL.radius, BALL.mass, spinAmt, speed);
       const offset = Math.min(3.5, 0.5 * aLat * T * T * 0.8);
-      const lateral = new THREE.Vector3(-horiz.z, 0, horiz.x);
-      const curlSide = Math.sign(targetZ - bp.z) * Math.sign(lateral.z) || 1;
-      const aimPoint = target.clone().addScaledVector(lateral, -curlSide * offset);
+      // 휘는 방향은 차는 발로 정해진다 (발 안쪽 감아차기): 오른발은 왼쪽으로, 왼발은 오른쪽으로 휜다.
+      // 그래서 휘는 반대쪽(오른발이면 목표 오른쪽)을 겨냥해 차고 회전으로 목표에 들어오게 한다.
+      // 마그누스 힘 = ω×v: ω가 +Y(위)면 진행 방향의 왼쪽으로 휜다 (오른쪽 = (-vz, 0, vx))
+      const right = new THREE.Vector3(-horiz.z, 0, horiz.x);
+      const bendLeft = foot.side === 1; // 오른발
+      const aimPoint = target.clone().addScaledVector(right, bendLeft ? offset : -offset);
       launch = new THREE.Vector3(aimPoint.x - bp.x, 0, aimPoint.z - bp.z).normalize();
-      const sgn = Math.sign(launch.z * lateral.x * curlSide - launch.x * lateral.z * curlSide) || 1;
-      spin.set(0, sgn * spinAmt, 0);
+      spin.set(0, bendLeft ? spinAmt : -spinAmt, 0);
     }
     const vy = (targetY - bp.y + 0.5 * g() * T * T) / T;
     return { vel: new CANNON.Vec3(launch.x * speed, Math.max(0.5, vy), launch.z * speed), spin, receiver: null, weakFoot: foot.weak };
