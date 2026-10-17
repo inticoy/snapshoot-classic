@@ -7,7 +7,7 @@ import type { PlayerProfile } from '../data/Teams';
 import type { Role, Slot } from '../data/Formation';
 
 export type { Role };
-import { n, type OutfieldStats } from '../data/Stats';
+import { n, type OutfieldStats, accelCurve, accelType, heightOf, type AccelType } from '../data/Stats';
 import { appearance, backName } from '../data/Appearance';
 import { visualRandom } from '../core/Random';
 import { pickMotion, speedClass } from '../gameplay/Motions';
@@ -41,6 +41,9 @@ export class Player {
   diveKind: 'save' | 'smother' = 'save';
   diveSide: 1 | -1 = 1;
   keeperAdvancing = false;
+  /** 키(cm)와 가속 유형 (FC24 AcceleRATE) */
+  readonly height: number;
+  readonly accelType: AccelType;
   /** 개인기에 속아 몸을 잘못 실은 남은 시간과 그 방향 */
   wrongFoot = 0;
   /** C 볼 지키기 중 (몸으로 공을 가림) */
@@ -68,6 +71,8 @@ export class Player {
     modelFactory: PlayerModelFactory = createPlayerModel,
   ) {
     this.attackDir = team === 0 ? 1 : -1;
+    this.height = heightOf(profile.name, profile.pos);
+    this.accelType = accelType(profile.stats, this.height);
     const c = TEAM_COLORS[team];
     const keeper = role === 'GK';
     const look = appearance(profile.name);
@@ -141,7 +146,9 @@ export class Player {
     }
     const diff = target.sub(this.vel);
     // 가속력: 출발/방향 전환 시 가속
-    const rate = desired.lengthSq() > 0.01 ? PLAYER.accel - 5 + 10 * this.stat('acceleration') : PLAYER.decel;
+    // 가속 유형(AcceleRATE): 지금 속도가 최고 속도의 몇 %인지에 따라 가속이 달라진다
+    const f = Math.hypot(this.vel.x, this.vel.z) / Math.max(1, this.maxSpeed(hasBall));
+    const rate = desired.lengthSq() > 0.01 ? (PLAYER.accel - 5 + 10 * this.stat('acceleration')) * accelCurve(this.accelType, f) : PLAYER.decel;
     const maxDelta = rate * dt;
     if (diff.length() > maxDelta) diff.setLength(maxDelta);
     this.vel.add(diff);

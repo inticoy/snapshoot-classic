@@ -141,3 +141,37 @@ export function overall(s: Stats, pos: 'GK' | 'LB' | 'CB' | 'RB' | 'CM' | 'LW' |
       s.composure * 0.06 + s.shortPassing * 0.05 + s.strength * 0.05,
   );
 }
+
+/** FC24 AcceleRATE 가속 유형 */
+export type AccelType = 'explosive' | 'controlled' | 'lengthy';
+
+/**
+ * 키(cm): 선수 데이터에 없으면 이름 해시로 포지션별 범위에서 정한다 (같은 선수는 항상 같은 키)
+ *  GK·CB 183~195 / 풀백·중앙 175~186 / 윙·공격수 168~185
+ */
+export function heightOf(name: string, pos: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < name.length; i++) h = Math.imul(h ^ name.charCodeAt(i), 16777619);
+  const r = ((h >>> 0) % 1000) / 1000;
+  const [lo, hi] = pos === 'GK' || pos === 'CB' ? [183, 195] : pos === 'LB' || pos === 'RB' || pos === 'CM' ? [175, 186] : [168, 185];
+  return Math.round(lo + (hi - lo) * r);
+}
+
+/**
+ * 가속 유형 (EA 공식 기준, fc-mechanics.md):
+ *  폭발형: 키 ≤ 175, 민첩·가속 ≥ 80, 민첩 − 몸싸움 ≥ 20
+ *  지속형: 키 ≥ 188, 몸싸움 ≥ 80, 가속 ≥ 55, 몸싸움 − 민첩 ≥ 20
+ *  그 외 균형형
+ */
+export function accelType(s: Stats, height: number): AccelType {
+  if (height <= 175 && s.agility >= 80 && s.acceleration >= 80 && s.agility - s.strength >= 20) return 'explosive';
+  if (height >= 188 && s.strength >= 80 && s.acceleration >= 55 && s.strength - s.agility >= 20) return 'lengthy';
+  return 'controlled';
+}
+
+/** 가속 곡선 배수: 최고 속도의 몇 %까지 왔는지(f)에 따라. 폭발형은 초반이 세고 후반이 약하다, 지속형은 반대 */
+export function accelCurve(type: AccelType, f: number): number {
+  if (type === 'explosive') return f < 0.6 ? 1.2 : 0.9;
+  if (type === 'lengthy') return f < 0.6 ? 0.85 : 1.1;
+  return 1;
+}
