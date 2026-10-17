@@ -1,5 +1,6 @@
 import './net/installMath';
 import { Game } from './core/Game';
+import { NetSession } from './net/NetSession';
 import { loadCharacterAsset, loadMotionLibrary } from './entities/SkinnedPlayerModel';
 
 const canvas = document.getElementById('scene') as HTMLCanvasElement;
@@ -11,4 +12,23 @@ await Promise.all([loadCharacterAsset('assets/models/player.glb'), loadMotionLib
 // 개발 페이지도 별도 시뮬레이터 없이 본 경기의 입력·루프·카메라를 사용한다.
 const Playground = new URLSearchParams(location.search).has('playground')
   ? (await import('./playground/Playground')).Playground : undefined;
-new Game(canvas, { playground: Playground }).run();
+// 온라인 1:1: ?room=코드 (없으면 ?online 으로 방을 만든다). 중계 서버는 ?relay= (기본: 로컬 개발 서버)
+const params = new URLSearchParams(location.search);
+const relay = params.get('relay') ?? 'http://127.0.0.1:8787';
+if (params.has('online') && !params.get('room')) {
+  const code = await NetSession.createRoom(relay);
+  params.set('room', code);
+  params.delete('online');
+  location.search = params.toString();
+} else if (params.get('room')) {
+  const session = new NetSession(relay, params.get('room')!.toUpperCase());
+  const status = (text: string) => { overlay.innerHTML = `<div class="loading"><span>${text}</span></div>`; };
+  status('중계 서버 접속 중');
+  const start = await session.connect(status);
+  overlay.innerHTML = '';
+  const game = new Game(canvas, { online: { session, start } });
+  game.run();
+  game.startOnline();
+} else {
+  new Game(canvas, { playground: Playground }).run();
+}

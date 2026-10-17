@@ -6,6 +6,8 @@ import type { TouchMode } from './TouchInput';
 import { PhysicsWorld } from '../physics/PhysicsWorld';
 import { Stadium } from '../environment/Stadium';
 import { SKILLS } from '../gameplay/Skills';
+import { Lockstep } from '../net/Lockstep';
+import type { NetSession, StartInfo } from '../net/NetSession';
 import { Match, type UserCommand } from '../gameplay/Match';
 import { CAMERA_LABEL, CameraRig } from '../camera/CameraRig';
 import { Hud } from '../ui/Hud';
@@ -16,7 +18,7 @@ import { Sound } from '../audio/Sound';
 import { categoryVolume, decideTouchSound } from '../audio/Mix';
 import { TEAMS } from '../data/Teams';
 import { RESTART_LABEL } from '../gameplay/SetPieces';
-import { visualRandom } from './Random';
+import { Random, visualRandom } from './Random';
 import type { Playground } from '../playground/Playground';
 
 type AppState = 'menu' | 'playing' | 'paused' | 'result';
@@ -61,7 +63,10 @@ export class Game {
     contain: { held: false, pressed: false, released: false },
   };
 
-  constructor(canvas: HTMLCanvasElement, options: { playground?: typeof Playground } = {}) {
+  /** 온라인 1:1 (중계 서버 락스텝) */
+  private lockstep: Lockstep | null = null;
+
+  constructor(canvas: HTMLCanvasElement, options: { playground?: typeof Playground; online?: { session: NetSession; start: StartInfo } } = {}) {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, GRAPHICS.high.pixelRatio));
     this.renderer.shadowMap.enabled = true;
@@ -75,7 +80,17 @@ export class Game {
     this.stadium = new Stadium(this.physics);
     this.scene.add(this.stadium.group);
 
-    this.match = new Match(this.physics, { practice: !!options.playground });
+    const online = options.online;
+    this.match = new Match(this.physics, online
+      ? { random: new Random(online.start.seed), userTeams: [true, true], localTeam: online.start.team }
+      : { practice: !!options.playground });
+    if (online) {
+      this.lockstep = new Lockstep(this.match, online.start.team, online.session, online.start.delay);
+      online.session.onData = (team, data) => this.lockstep!.receive(data, team);
+      online.session.onDesync = (tick) => this.hud.tick(`동기화 어긋남 (틱 ${tick})`, 4);
+      online.session.onOpponentLeft = () => this.hud.tick('상대가 나갔어요', 4);
+      online.session.flushEarly();
+    }
     for (const g of this.match.goals) this.scene.add(g.group);
     for (const p of this.match.players) this.scene.add(p.model.root);
     for (const o of this.match.officials.all) this.scene.add(o.model.root, o.item);
@@ -332,6 +347,11 @@ export class Game {
     return min > base ? `${base}+${min - base}'` : `${Math.max(1, min)}'`;
   }
 
+  /** 온라인 경기: 메뉴 없이 바로 킥오프 */
+  startOnline(): void {
+    void this.startMatch();
+  }
+
   private async startMatch(): Promise<void> {
     if (this.playground) { this.playground.reset(); return; }
     this.menu.close();
@@ -386,7 +406,15 @@ export class Game {
         while (this.accumulator >= PHYSICS.step && steps < 12) {
           this.buildCommand();
           const stepCommand = this.playground?.commandForStep() ?? this.cmd;
-          this.match.update(PHYSICS.step, stepCommand);
+          if (this.lockstep) {
+            // 온라인: 두 사람 입력이 다 온 틱만 계산한다 (상대 입력이 늦으면 이 틱에서 기다린다)
+            if (this.lockstep.ready) this.lockstep.pushLocal(stepCommand);
+            if (!this.lockstep.step()) {
+              this.input.endFrame();
+              this.accumulator = Math.min(this.accumulator, PHYSICS.step * 4);
+              break;
+            }
+          } else this.match.update(PHYSICS.step, stepCommand);
           if (this.playground) {
             // 텔레메트리의 뼈 높이도 같은 스텝의 애니메이션에서 읽는다.
             for (const p of this.match.players) {

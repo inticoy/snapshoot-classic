@@ -107,6 +107,8 @@ const cspin = new CANNON.Vec3();
 
 
 export interface MatchOptions {
+  /** 이 화면에서 조작하는 팀 (온라인에서 팀 1일 수 있다). HUD·카메라·Match의 조작 필드가 이 팀을 가리킨다 */
+  localTeam?: 0 | 1;
   /** 사람이 조작하는 팀 [팀0, 팀1]. 없으면 userControl(기본 켜짐)로 팀 0만 */
   userTeams?: [boolean, boolean];
   /** 실제 킥오프 규칙(첫 패스 전 드리블 금지, 상대 서클 밖). 기본 켜짐, 드리블 단위 테스트는 끈다 */
@@ -210,8 +212,9 @@ export class Match {
   /** 공이 오기 전에 미리 입력한 원터치 동작 */
   /** 팀별 사람 조작 상태 (멀티플레이: 두 팀 모두 사람일 수 있다). [0]이 이 화면의 기본 조작 팀 */
   readonly sides: [UserSide, UserSide] = [new UserSide(0), new UserSide(1)];
-  /** 지금 처리 중인 조작 팀. handleUser 밖에서는 기본(팀 0) */
-  private side: UserSide = this.sides[0];
+  get localTeam(): 0 | 1 { return this.options.localTeam ?? 0; }
+  /** 지금 처리 중인 조작 팀. handleUser 밖에서는 이 화면의 팀 (localTeam) */
+  private side: UserSide;
   get skillInput(): UserSide['skillInput'] { return this.side.skillInput; }
   get skillInputHeld(): UserSide['skillInputHeld'] { return this.side.skillInputHeld; }
   get keeperRush(): UserSide['keeperRush'] { return this.side.keeperRush; }
@@ -275,6 +278,7 @@ export class Match {
         this.teams[team].push(p);
       });
     }
+    this.side = this.sides[this.localTeam];
     this.sides[0].active = this.options.userTeams?.[0] ?? this.options.userControl !== false;
     this.sides[1].active = this.options.userTeams?.[1] ?? false;
     for (const side of this.sides) side.controlled = this.forward(side.team);
@@ -628,7 +632,7 @@ export class Match {
     for (const side of this.sides) if (side.controlled === p) {
       this.side = side;
       this.switchToNearest();
-      this.side = this.sides[0];
+      this.side = this.sides[this.localTeam];
     }
   }
 
@@ -645,7 +649,7 @@ export class Match {
       this.side = side;
       this.handleUser(dt, cmd);
     }
-    this.side = this.sides[0];
+    this.side = this.sides[this.localTeam];
     this.ai.update(dt);
     this.updateKickoffRule(dt);
     this.keepers.update(dt);
@@ -1691,7 +1695,7 @@ export class Match {
       side.queued = null;
       this.side = side;
       this.executeUserKick(best, q, this.lastMove);
-      this.side = this.sides[0];
+      this.side = this.sides[this.localTeam];
     }
   }
 

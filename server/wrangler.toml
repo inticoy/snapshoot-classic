@@ -1,0 +1,12 @@
+# SnapShoot Classic 1:1 중계 서버 (입력 지연 락스텝)
+name = "snapshoot-relay"
+main = "src/index.ts"
+compatibility_date = "2026-05-01"
+
+[[durable_objects.bindings]]
+name = "ROOMS"
+class_name = "MatchRoom"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["MatchRoom"]
