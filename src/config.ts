@@ -53,6 +53,8 @@ export const PLAYER = {
   accel: 16,
   decel: 20,
   turnRate: 11,
+  /** 슬라이딩에 걸려 넘어진 뒤 다시 움직이기까지 (초). 예전엔 화면 동작 길이(최대 1.4초)로 정했다 */
+  fallTime: 1.2,
   staminaDrain: 0.045, // 넓은 경기장에서도 약 30초 연속 질주 가능 (능력치로 보정)
   staminaRegen: 0.025,
   controlRadius: 0.7,

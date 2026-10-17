@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { expect, it } from 'vitest';
-import { accelType, heightOf } from '../src/data/Stats';
+import { accelType, heightOf, type Stats } from '../src/data/Stats';
 import { simulation } from './helpers';
 
 function timeTo(type: 'explosive' | 'controlled' | 'lengthy', frac: number): number {
@@ -25,9 +25,9 @@ it('가속 유형: 폭발형은 출발(50%)이 빠르고, 지속형은 최고 �
 });
 
 it('키와 능력치로 가속 유형이 나뉜다 (FC24 기준)', () => {
-  const base = { agility: 85, acceleration: 85, strength: 60 } as never;
+  const base = { agility: 85, acceleration: 85, strength: 60 } as unknown as Stats;
   expect(accelType({ ...base }, 170)).toBe('explosive');
-  expect(accelType({ agility: 60, acceleration: 70, strength: 85 } as never, 190)).toBe('lengthy');
+  expect(accelType({ agility: 60, acceleration: 70, strength: 85 } as unknown as Stats, 190)).toBe('lengthy');
   expect(accelType({ ...base }, 180)).toBe('controlled');
   expect(heightOf('Kang Min-jae', 'CB')).toBe(heightOf('Kang Min-jae', 'CB'));
 });

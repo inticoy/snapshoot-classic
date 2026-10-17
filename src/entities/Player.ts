@@ -225,9 +225,10 @@ export class Player {
 
   /** 태클에 걸려 넘어짐. 넘어졌다 일어나기까지 걸리는 시간(초)을 돌려준다 (동작이 없으면 0) */
   fall(): number {
+    // 판정용 시간은 화면(동작 클립·화면 난수)과 무관하게 정한다 — 화면 없는 서버·상대 클라이언트와 결과가 같아야 한다
     const entry = pickMotion('fall', speedClass(this), null, visualRandom.next());
-    if (!this.playMotion(entry)) return 0;
-    return Math.min(1.4, this.animTimer);
+    this.playMotion(entry);
+    return PLAYER.fallTime;
   }
 
   startTackle(dir: THREE.Vector3, kind: 'slide' | 'stand' = 'slide'): void {
