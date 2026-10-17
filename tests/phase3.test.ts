@@ -19,7 +19,10 @@ function duel(seed: number, team: 0 | 1 = 0) {
   striker.facing.set(a, 0, 0);
   keeper.pos.set(gx - a * 0.8, 0, 0);
   keeper.facing.set(-a, 0, 0);
-  match.controlled = striker;
+  // 공격 팀을 사람이 조작한다 (팀 1이면 팀 1 조작 측을 켠다)
+  match.sides[team].active = true;
+  match.sides[1 - team].active = false;
+  match.sides[team].controlled = striker;
   match.ball.reset(striker.pos.x + a * 0.5, striker.pos.z);
   match.ball.owner = match.ball.lastTouch = striker;
   return { match, physics, striker, keeper, a, gx };
@@ -41,7 +44,7 @@ function oneOnOnes(team: 0 | 1, count = 100) {
           new THREE.Vector3(gx - striker.pos.x, 0, targetZ - striker.pos.z).normalize());
         shot = true;
       }
-      match.update(PHYSICS.step, cmd);
+      match.update(PHYSICS.step, team === 0 ? cmd : [null, cmd]);
       maxAdvance = Math.max(maxAdvance, Math.abs(gx - keeper.pos.x));
       for (const e of match.events) {
         if (e.type === 'smother') smothers++;
@@ -184,6 +187,9 @@ describe('키퍼 물리와 판단 경계', () => {
 
 it('수비 W 꾹/해제는 홈 키퍼만 돌진시키고 공격 W·Q+W는 기존 스루 패스다', () => {
   const { match, striker } = duel(10, 1);
+  // 수비하는 홈 팀(0)을 사람이 조작한다
+  match.sides[0].active = true;
+  match.sides[1].active = false;
   match.controlled = match.forward(0);
   const cmd = command();
   cmd.through.held = cmd.through.pressed = true;

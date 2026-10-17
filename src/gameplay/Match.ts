@@ -107,6 +107,8 @@ const cspin = new CANNON.Vec3();
 
 
 export interface MatchOptions {
+  /** 사람이 조작하는 팀 [팀0, 팀1]. 없으면 userControl(기본 켜짐)로 팀 0만 */
+  userTeams?: [boolean, boolean];
   /** 실제 킥오프 규칙(첫 패스 전 드리블 금지, 상대 서클 밖). 기본 켜짐, 드리블 단위 테스트는 끈다 */
   kickoffPass?: boolean;
   /** 고립된 개발 시나리오. 아웃·휘슬 뒤 재개 배치 없이 R 리셋을 기다린다. */
@@ -128,6 +130,49 @@ export interface MatchOptions {
   dribbleTouches?: boolean;
 }
 
+
+/**
+ * 한 팀을 사람이 조작할 때 필요한 상태. 멀티플레이에서는 두 팀이 각각 하나씩 가진다.
+ * Match의 같은 이름 필드는 지금 처리 중인 팀(side)의 값을 가리킨다.
+ */
+const btn = (): ButtonState => ({ held: false, pressed: false, released: false });
+/** 입력 없음 */
+const IDLE_COMMAND: UserCommand = { move: new THREE.Vector3(), sprint: false, shoot: btn(), pass: btn(), through: btn(), lob: btn(), modifier: btn(), finesse: btn(), contain: btn(), tackle: btn() };
+
+export class UserSide {
+  /** 사람이 이 팀을 조작 중인지 */
+  active = false;
+  controlled!: Player;
+  charge: UserKick | null = null;
+  pendingUserKick: { player: Player; kick: UserKick; move: THREE.Vector3 } | null = null;
+  powerTiming: { player: Player; kick: UserKick; move: THREE.Vector3; elapsed: number; timed: boolean; tapped: boolean } | null = null;
+  holding: Player | null = null;
+  holdTime = 0;
+  holdJudge = 0;
+  /** 공이 오기 전에 미리 입력한 원터치 동작 */
+  queued: (UserKick & { ttl: number }) | null = null;
+  readonly skillInput = new SkillInput();
+  readonly skillInputHeld = new SkillInput(true);
+  readonly lastMove = new THREE.Vector3();
+  /** Shift를 누르기 직전의 이동 방향 (개인기 커맨드 입력 중 유지) */
+  readonly skillHeldMove = new THREE.Vector3();
+  switchAimHeld = false;
+  /** 녹온 뒤 공을 쫓는 동안 (소유 상실 거리를 늘린다) */
+  knockTimer = 0;
+  prevSprint = false;
+  sprintTaps = 0;
+  lastSprintTap = -9;
+  shiftDownAt = -9;
+  /** 패스로 조작 선수가 바뀐 뒤 지난 시간 (자동 전환 이동 보조용) */
+  receiveTimer = 0;
+  /** Q 꾹: 가장 가까운 AI 동료가 공 소유자를 압박 */
+  teammatePress = false;
+  /** W (상대 공격 중): 키퍼 돌진 */
+  keeperRush = false;
+
+  constructor(readonly team: 0 | 1) {}
+}
+
 export class Match {
   readonly random: Random;
   readonly players: Player[] = [];
@@ -142,11 +187,8 @@ export class Match {
   readonly keepers: Keepers;
   readonly rules: Rules;
   readonly skills: SkillRunner;
-  private readonly skillInput = new SkillInput();
-  private readonly skillInputHeld = new SkillInput(true);
   readonly shootout: Shootout;
   readonly officials: Officials;
-  keeperRush = false;
   /** 전반 1, 후반 2 */
   half: 1 | 2 = 1;
   /** 이번 하프에서 흐른 시간 (실제 초) */
@@ -161,19 +203,53 @@ export class Match {
   /** 벽시계 대신 고정 스텝 시간을 써서 AI 움직임도 재현한다. */
   elapsed = 0;
   clock = 0; // 경기 진행 시간 (실제 초)
-  controlled: Player;
   /** 고립 연습에만 적용한다. 일반 경기 AI의 의사결정은 그대로 둔다. */
   practiceOpponent: PracticeOpponent | null = null;
   practiceControlLocked = false;
   /** 슛/패스 파워 게이지 (0..1), 차지 중이 아니면 null */
-  charge: UserKick | null = null;
-  private pendingUserKick: { player: Player; kick: UserKick; move: THREE.Vector3 } | null = null;
-  powerTiming: { player: Player; kick: UserKick; move: THREE.Vector3; elapsed: number; timed: boolean; tapped: boolean } | null = null;
-  private holding: Player | null = null;
-  private holdTime = 0;
-  private holdJudge = 0;
   /** 공이 오기 전에 미리 입력한 원터치 동작 */
-  private queued: (UserKick & { ttl: number }) | null = null;
+  /** 팀별 사람 조작 상태 (멀티플레이: 두 팀 모두 사람일 수 있다). [0]이 이 화면의 기본 조작 팀 */
+  readonly sides: [UserSide, UserSide] = [new UserSide(0), new UserSide(1)];
+  /** 지금 처리 중인 조작 팀. handleUser 밖에서는 기본(팀 0) */
+  private side: UserSide = this.sides[0];
+  get skillInput(): UserSide['skillInput'] { return this.side.skillInput; }
+  get skillInputHeld(): UserSide['skillInputHeld'] { return this.side.skillInputHeld; }
+  get keeperRush(): UserSide['keeperRush'] { return this.side.keeperRush; }
+  set keeperRush(v: UserSide['keeperRush']) { this.side.keeperRush = v; }
+  get controlled(): UserSide['controlled'] { return this.side.controlled; }
+  set controlled(v: UserSide['controlled']) { this.side.controlled = v; }
+  get charge(): UserSide['charge'] { return this.side.charge; }
+  set charge(v: UserSide['charge']) { this.side.charge = v; }
+  get pendingUserKick(): UserSide['pendingUserKick'] { return this.side.pendingUserKick; }
+  set pendingUserKick(v: UserSide['pendingUserKick']) { this.side.pendingUserKick = v; }
+  get powerTiming(): UserSide['powerTiming'] { return this.side.powerTiming; }
+  set powerTiming(v: UserSide['powerTiming']) { this.side.powerTiming = v; }
+  get holding(): UserSide['holding'] { return this.side.holding; }
+  set holding(v: UserSide['holding']) { this.side.holding = v; }
+  get holdTime(): UserSide['holdTime'] { return this.side.holdTime; }
+  set holdTime(v: UserSide['holdTime']) { this.side.holdTime = v; }
+  get holdJudge(): UserSide['holdJudge'] { return this.side.holdJudge; }
+  set holdJudge(v: UserSide['holdJudge']) { this.side.holdJudge = v; }
+  get queued(): UserSide['queued'] { return this.side.queued; }
+  set queued(v: UserSide['queued']) { this.side.queued = v; }
+  get lastMove(): UserSide['lastMove'] { return this.side.lastMove; }
+  get switchAimHeld(): UserSide['switchAimHeld'] { return this.side.switchAimHeld; }
+  set switchAimHeld(v: UserSide['switchAimHeld']) { this.side.switchAimHeld = v; }
+  get knockTimer(): UserSide['knockTimer'] { return this.side.knockTimer; }
+  set knockTimer(v: UserSide['knockTimer']) { this.side.knockTimer = v; }
+  get prevSprint(): UserSide['prevSprint'] { return this.side.prevSprint; }
+  set prevSprint(v: UserSide['prevSprint']) { this.side.prevSprint = v; }
+  get sprintTaps(): UserSide['sprintTaps'] { return this.side.sprintTaps; }
+  set sprintTaps(v: UserSide['sprintTaps']) { this.side.sprintTaps = v; }
+  get lastSprintTap(): UserSide['lastSprintTap'] { return this.side.lastSprintTap; }
+  set lastSprintTap(v: UserSide['lastSprintTap']) { this.side.lastSprintTap = v; }
+  get shiftDownAt(): UserSide['shiftDownAt'] { return this.side.shiftDownAt; }
+  set shiftDownAt(v: UserSide['shiftDownAt']) { this.side.shiftDownAt = v; }
+  get skillHeldMove(): UserSide['skillHeldMove'] { return this.side.skillHeldMove; }
+  get receiveTimer(): UserSide['receiveTimer'] { return this.side.receiveTimer; }
+  set receiveTimer(v: UserSide['receiveTimer']) { this.side.receiveTimer = v; }
+  get teammatePress(): UserSide['teammatePress'] { return this.side.teammatePress; }
+  set teammatePress(v: UserSide['teammatePress']) { this.side.teammatePress = v; }
   stats: MatchStats = emptyStats();
   duration: number = MATCH.durationSeconds;
   private pendingPass: 0 | 1 | null = null;
@@ -199,7 +275,9 @@ export class Match {
         this.teams[team].push(p);
       });
     }
-    this.controlled = this.forward(0);
+    this.sides[0].active = this.options.userTeams?.[0] ?? this.options.userControl !== false;
+    this.sides[1].active = this.options.userTeams?.[1] ?? false;
+    for (const side of this.sides) side.controlled = this.forward(side.team);
     this.ai = new TeamAI(this, options.dribbleTouches !== false);
     this.kicks = new Kicks(this);
     this.setPieces = new SetPieces(this);
@@ -245,7 +323,8 @@ export class Match {
   }
 
   isUserControlled(p: Player): boolean {
-    return this.options.userControl !== false && p === this.controlled && this.phase !== 'goal' && this.phase !== 'fulltime' &&
+    const side = this.sides[p.team];
+    return side.active && p === side.controlled && this.phase !== 'goal' && this.phase !== 'fulltime' &&
       this.phase !== 'halftime' && this.phase !== 'shootout';
   }
 
@@ -301,8 +380,7 @@ export class Match {
     this.ball.owner = taker;
     this.ball.lastTouch = taker;
     this.ball.body.position.set(taker.pos.x + taker.attackDir * 0.35, BALL.radius, 0);
-    if (team === 0) this.controlled = taker;
-    else this.controlled = this.forward(0);
+    for (const side of this.sides) side.controlled = side.team === team ? taker : this.forward(side.team);
   }
 
   /** 킥오프를 차기 전인 선수 (첫 킥 전까지 드리블 못 함). null이면 진행 중 */
@@ -339,7 +417,11 @@ export class Match {
     }
   }
 
-  update(dt: number, cmd: UserCommand): void {
+  /** cmd: 팀 0 명령(한 사람) 또는 [팀0, 팀1] 명령 (두 사람, 멀티플레이) */
+  update(dt: number, input: UserCommand | readonly [UserCommand | null, UserCommand | null]): void {
+    const cmds = Array.isArray(input) ? input as readonly [UserCommand | null, UserCommand | null] : [input as UserCommand, null] as const;
+    // 세트피스·승부차기는 아직 팀 0 사람 기준 (명령이 없으면 빈 명령)
+    const cmd = cmds[0] ?? cmds[1] ?? IDLE_COMMAND;
     this.elapsed += dt;
     this.phaseTimer -= dt;
 
@@ -370,7 +452,7 @@ export class Match {
         // 경기 시간은 공이 나가 있을 때도 흐른다
         this.clock += dt;
         this.halfClock += dt;
-        if (this.phase === 'playing') this.updatePlaying(dt, cmd);
+        if (this.phase === 'playing') this.updatePlaying(dt, cmds);
         else this.setPieces.update(dt, cmd);
         if (!this.stoppage && this.halfClock >= this.halfLength) {
           this.stoppage = this.rules.stoppageMinutes(this.half);
@@ -533,17 +615,27 @@ export class Match {
     p.vel.set(0, 0, 0);
     if (this.ball.owner === p) this.ball.owner = null;
     if (this.passTarget === p) this.passTarget = null;
-    if (this.controlled === p) this.switchToNearest();
+    for (const side of this.sides) if (side.controlled === p) {
+      this.side = side;
+      this.switchToNearest();
+      this.side = this.sides[0];
+    }
   }
 
-  private updatePlaying(dt: number, cmd: UserCommand): void {
+  private updatePlaying(dt: number, cmds: readonly [UserCommand | null, UserCommand | null]): void {
     for (const p of this.players) p.contactScale = 1;
     const holder = this.ball.owner ?? this.ball.lastTouch;
     if (holder) this.stats.possession[holder.team] += dt;
     // W는 상대 공격 중에만 키퍼 지시다. 공격 스루/로빙 스루 입력은 그대로 둔다.
-    const defending = this.ball.owner ? this.ball.owner.team === 1 : this.ball.lastTouch?.team === 1;
-    this.keeperRush = this.options.userControl !== false && defending && cmd.through.held;
-    if (this.isUserControlled(this.controlled)) this.handleUser(dt, cmd);
+    const attackingTeam = this.ball.owner?.team ?? this.ball.lastTouch?.team;
+    for (const side of this.sides) {
+      const cmd = cmds[side.team];
+      side.keeperRush = side.active && !!cmd && attackingTeam === 1 - side.team && cmd.through.held;
+      if (!cmd || !this.isUserControlled(side.controlled)) continue;
+      this.side = side;
+      this.handleUser(dt, cmd);
+    }
+    this.side = this.sides[0];
     this.ai.update(dt);
     this.updateKickoffRule(dt);
     this.keepers.update(dt);
@@ -694,8 +786,8 @@ export class Match {
       if (mode === 'pass') {
         this.stats.passes[p.team]++;
         this.pendingPass = p.team;
-        if (r.receiver && p.team === 0 && !r.receiver.isKeeper) {
-      if (!this.practiceControlLocked) this.controlled = r.receiver;
+        if (r.receiver && this.sides[p.team].active && !r.receiver.isKeeper) {
+      if (!this.practiceControlLocked) this.sides[p.team].controlled = r.receiver;
       this.receiveTimer = 0;
     }
       }
@@ -719,8 +811,8 @@ export class Match {
     this.passTarget = receiver;
     this.stats.passes[p.team]++;
     this.pendingPass = p.team;
-    if (receiver && p.team === 0 && !receiver.isKeeper) {
-      if (!this.practiceControlLocked) this.controlled = receiver;
+    if (receiver && this.sides[p.team].active && !receiver.isKeeper) {
+      if (!this.practiceControlLocked) this.sides[p.team].controlled = receiver;
       this.receiveTimer = 0;
     }
   }
@@ -983,8 +1075,6 @@ export class Match {
     }
   }
 
-  private readonly lastMove = new THREE.Vector3();
-  private switchAimHeld = false;
 
   /** 지금 선수에서 dir 쪽으로 가장 잘 맞는 동료(각도 우선, 가까울수록)로 전환 */
   switchToward(from: Player, dir: THREE.Vector3): void {
@@ -1005,11 +1095,6 @@ export class Match {
     }
   }
   /** 녹온 뒤 공을 쫓는 동안 (소유 상실 거리를 늘린다) */
-  private knockTimer = 0;
-  private prevSprint = false;
-  private sprintTaps = 0;
-  private lastSprintTap = -9;
-  private shiftDownAt = -9;
 
   /** 녹온: 공을 진행 방향으로 distance(m)만큼 길게 치고 질주로 쫓는다. 가속·속력이 좋을수록 더 길게 */
   knockOn(p: Player, distance: number, move: THREE.Vector3): void {
@@ -1027,7 +1112,6 @@ export class Match {
     this.events.push({ type: 'skill', id: 'knock_on', player: p });
   }
   /** Shift를 누르기 직전의 이동 방향 (개인기 커맨드 입력 중 유지) */
-  private readonly skillHeldMove = new THREE.Vector3();
 
   /** id로 개인기 시작 (별이 모자라면 무시) */
   startSkill(p: Player, id: string): boolean {
@@ -1035,7 +1119,6 @@ export class Match {
     return !!def && this.skills.start(p, def);
   }
   /** 패스로 조작 선수가 바뀐 뒤 지난 시간 (자동 전환 이동 보조용) */
-  private receiveTimer = 0;
 
   /**
    * 선수가 공을 가로챌 수 있는 가장 이른 지점.
@@ -1071,7 +1154,6 @@ export class Match {
     return new THREE.Vector3(x, 0, z);
   }
   /** S 꾹: 가장 가까운 AI 동료가 공 소유자를 압박 */
-  teammatePress = false;
 
   private executeUserKick(p: Player, c: UserKick, move: THREE.Vector3): void {
     if (c.power && c.kind === 'shoot') {
@@ -1157,7 +1239,7 @@ export class Match {
   switchToNearest(): void {
     let best: Player | null = null;
     let bestD = Infinity;
-    for (const p of this.teams[this.practiceControlLocked ? this.controlled.team : 0]) {
+    for (const p of this.teams[this.practiceControlLocked ? this.controlled.team : this.side.team]) {
       if (p.isKeeper || p === this.controlled) continue;
       const d = p.pos.distanceToSquared(tmp.set(this.ball.position.x, 0, this.ball.position.z));
       if (d < bestD) {
@@ -1201,8 +1283,8 @@ export class Match {
       this.passTarget = r.receiver;
       this.stats.passes[p.team]++;
       this.pendingPass = p.team;
-      if (r.receiver && p.team === 0 && !r.receiver.isKeeper) {
-        if (!this.practiceControlLocked) this.controlled = r.receiver;
+      if (r.receiver && this.sides[p.team].active && !r.receiver.isKeeper) {
+        if (!this.practiceControlLocked) this.sides[p.team].controlled = r.receiver;
         this.receiveTimer = 0;
       }
     });
@@ -1473,7 +1555,7 @@ export class Match {
           // 어드밴티지(공을 지킨 채 계속)면 넘어지지 않는다. 휘슬이 불리면 경기가 멈추므로 넘어져도 된다
           if (success) o.fall();
           o.basePose = null;
-          if (o.team === 0) this.charge = null;
+          this.sides[o.team].charge = null;
           this.rules.call(foul, !success);
           if (this.phase !== 'playing') return;
           continue;
@@ -1484,7 +1566,7 @@ export class Match {
           // 슬라이딩에 걸려 넘어지면 넘어지는 동작 길이만큼 못 움직인다 (누운 채 미끄러져 보이지 않게)
           if (p.tackleKind === 'slide') o.stunned = Math.max(o.stunned, o.fall());
           o.basePose = null;
-          if (o.team === 0) this.charge = null;
+          this.sides[o.team].charge = null;
           if (p.tackleKind === 'stand') {
             // 스탠딩 태클은 공을 그대로 빼앗는다
             this.gainPossession(p);
@@ -1579,9 +1661,10 @@ export class Match {
       if (best.team === this.pendingPass) this.stats.passesDone[best.team]++;
       this.pendingPass = null;
     }
-    if (best.team === 0 && !best.isKeeper && !this.practiceControlLocked) this.controlled = best;
+    const side = this.sides[best.team];
+    if (side.active && !best.isKeeper && !this.practiceControlLocked) side.controlled = best;
     // 방향 첫 터치: 받는 순간 누르고 있던 방향으로 공을 잡아 놓는다
-    if (best === this.controlled && this.lastMove.lengthSq() > 0.01) best.facing.copy(this.lastMove).setY(0).normalize();
+    if (best === side.controlled && side.lastMove.lengthSq() > 0.01) best.facing.copy(side.lastMove).setY(0).normalize();
     // 터치 드리블에서는 받은 공의 속도를 죽여 발 앞에 놓아야 한다 (안 그러면 패스 속도 그대로 굴러가 버린다)
     if (this.options.dribbleTouches !== false && !best.isKeeper) this.firstTouch(best);
     if (best.isKeeper) {
@@ -1593,10 +1676,12 @@ export class Match {
       return;
     }
     // 미리 입력해 둔 원터치 슛/패스
-    if (best === this.controlled && this.queued) {
-      const q = this.queued;
-      this.queued = null;
+    if (best === side.controlled && side.queued) {
+      const q = side.queued;
+      side.queued = null;
+      this.side = side;
       this.executeUserKick(best, q, this.lastMove);
+      this.side = this.sides[0];
     }
   }
 

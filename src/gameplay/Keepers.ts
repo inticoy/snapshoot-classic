@@ -108,7 +108,7 @@ export class Keepers {
     const threat = depth > 0 && depth < KEEPER.threatRange && Math.abs(bp.z) < PITCH.boxWidth / 2 &&
       (!!opponent && !covering || through);
     state.threatTime = threat ? state.threatTime + dt : 0;
-    const manual = k.team === 0 && m.keeperRush;
+    const manual = m.sides[k.team].keeperRush;
     const reacting = state.threatTime > KEEPER.reactionTime * (1.5 - reflex);
     if ((threat && reacting) || manual) {
       // 골문과 공을 잇는 선을 따라 각도를 좁히되 박스 밖까지 쫓아가지 않는다.
