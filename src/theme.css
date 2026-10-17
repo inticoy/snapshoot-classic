@@ -335,3 +335,6 @@ kbd {
   font: 700 13px/1 var(--ui); pointer-events: auto; touch-action: none;
 }
 .touch-skill.held { background: rgba(255, 212, 0, 0.25); border-color: var(--accent); }
+
+/* 터치 기기: 메뉴 값 화살표는 손가락 최소 크기(44px)를 지킨다 */
+.touch-device .menu-item .value button { min-width: 44px; min-height: 44px; }
