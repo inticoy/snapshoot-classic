@@ -9,6 +9,7 @@ export class TouchControls {
   private readonly root = document.createElement('div');
   private readonly stick = document.createElement('div');
   private readonly pad = document.createElement('div');
+  private readonly skillPad = document.createElement('div');
   private readonly buttons = new Map<TouchSlot, HTMLButtonElement>();
   private readonly activePointers = new Map<number, HTMLElement>();
   private readonly touch: TouchInput;
@@ -26,6 +27,11 @@ export class TouchControls {
     this.stick.className = 'touch-stick hidden';
     this.stick.innerHTML = '<i></i>';
     this.root.append(this.pad, this.stick);
+    this.skillPad.className = 'touch-skill';
+    this.skillPad.setAttribute('role', 'button');
+    this.skillPad.setAttribute('aria-label', '개인기 스틱: 누른 채 8방향으로 굴리기');
+    this.skillPad.textContent = '개인기';
+    this.root.append(this.skillPad);
     for (const slot of SLOTS) {
       const button = document.createElement('button');
       button.type = 'button';
@@ -36,6 +42,7 @@ export class TouchControls {
       this.bind(button, slot);
     }
     this.bind(this.pad);
+    this.bind(this.skillPad, undefined, true);
     const guide = document.createElement('div');
     guide.id = 'rotate-guide';
     guide.setAttribute('role', 'status');
@@ -101,6 +108,7 @@ export class TouchControls {
     const mode = this.touch.mode;
     this.root.dataset.mode = mode;
     const shown = visibleSlots(mode);
+    this.skillPad.classList.toggle('hidden', mode !== 'attack');
     for (const [slot, button] of this.buttons) {
       const { label } = touchBinding(mode, slot);
       const hint = swipeHint(mode, slot);
@@ -111,12 +119,14 @@ export class TouchControls {
     }
   }
 
-  private bind(element: HTMLElement, slot?: TouchSlot): void {
+  private bind(element: HTMLElement, slot?: TouchSlot, skill = false): void {
     element.addEventListener('contextmenu', (event) => event.preventDefault());
     element.addEventListener('pointerdown', (event) => {
       if (!this.visible || (event.pointerType === 'mouse' && event.button !== 0)) return;
       event.preventDefault();
-      const accepted = slot
+      const accepted = skill
+        ? this.touch.startSkill(event.pointerId, event.clientX, event.clientY)
+        : slot
         ? this.touch.startButton(event.pointerId, slot, event.clientX, event.clientY)
         : this.touch.startMove(event.pointerId, event.clientX, event.clientY);
       if (!accepted) return;

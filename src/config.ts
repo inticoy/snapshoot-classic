@@ -232,7 +232,7 @@ export const AI = {
 };
 
 // 화면 픽셀 기준 입력 임계값: 작은 손떨림은 이동/슛 제스처로 보지 않는다.
-export const TOUCH = { joystickRadius: 52, deadZone: 0.12, swipeDistance: 30 };
+export const TOUCH = { joystickRadius: 52, deadZone: 0.12, swipeDistance: 30, skillRadius: 38, skillDeadZone: 0.3 };
 export const GRAPHICS = {
   high: { pixelRatio: 2, shadowSize: 2048, crowdDensity: 1 },
   // 픽셀 비율은 화질에 가장 크게 보이므로 1.75까지 유지하고, 대신 그림자와 관중을 줄인다

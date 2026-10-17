@@ -3,6 +3,8 @@ import { Window as HappyWindow } from 'happy-dom';
 import { Input } from '../src/core/Input';
 import { TouchControls } from '../src/ui/TouchControls';
 import { Menu } from '../src/ui/Menu';
+import * as THREE from 'three';
+import { SKILLS, SkillInput } from '../src/gameplay/Skills';
 
 let win: HappyWindow;
 let coarse: boolean;
@@ -82,6 +84,66 @@ it('DOM 포인터의 조이스틱+슛 입력과 캡처 뒤 스와이프 release�
   expect(input.isDown('modifier')).toBe(true);
   pointer(pad, 'pointerup', 1, 172, 230);
   expect(input.moveAxis()).toEqual({ x: 0, y: 0 });
+});
+
+it('개인기 스틱을 위·대각선·오른쪽으로 굴리면 이동 중에도 스텝오버를 인식한다', () => {
+  const { input, pad } = ui();
+  const skill = document.querySelector('.touch-skill')!;
+  const recognizer = new SkillInput();
+  const facing = new THREE.Vector3(1, 0, 0);
+  const found: string[] = [];
+  const step = (frames: number) => {
+    for (let i = 0; i < frames; i++) {
+      const axis = input.skillAxis();
+      const result = recognizer.update(1 / 120, input.isDown('skill'), false, new THREE.Vector3(axis.y, 0, axis.x), facing, SKILLS);
+      if (result) found.push(result.id);
+      input.endFrame();
+    }
+  };
+  pointer(pad, 'pointerdown', 1, 100, 230);
+  pointer(pad, 'pointermove', 1, 150, 230);
+  pointer(skill, 'pointerdown', 2, 590, 325);
+  pointer(skill, 'pointermove', 2, 590, 285);
+  step(7);
+  pointer(skill, 'pointermove', 2, 618, 297);
+  step(7);
+  pointer(skill, 'pointermove', 2, 630, 325);
+  step(20);
+  expect(found).toEqual(['step_over_r']);
+  expect(input.moveAxis().x).toBeGreaterThan(0.9);
+  pointer(skill, 'pointerup', 2, 630, 325);
+  step(1);
+  expect(input.isDown('skill')).toBe(false);
+  expect(input.skillAxis()).toEqual(input.moveAxis());
+});
+
+it('개인기 스틱의 짧은 탭과 길게 유지가 다른 커맨드가 된다', () => {
+  const { input } = ui();
+  const skill = document.querySelector('.touch-skill')!;
+  const facing = new THREE.Vector3(1, 0, 0);
+  const list = SKILLS.filter((s) => s.id === 'feint_r' || s.id === 'side_step_r');
+  const run = (frames: number, recognizer: SkillInput) => {
+    let result: string | undefined;
+    for (let i = 0; i < frames; i++) {
+      const axis = input.skillAxis();
+      result ??= recognizer.update(1 / 120, input.isDown('skill'), false, new THREE.Vector3(axis.y, 0, axis.x), facing, list)?.id;
+      input.endFrame();
+    }
+    return result;
+  };
+  const tap = new SkillInput();
+  pointer(skill, 'pointerdown', 1, 590, 325);
+  pointer(skill, 'pointermove', 1, 630, 325);
+  expect(run(10, tap)).toBeUndefined();
+  pointer(skill, 'pointerup', 1, 630, 325);
+  expect(run(1, tap)).toBe('feint_r');
+
+  const hold = new SkillInput();
+  pointer(skill, 'pointerdown', 2, 590, 325);
+  pointer(skill, 'pointermove', 2, 630, 325);
+  expect(run(50, hold)).toBe('side_step_r');
+  pointer(skill, 'pointerup', 2, 630, 325);
+  expect(input.skillAxis()).toEqual({ x: 0, y: 0 });
 });
 
 it.each(['pointercancel', 'lostpointercapture'])('%s는 멀티터치와 차지를 함께 취소한다', (type) => {

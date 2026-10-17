@@ -11,6 +11,7 @@
     "test": "vitest run",
     "test:browser": "node scripts/browser-smoke.mjs",
     "test:mobile": "node scripts/mobile-smoke.mjs",
+    "test:menu": "node scripts/menu-smoke.mjs",
     "test:phase2": "node scripts/phase-2-smoke.mjs",
     "test:playground": "node scripts/playground-smoke.mjs"
   },

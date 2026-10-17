@@ -110,7 +110,7 @@ export class Menu {
             ${s.onBack ? '<button type="button" class="menu-back">뒤로</button>' : ''}
           </div>
         </div>
-        <div class="menu-right">${active.panel ? active.panel() : s.panel()}</div>
+        <div class="menu-right" role="region" aria-label="${active.label} 내용" tabindex="0">${active.panel ? active.panel() : s.panel()}</div>
       </div>`;
     this.root.querySelectorAll<HTMLElement>('.menu-item').forEach((el) => {
       const i = Number(el.dataset.i);
@@ -160,7 +160,7 @@ export function controlsPanel(): string {
   return `
     <div class="card">
       <h3>조작법</h3>
-      <p class="touch-instructions">왼쪽 빈 곳을 누르고 드래그하면 이동합니다. 오른쪽 슛·패스를 꾹 눌러 파워를 모으고 뗍니다. 패스를 누른 채 위로 밀면 스루, 아래로 밀면 로빙. 슛을 위로 밀며 떼면 칩슛, 좌우로 떼면 감아차기. 수비 때는 압박(밀면 슬라이딩)·태클·선수 변경 버튼으로 바뀝니다. PK는 조이스틱 위/아래로 구석을 고르고, 상대 PK는 차는 순간 조이스틱 방향으로 키퍼가 몸을 던집니다.</p>
+      <p class="touch-instructions">왼쪽 빈 곳을 누르고 드래그하면 이동합니다. 오른쪽 개인기 스틱을 누른 채 8방향으로 굴리면 개인기를 사용합니다. 짧게 움직였다 놓으면 탭, 길게 유지하면 꾹 입력입니다. 오른쪽 슛·패스를 꾹 눌러 파워를 모으고 뗍니다. 패스를 누른 채 위로 밀면 스루, 아래로 밀면 로빙. 슛을 위로 밀며 떼면 칩슛, 좌우로 떼면 감아차기. 수비 때는 압박(밀면 슬라이딩)·태클·선수 변경 버튼으로 바뀝니다. PK는 조이스틱 위/아래로 구석을 고르고, 상대 PK는 차는 순간 조이스틱 방향으로 키퍼가 몸을 던집니다.</p>
       <h4>FC 온라인 키보드 배치</h4>
       <div class="keymap">
         <div>

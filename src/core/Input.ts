@@ -74,6 +74,7 @@ export class Input {
   private readonly virtualReleased = new Set<Action>();
   private readonly pulses = new Set<Action>();
   private touchAxis = { x: 0, y: 0 };
+  private touchSkillAxis: { x: number; y: number } | null = null;
 
   /** 포인터마다 소스를 분리해 한 손을 떼어도 다른 손/키보드 입력을 유지한다. */
   setActions(source: string, actions: Action[]): void {
@@ -101,10 +102,19 @@ export class Input {
     this.touchAxis = { x: x / scale, y: y / scale };
   }
 
+  /** 개인기 스틱은 이동 조이스틱과 독립적이어야 커맨드에 달리던 방향이 섞이지 않는다. */
+  setSkillMove(x: number, y: number): void {
+    const scale = Math.max(1, Math.hypot(x, y));
+    this.touchSkillAxis = { x: x / scale, y: y / scale };
+  }
+
+  clearSkillMove(): void { this.touchSkillAxis = null; }
+
   /** 취소는 킥의 release가 아니다. 호출 측에서도 진행 중인 차지를 취소한다. */
   clearVirtual(): void {
     this.clearVirtualActions();
     this.setMove(0, 0);
+    this.clearSkillMove();
   }
 
   clearVirtualActions(): void {
@@ -190,6 +200,7 @@ export class Input {
 
   /** 개인기 커맨드용 방향: 보조키를 누른 뒤 새로 누른 방향키만 */
   skillAxis(): { x: number; y: number } {
+    if (this.touchSkillAxis) return this.touchSkillAxis;
     return this.moveAxis(this.masked);
   }
 

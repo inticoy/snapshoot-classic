@@ -45,6 +45,7 @@ export function swipeHint(mode: TouchMode, slot: TouchSlot): string {
 export class TouchInput {
   private readonly contacts = new Map<number, Contact>();
   private moveId: number | null = null;
+  private skillId: number | null = null;
   private buttonUsed = false;
   mode: TouchMode = 'attack';
   joystick: { x: number; y: number; dx: number; dy: number } | null = null;
@@ -68,9 +69,25 @@ export class TouchInput {
     return true;
   }
 
+  startSkill(id: number, x: number, y: number): boolean {
+    if (this.skillId !== null || this.contacts.has(id) || this.mode !== 'attack') return false;
+    this.skillId = id;
+    this.contacts.set(id, { x, y, action: 'skill' });
+    this.input.setActions(`touch:${id}`, ['skill']);
+    this.input.setSkillMove(0, 0);
+    return true;
+  }
+
   move(id: number, x: number, y: number): void {
     const start = this.contacts.get(id);
     if (!start) return;
+    if (id === this.skillId) {
+      const dx = (x - start.x) / TOUCH.skillRadius;
+      const dy = (start.y - y) / TOUCH.skillRadius;
+      const length = Math.hypot(dx, dy);
+      this.input.setSkillMove(length >= TOUCH.skillDeadZone ? dx / Math.max(1, length) : 0, length >= TOUCH.skillDeadZone ? dy / Math.max(1, length) : 0);
+      return;
+    }
     if (id !== this.moveId) {
       this.swipe(id, start, x - start.x, y - start.y);
       return;
@@ -86,7 +103,11 @@ export class TouchInput {
   end(id: number, x: number, y: number): void {
     const start = this.contacts.get(id);
     if (!start) return;
-    if (id === this.moveId) {
+    if (id === this.skillId) {
+      this.skillId = null;
+      this.input.clearSkillMove();
+      this.input.setActions(`touch:${id}`, []);
+    } else if (id === this.moveId) {
       this.moveId = null;
       this.joystick = null;
       this.input.setMove(0, 0);
@@ -121,6 +142,8 @@ export class TouchInput {
     for (const [id, contact] of this.contacts) {
       if (id !== this.moveId && contact.slot !== 'sprint' && contact.slot !== 'pause') this.contacts.delete(id);
     }
+    this.skillId = null;
+    this.input.clearSkillMove();
     this.input.clearVirtualActions();
     for (const [id, contact] of this.contacts) {
       if (contact.action) this.input.setActions(`touch:${id}`, [contact.action]);
@@ -135,6 +158,7 @@ export class TouchInput {
     this.buttonUsed = false;
     this.contacts.clear();
     this.moveId = null;
+    this.skillId = null;
     this.joystick = null;
     this.input.clearVirtual();
     if (hadButton) this.onCancel();
