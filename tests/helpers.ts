@@ -6,7 +6,7 @@ import type { CharacterModel, AnimState } from '../src/entities/PlayerModel';
 import { PhysicsWorld } from '../src/physics/PhysicsWorld';
 
 // 캔버스나 GLTF를 흉내 내지 않고 시각 인터페이스만 주입한다.
-class SimulationModel implements CharacterModel {
+export class SimulationModel implements CharacterModel {
   readonly root = new THREE.Group();
   current: AnimState = 'idle';
   play(state: AnimState): void { this.current = state; }

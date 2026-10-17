@@ -195,7 +195,8 @@ export class Goal {
         const pin = Math.min(1, y / 0.4) * Math.min(1, Math.abs(Math.abs(x) - PITCH.halfL) / 0.4);
         let d = Math.sin(this.time * 1.7 + x * 2.1 + z * 1.3) * idle;
         if (this.rippleAmp > 0.002) {
-          const dist2 = (x - this.impact.x) ** 2 + (y - this.impact.y) ** 2 + (z - this.impact.z) ** 2;
+          const dx = x - this.impact.x, dy = y - this.impact.y, dz = z - this.impact.z;
+          const dist2 = dx * dx + dy * dy + dz * dz;
           d += this.rippleAmp * Math.exp(-dist2 / 0.7) * Math.cos(this.rippleT * 14 - Math.sqrt(dist2) * 5);
         }
         d *= pin;

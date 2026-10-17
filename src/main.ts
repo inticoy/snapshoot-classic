@@ -1,3 +1,4 @@
+import './net/installMath';
 import { Game } from './core/Game';
 import { loadCharacterAsset, loadMotionLibrary } from './entities/SkinnedPlayerModel';
 

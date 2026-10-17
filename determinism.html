@@ -1,0 +1,11 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><title>Determinism</title></head>
+<body><pre id="out">running…</pre>
+<script type="module">
+  import { determinismHashes } from './src/net/determinism.ts';
+  const seconds = Number(new URLSearchParams(location.search).get('s') ?? 60);
+  const t0 = performance.now();
+  const hashes = determinismHashes(seconds);
+  window.__hashes = hashes;
+  document.getElementById('out').textContent = JSON.stringify({ ms: Math.round(performance.now() - t0), last: hashes.at(-1), hashes });
+</script></body></html>

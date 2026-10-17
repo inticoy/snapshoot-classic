@@ -139,7 +139,7 @@ export class Keepers {
       const z = bp.z + bv.z * t;
       if (t > 0 && t < 2.5 && Math.abs(z) < GOAL.width / 2 + 0.8) {
         const tk = (k.pos.x - bp.x) / bv.x;
-        const yk = bp.y + bv.y * Math.max(tk, 0) - activePhysics().gravity * Math.max(tk, 0) ** 2 / 2;
+        const yk = bp.y + bv.y * Math.max(tk, 0) - activePhysics().gravity * Math.max(tk, 0) * Math.max(tk, 0) / 2; // ** 연산자는 엔진마다 결과가 다를 수 있어 곱셈으로
         target.x = yk > GOAL.height + 0.2 || tk < 0 ? gx + a * 0.6 : k.pos.x;
         target.z = THREE.MathUtils.clamp(bp.z + bv.z * Math.max(0, tk), -GOAL.width / 2 - 0.3, GOAL.width / 2 + 0.3);
         urgent = true;

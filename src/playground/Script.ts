@@ -1,10 +1,10 @@
 import * as THREE from 'three';
+import { HeadlessModel } from '../net/HeadlessModel';
 import { PHYSICS } from '../config';
 import { Input, ACTION_KEYS } from '../core/Input';
 import { Random } from '../core/Random';
 import { PLAYGROUND_PARAMETERS, PLAYGROUND_SCENARIOS, type PlaygroundScenario } from '../data/Playground';
 import type { Player } from '../entities/Player';
-import type { CharacterModel, AnimState } from '../entities/PlayerModel';
 import { Match, type MatchEvent, type PracticeOpponent, type UserCommand } from '../gameplay/Match';
 import { PhysicsWorld } from '../physics/PhysicsWorld';
 import { PlaygroundScenarios } from './Scenarios';
@@ -63,13 +63,6 @@ export function validateScript(value: unknown): PlaygroundScript {
   return s as unknown as PlaygroundScript;
 }
 
-class HeadlessModel implements CharacterModel {
-  readonly root = new THREE.Group();
-  current: AnimState = 'idle';
-  play(state: AnimState): void { this.current = state; }
-  setLocomotion(): void {}
-  update(): void {}
-}
 export function scriptCommand(input: Input): UserCommand {
   const axis = input.moveAxis();
   input.updateSkillMask(input.isDown('skill') || input.isDown('finesse'));
