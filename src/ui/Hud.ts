@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { PITCH, TEAM_COLORS } from '../config';
+import { COMMAND, PITCH, TEAM_COLORS } from '../config';
 import { TEAMS } from '../data/Teams';
 import type { Player } from '../entities/Player';
 import type { Match } from '../gameplay/Match';
@@ -206,18 +206,24 @@ export class Hud {
     }
 
     const sp = match.shootout.power;
-    const charge = match.charge ?? (sp !== null ? { kind: 'shoot' as const, value: sp, finesse: false, chip: false } : null);
+    const timing = match.powerTiming;
+    this.power.classList.toggle('timing', !!timing);
+    this.power.style.setProperty('--timing-start', `${(COMMAND.powerCenter - COMMAND.powerWindow / 2) / COMMAND.powerWindup * 100}%`);
+    this.power.style.setProperty('--timing-end', `${(COMMAND.powerCenter + COMMAND.powerWindow / 2) / COMMAND.powerWindup * 100}%`);
+    const charge = (timing ? { ...timing.kick, value: timing.elapsed / COMMAND.powerWindup } : match.charge) ?? (sp !== null ? { kind: 'shoot' as const, value: sp, finesse: false, chip: false } : null);
     this.power.classList.toggle('show', !!charge && live);
     if (charge) {
-      this.proj.set(p.pos.x, 0, p.pos.z).project(camera);
+      this.proj.set(p.pos.x, timing ? 2.7 : 0, p.pos.z).project(camera);
       this.power.style.left = `${((this.proj.x + 1) / 2) * window.innerWidth - 30}px`;
       this.power.style.top = `${((1 - this.proj.y) / 2) * window.innerHeight + 14}px`;
       this.powerLabel.textContent =
-        charge.kind === 'shoot' && charge.finesse ? 'FINESSE'
+        timing ? timing.tapped ? timing.timed ? 'PERFECT' : 'POWER' : 'TIMING'
+        : charge.kind === 'shoot' && charge.finesse ? 'FINESSE'
         : charge.kind === 'shoot' && charge.chip ? 'CHIP'
         : charge.kind === 'through' && charge.chip ? 'LOB THRU'
         : KIND_LABEL[charge.kind];
       this.powerFill.style.width = `${charge.value * 100}%`;
+      this.powerFill.style.marginLeft = timing ? `${charge.value * 100}%` : '0';
     }
   }
 

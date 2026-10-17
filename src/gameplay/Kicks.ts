@@ -1,13 +1,13 @@
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
-import { BALL, GOAL, PASS, PITCH, SHOT } from '../config';
+import { BALL, COMMAND, GOAL, PASS, PITCH, SHOT } from '../config';
 import type { AssistLevel } from '../core/Settings';
 import type { Player } from '../entities/Player';
 import { n } from '../data/Stats';
 import { activePhysics, magnusAccel } from '../physics/presets';
 import type { Match } from './Match';
 
-export type PassKind = 'short' | 'through' | 'lob' | 'lobThrough' | 'driven' | 'drivenThrough' | 'lowLob';
+export type PassKind = 'short' | 'through' | 'lob' | 'lobThrough' | 'driven' | 'drivenThrough' | 'lowLob' | 'dink' | 'dinkThrough' | 'lowLobThrough' | 'highLobThrough' | 'oneTwo' | 'flair' | 'cross' | 'lowCross' | 'highCross' | 'flairCross' | 'fastCross';
 
 export interface KickResult {
   vel: CANNON.Vec3;
@@ -16,6 +16,9 @@ export interface KickResult {
   receiver: Player | null;
   /** 약발로 찼는지 (HUD 표시용) */
   weakFoot: boolean;
+  target?: THREE.Vector3;
+  origin?: THREE.Vector3;
+  flair?: boolean;
 }
 
 const g = () => activePhysics().gravity;
@@ -56,7 +59,7 @@ export class Kicks {
 
   // ---------------------------------------------------------------- 슛
 
-  shot(p: Player, charge: number, finesse: boolean, aim: THREE.Vector3, assist: AssistLevel): KickResult {
+  shot(p: Player, charge: number, finesse: boolean, aim: THREE.Vector3, assist: AssistLevel, style: 'normal' | 'driven' | 'flair' | 'power' = 'normal', timed = false): KickResult {
     const s = p.profile.stats;
     const goalX = this.m.oppGoalX(p.team);
     const bp = this.m.ball.position;
@@ -98,15 +101,17 @@ export class Kicks {
     const acc = finesse ? n(finishingStat) * 0.5 + n(s.curve) * 0.5 : n(finishingStat);
     const foot = this.footFactor(p);
     const spread =
-      (0.12 + 0.75 * charge * charge + toGoal * 0.012) * (1.7 - 1.2 * acc) * this.pressureFactor(p) * foot.factor;
+      (0.12 + 0.75 * charge * charge + toGoal * 0.012) * (1.7 - 1.2 * acc) * this.pressureFactor(p) * foot.factor * (style === 'driven' ? COMMAND.drivenShotError : style === 'flair' ? COMMAND.flairError : style === 'power' ? (timed ? COMMAND.timedError : COMMAND.powerError) : 1);
     targetZ += this.m.random.gauss() * spread;
 
     // 3) 속도 (슛 파워)
     const power = 0.86 + 0.24 * n(s.shotPower);
-    const speed =
+    let speed =
       (finesse
         ? SHOT.finesseMinSpeed + (SHOT.finesseMaxSpeed - SHOT.finesseMinSpeed) * charge
         : SHOT.minSpeed + (SHOT.maxSpeed - SHOT.minSpeed) * charge) * power;
+    if (style === 'driven') speed *= COMMAND.drivenShotSpeed;
+    if (style === 'power') speed *= COMMAND.powerSpeed;
     // 80% 이상 차지하면 급격히 뜬다 (크로스바 위로 넘어갈 위험). 골 결정력이 높으면 덜 뜬다
     const sky = Math.max(0, charge - 0.8) * (11 - 4 * acc);
     const targetY = THREE.MathUtils.clamp(
@@ -125,7 +130,7 @@ export class Kicks {
     const spin = new CANNON.Vec3();
     if (finesse) {
       // 마그누스 횡가속도만큼 반대쪽으로 겨냥하고 회전으로 휘어 들어오게 (커브가 높을수록 많이 감김)
-      const spinAmt = SHOT.finesseSpin * (0.7 + 0.5 * n(s.curve));
+      const spinAmt = SHOT.finesseSpin * (0.7 + 0.5 * n(s.curve)) * (style === 'driven' ? COMMAND.drivenCurl : 1);
       const aLat = magnusAccel(activePhysics(), BALL.radius, BALL.mass, spinAmt, speed);
       const offset = Math.min(3.5, 0.5 * aLat * T * T * 0.8);
       const lateral = new THREE.Vector3(-horiz.z, 0, horiz.x);
@@ -136,7 +141,7 @@ export class Kicks {
       spin.set(0, sgn * spinAmt, 0);
     }
     const vy = (targetY - bp.y + 0.5 * g() * T * T) / T;
-    return { vel: new CANNON.Vec3(launch.x * speed, Math.max(0.5, vy), launch.z * speed), spin, receiver: null, weakFoot: foot.weak };
+    return { vel: new CANNON.Vec3(launch.x * speed, style === 'driven' ? COMMAND.drivenShotLift : Math.max(0.5, vy), launch.z * speed), spin, receiver: null, weakFoot: foot.weak, flair: style === 'flair', origin: new THREE.Vector3(bp.x, bp.y, bp.z), target };
   }
 
   /** Q+D 칩슛: 키퍼 머리 위로 띄워 크로스바 아래로 */
@@ -165,13 +170,17 @@ export class Kicks {
   // ---------------------------------------------------------------- 패스
 
   pass(p: Player, input: THREE.Vector3, kind: PassKind, charge: number, assist: AssistLevel): KickResult {
+    const dink = kind === 'dink' || kind === 'dinkThrough';
+    const cross = kind.endsWith('Cross') || kind === 'cross';
+    const flair = kind === 'flair' || kind === 'flairCross';
+    const selectionKind = kind === 'dink' || kind === 'oneTwo' || kind === 'flair' ? 'short' : kind === 'dinkThrough' ? 'through' : kind === 'lowLobThrough' || kind === 'highLobThrough' ? 'lobThrough' : cross ? 'lob' : kind;
     const driven = kind === 'driven' || kind === 'drivenThrough' || kind === 'lowLob';
-    const baseKind = kind === 'driven' ? 'short' : kind === 'drivenThrough' ? 'through' : kind === 'lowLob' ? 'lob' : kind;
+    const baseKind = kind === 'driven' ? 'short' : kind === 'drivenThrough' ? 'through' : kind === 'lowLob' ? 'lob' : selectionKind;
     const s = p.profile.stats;
     const bp = this.m.ball.position;
     const d = input.clone().setY(0).normalize();
-    const aerial = kind === 'lob' || kind === 'lobThrough' || kind === 'lowLob';
-    const throughBall = kind === 'through' || kind === 'lobThrough' || kind === 'drivenThrough';
+    const aerial = baseKind === 'lob' || baseKind === 'lobThrough';
+    const throughBall = baseKind === 'through' || baseKind === 'lobThrough' || kind === 'oneTwo';
 
     // 1) 받을 동료 찾기 (보조: 넓게, 세미: 좁게, 수동: 안 찾음). 시야가 좋으면 범위가 넓어진다
     const vision = n(s.vision);
@@ -187,6 +196,7 @@ export class Kicks {
         let lead = assist === 'assisted' ? 4 + 5 * vision + 2 * charge : 3 + 9 * charge;
         // Z+W: 더 깊은 공간으로 (받는 선수가 뛰어서 따라잡는 공)
         if (kind === 'drivenThrough') lead = lead * PASS.drivenThroughLead + PASS.drivenThroughExtra;
+        if (kind === 'oneTwo') lead *= COMMAND.oneTwoLead;
         tx = receiver.pos.x + run.x * lead;
         tz = receiver.pos.z + run.z * lead;
       } else {
@@ -210,7 +220,7 @@ export class Kicks {
     const acc = long ? n(s.longPassing) * 0.8 + n(s.vision) * 0.2 : n(s.shortPassing) * 0.85 + n(s.vision) * 0.15;
     const foot = this.footFactor(p);
     const err = (0.012 + 0.05 * (1 - acc)) * (1 + D / 35) * this.pressureFactor(p) * foot.factor;
-    const angle = this.m.random.gauss() * err * (driven ? PASS.drivenError : 1);
+    const angle = this.m.random.gauss() * err * (flair ? COMMAND.flairError : driven ? PASS.drivenError : 1);
     const dir2 = new THREE.Vector3(tx - bp.x, 0, tz - bp.z).normalize().applyAxisAngle(new THREE.Vector3(0, 1, 0), angle);
     const speedErr = 1 + this.m.random.gauss() * (0.03 + 0.08 * (1 - acc)) * foot.factor;
 
@@ -220,7 +230,7 @@ export class Kicks {
 
     const vel = new CANNON.Vec3();
     if (aerial) {
-      const T = (baseKind === 'lob' ? 0.75 + D * 0.035 : 0.6 + D * 0.026) * (kind === 'lowLob' ? PASS.lowLobTime : 1);
+      const T = (baseKind === 'lob' ? 0.75 + D * 0.035 : 0.6 + D * 0.026) * (kind === 'lowLob' || kind === 'lowCross' ? PASS.lowLobTime : kind === 'highCross' ? COMMAND.highCrossTime : kind === 'highLobThrough' ? COMMAND.lobThroughTime : 1);
       const vh = (D / T) * (1 + D * 0.0095) * powerScale * speedErr;
       vel.set(dir2.x * vh, 0.5 * g() * T, dir2.z * vh);
     } else {
@@ -231,9 +241,24 @@ export class Kicks {
       vel.set(dir2.x * vh, driven ? PASS.drivenLift : D > 22 ? 2.2 : 0.4, dir2.z * vh);
     }
 
+    if (dink) {
+      vel.x *= COMMAND.dinkSpeed; vel.z *= COMMAND.dinkSpeed;
+      vel.y = Math.sqrt(2 * g() * Math.max(0, COMMAND.dinkHeight - bp.y));
+    }
+    if (kind === 'lowLobThrough') {
+      const vy = Math.sqrt(2 * g() * Math.max(0, COMMAND.lowThroughHeight - bp.y));
+      const flight = 2 * vy / g();
+      const speed = D / flight * (1 + D * 0.0095) * powerScale * speedErr * COMMAND.lowThroughSpeed;
+      vel.set(dir2.x * speed, vy, dir2.z * speed);
+    }
+    if (kind === 'fastCross') {
+      vel.x *= COMMAND.fastCrossSpeed; vel.z *= COMMAND.fastCrossSpeed;
+      vel.y *= PASS.lowLobTime;
+    }
+
     // 수동 패스는 공이 떨어질 곳에 가장 가까운 동료를 받는 선수로 본다
     const recv = receiver ?? this.nearestMateTo(p, tx, tz, 8);
-    return { vel, spin: new CANNON.Vec3(), receiver: recv, weakFoot: foot.weak };
+    return { vel, spin: new CANNON.Vec3(), receiver: recv, weakFoot: foot.weak, target: new THREE.Vector3(tx, 0, tz), origin: new THREE.Vector3(bp.x, bp.y, bp.z), flair };
   }
 
   // ---------------------------------------------------------------- 공중볼

@@ -2,9 +2,13 @@
  * 키 배치: FC 온라인(넥슨) 키보드 기본 배치 기준
  *  공격  방향키 이동 · E 질주 · S 짧은 패스 · W 스루 패스 · A 로빙 패스 · D 슛
  *        Z+D 감아차기 · Q+D 칩슛 · Q+W 로빙 스루 패스
- *  수비  W(꾹) 키퍼 돌진 · S 선수 변경 · D(꾹) 압박 · Q(꾹) 동료 압박 · C(꾹) 견제 · Space 스탠딩 태클 · A 슬라이딩 태클
+ *        SS/WW 딩크 · Q+S 침투 · C+S 플레어 · Z+Q+W 낮은 로빙 스루
+ *        DD 드리븐 · ZDD 감기는 드리븐 · C+D 플레어 · F+D (뗌) + D 파워 타이밍
+ *        박스 측면 A/AA/Q+A/C+A/Z+A 크로스
+ *  수비  W(꾹) 키퍼 돌진 · S 선수 변경 · D(꾹) 압박 · Q(꾹) 동료 압박 · C(꾹) 견제 · Space 탭 스탠딩/유지 붙잡기 · D 탭 밀치기/루즈볼 걷어내기 · C+방향 몸싸움 · C+E 달리며 견제 · A 슬라이딩 태클
  */
 export type Action =
+  | 'power'
   | 'shoot'
   | 'pass'
   | 'through'
@@ -21,6 +25,7 @@ export type Action =
   | 'back';
 
 export const ACTION_KEYS: Record<Action, string[]> = {
+  power: ['KeyF'], // 공격: 파워슛 준비·타이밍
   shoot: ['KeyD'],
   pass: ['KeyS'],
   through: ['KeyW'],
@@ -134,6 +139,11 @@ export class Input {
       for (const code of this.down) this.releasedQueue.add(code);
       this.down.clear();
     });
+  }
+
+  /** 연타는 실제 키보드와 JSON 키 재생에만 적용한다. */
+  keyboardKick(): boolean {
+    return ['KeyD', 'KeyS', 'KeyW', 'KeyA'].some((k) => this.down.has(k) || this.scripted.has(k) || this.pressedQueue.has(k) || this.releasedQueue.has(k));
   }
 
   isDown(action: Action): boolean {

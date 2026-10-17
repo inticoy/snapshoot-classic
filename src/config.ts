@@ -56,6 +56,7 @@ export const PLAYER = {
   staminaDrain: 0.045, // 넓은 경기장에서도 약 30초 연속 질주 가능 (능력치로 보정)
   staminaRegen: 0.025,
   controlRadius: 0.7,
+  dinkInterceptHeight: 0.4, // 딩크의 발 인터셉트가 닿는 높이 (m)
   dribbleOffset: 0.55,
   kickCooldown: 0.3,
   tackleRange: 1.15,
@@ -287,3 +288,18 @@ export const SKILL_INPUT = {
   dead: 0.5,
 };
 export const SKILL_AI = { range: 2, front: 0.65, chance: 0.035, cooldown: 5 };
+
+/** 연타는 키보드의 첫 누름부터 센다. 터치 스와이프의 즉시 뗌 동작은 유지한다. */
+export const INPUT = { doubleTap: 0.25 };
+export const COMMAND = {
+  dinkSpeed: 0.9, dinkHeight: 0.8,
+  lowThroughHeight: 2.1, lobThroughTime: 1.35, lowThroughSpeed: 1.25,
+  oneTwoLead: 0.35, flairError: 1.35,
+  drivenShotSpeed: 1.1, drivenShotLift: 0.65, drivenShotError: 1.18, drivenCurl: 0.35,
+  powerSpeed: 1.5, powerWindup: 0.4, powerWindow: 0.1, powerCenter: 0.3,
+  powerError: 1.6, timedError: 0.55,
+  crossRange: 30, highCrossTime: 1.3, fastCrossSpeed: 1.2,
+  contactRange: 1.5, holdSlow: 0.7, holdFoulAfter: 1.5, holdJudgePeriod: 0.5,
+  clearanceRange: 2.2, clearanceSpeed: 23, clearanceLift: 9,
+  pushStun: 0.3, contactSpeed: 0.7, contactSprintSpeed: 0.95,
+};

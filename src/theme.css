@@ -272,3 +272,9 @@ kbd {
 .sb-pk i.miss { background: #e0242f; border-color: #e0242f; }
 .sb-pk span { margin-left: 6px; min-width: 14px; text-align: right; color: var(--accent); }
 .touch-device .card-pop { bottom: auto; top: calc(56px + env(safe-area-inset-top)); font-size: 13px; }
+
+/* 파워슛 준비 0.4초 중 0.25~0.35초가 초록 타이밍 창이다. */
+.power.timing .power-track { background: linear-gradient(90deg, #263241 0% var(--timing-start), #36d778 var(--timing-start) var(--timing-end), #263241 var(--timing-end)); }
+.power.timing .power-fill { background: #fff; width: 2px !important; transform: translateX(-1px); }
+.power.timing .power-mark { display: none; }
+.power.timing .power-label { display: block; }

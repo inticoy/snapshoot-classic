@@ -1,0 +1,20 @@
+{
+  "scenario": "commands",
+  "seed": 3,
+  "duration": 4,
+  "opponent": "stand",
+  "sampleHz": 120,
+  "inputs": [
+    {
+      "t": 0.1,
+      "keys": [],
+      "tap": [
+        "KeyW"
+      ]
+    },
+    {
+      "t": 0.6,
+      "keys": []
+    }
+  ]
+}

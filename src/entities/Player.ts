@@ -45,6 +45,8 @@ export class Player {
   wrongFoot = 0;
   /** C 볼 지키기 중 (몸으로 공을 가림) */
   shielding = false;
+  /** 현재 스텝에 상대가 붙잡고 있으면 이동 목표 속도를 줄인다. */
+  contactScale = 1;
   readonly baitDir = new THREE.Vector3();
   /** 액션 중에는 이동 입력을 무시 */
   actionLock = 0;
@@ -133,7 +135,7 @@ export class Player {
    */
   steer(desired: THREE.Vector3, sprint: boolean, hasBall: boolean, dt: number, speedScale = 1): void {
     this.sprinting = sprint && desired.lengthSq() > 0.01;
-    const target = desired.clone().multiplyScalar(this.maxSpeed(hasBall) * speedScale);
+    const target = desired.clone().multiplyScalar(this.maxSpeed(hasBall) * speedScale * this.contactScale);
     if (this.wrongFoot > 0) {
       // 개인기에 속은 동안: 원래 가려던 방향 대신 속은 쪽으로 몸이 쏠리고, 다시 가속하기까지 느리다
       this.wrongFoot = Math.max(0, this.wrongFoot - dt);
@@ -269,7 +271,7 @@ export class Player {
   }
 
   /** 일회성 동작 재생 (킥 등). duration 동안 기본 동작으로 돌아가지 않는다 */
-  playAction(state: AnimState, duration: number, opts: { side?: 1 | -1 } = {}): void {
+  playAction(state: AnimState, duration: number, opts: { side?: 1 | -1; flair?: boolean } = {}): void {
     this.model.play(state, opts);
     this.animTimer = duration;
   }

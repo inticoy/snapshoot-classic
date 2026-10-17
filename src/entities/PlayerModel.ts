@@ -33,7 +33,7 @@ const FADE_SPEED: Record<AnimState, number> = {
 export interface CharacterModel {
   readonly root: THREE.Group;
   readonly current: AnimState;
-  play(state: AnimState, opts?: { side?: 1 | -1 }): void;
+  play(state: AnimState, opts?: { side?: 1 | -1; flair?: boolean }): void;
   setLocomotion(speed: number, sprint: boolean): void;
   update(dt: number): void;
   /** 심판 동작: 오른팔 들기(카드·깃발) / 앞으로 가리키기(프리킥 방향). 스킨드 캐릭터만 지원 */
@@ -91,6 +91,7 @@ export class PlayerModel implements CharacterModel {
   private speed = 0;
   private sprint = false;
   private kickSide: 1 | -1 = 1;
+  private kickFlair = false;
   private diveSide: 1 | -1 = 1;
   private readonly shirtMaterial: THREE.MeshStandardMaterial;
 
@@ -196,10 +197,10 @@ export class PlayerModel implements CharacterModel {
   }
 
   /** 상태 전환. 일회성 동작은 처음부터 다시 재생된다 */
-  play(state: AnimState, opts: { side?: 1 | -1 } = {}): void {
+  play(state: AnimState, opts: { side?: 1 | -1; flair?: boolean } = {}): void {
     if (state === 'kick' || state === 'tackle' || state === 'dive' || state === 'smother' || state === 'header') {
       this.actionT = 0;
-      if (state === 'kick') this.kickSide = opts.side ?? 1;
+      if (state === 'kick') { this.kickSide = opts.side ?? 1; this.kickFlair = opts.flair ?? false; }
       if (state === 'dive' || state === 'smother') this.diveSide = opts.side ?? 1;
     }
     this.state = state;
@@ -304,7 +305,9 @@ export class PlayerModel implements CharacterModel {
           armSpreadL: 0.5, armSpreadR: 0.5,
           elbowL: -0.4, elbowR: -0.4,
           spine: -0.15 * swing + 0.1,
-          bodyDrop: 0.05,
+          // 플레어는 발목을 바깥으로 열고 몸통을 비틀어 일반 킥과 구별한다.
+          bodyRoll: this.kickFlair ? this.kickSide * 0.35 * swing : 0,
+          bodyDrop: this.kickFlair ? 0.12 : 0.05,
         };
       }
       case 'tackle': {

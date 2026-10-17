@@ -1,0 +1,33 @@
+{
+  "scenario": "keeper",
+  "seed": 3,
+  "duration": 4,
+  "sampleHz": 120,
+  "inputs": [
+    {
+      "t": 0.1,
+      "keys": [
+        "KeyF",
+        "KeyD",
+        "ArrowUp"
+      ]
+    },
+    {
+      "t": 0.5,
+      "keys": [
+        "KeyF",
+        "ArrowUp"
+      ]
+    },
+    {
+      "t": 0.6,
+      "tap": [
+        "KeyD"
+      ]
+    },
+    {
+      "t": 1,
+      "keys": []
+    }
+  ]
+}

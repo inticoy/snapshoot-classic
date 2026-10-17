@@ -1,0 +1,21 @@
+{
+  "scenario": "contact",
+  "seed": 3,
+  "duration": 3.5,
+  "opponent": "stand",
+  "sampleHz": 120,
+  "inputs": [
+    {
+      "t": 0,
+      "keys": [
+        "KeyC",
+        "KeyE",
+        "ArrowLeft"
+      ]
+    },
+    {
+      "t": 3,
+      "keys": []
+    }
+  ]
+}

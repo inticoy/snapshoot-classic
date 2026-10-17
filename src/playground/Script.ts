@@ -23,7 +23,7 @@ export interface PlaygroundScript {
   sampleHz?: number;
 }
 export interface ScriptResult {
-  frames: { t: number; user: { pos: number[]; vel: number[]; facing: number[] }; ball: { pos: number[]; vel: number[] }; owner: string | null; footToBall: number; opponents: { pos: number[]; dist: number }[]; keys: string[] }[];
+  frames: { t: number; user: { pos: number[]; vel: number[]; facing: number[]; stunned: number; contactScale: number }; timing: { elapsed: number; timed: boolean; tapped: boolean } | null; ball: { pos: number[]; vel: number[] }; owner: string | null; footToBall: number; opponents: { pos: number[]; dist: number }[]; keys: string[] }[];
   events: { t: number; type: MatchEvent['type']; [key: string]: unknown }[];
   summary: { possession: number; progress: Record<string, number>; alignment: Record<string, number>; touches: number; losses: number; nearestOpponent: number | null; firstWithin2m: number | null; tackleAttempts: number; userTackles: number; opponentTackles: number; tackleSuccesses: number; skills: Record<string, number> };
 }
@@ -59,7 +59,7 @@ export function validateScript(value: unknown): PlaygroundScript {
       if (!p || typeof v !== 'number' || !Number.isFinite(v) || v < p.min || v > p.max) throw new Error(`잘못된 파라미터: ${key}`);
     }
   }
-  if (s.control === 'opponent' && !['duel', 'pressure', 'slide'].includes(s.scenario as string)) throw new Error('상대 조작은 필드 선수가 있는 시나리오에서만 가능합니다');
+  if (s.control === 'opponent' && !['duel', 'pressure', 'slide', 'commands', 'contact', 'clearance'].includes(s.scenario as string)) throw new Error('상대 조작은 필드 선수가 있는 시나리오에서만 가능합니다');
   return s as unknown as PlaygroundScript;
 }
 
@@ -80,7 +80,7 @@ export function scriptCommand(input: Input): UserCommand {
     move: new THREE.Vector3(axis.y, 0, axis.x), sprint: input.isDown('sprint'),
     shoot: input.button('shoot'), pass: input.button('pass'), through: input.button('through'), lob: input.button('lob'),
     modifier: input.button('modifier'), finesse: input.button('finesse'), contain: input.button('contain'), tackle: input.button('tackle'),
-    skill: input.button('skill'),
+    skill: input.button('skill'), power: input.button('power'), keyboardKick: input.keyboardKick(),
   };
 }
 function serializedEvent(event: MatchEvent, t: number): ScriptResult['events'][number] {
@@ -110,7 +110,7 @@ export function runScript(source: PlaygroundScript): ScriptResult {
     const steps = Math.ceil(script.duration / PHYSICS.step);
     const capture = (t: number, keys: string[]) => {
       const bp = match.ball.position;
-      result.frames.push({ t: +t.toFixed(6), user: { pos: vec(user.pos), vel: vec(user.vel), facing: vec(user.facing) }, ball: { pos: vec(bp), vel: vec(match.ball.velocity) }, owner: id(match.ball.owner), footToBall: match.footPoint(user, new THREE.Vector3()).distanceTo(bp), opponents: foes.map((p) => ({ pos: vec(p.pos), dist: Math.hypot(p.pos.x - user.pos.x, p.pos.z - user.pos.z) })), keys: [...keys] });
+      result.frames.push({ t: +t.toFixed(6), user: { pos: vec(user.pos), vel: vec(user.vel), facing: vec(user.facing), stunned: user.stunned, contactScale: user.contactScale }, timing: match.powerTiming ? { elapsed: match.powerTiming.elapsed, timed: match.powerTiming.timed, tapped: match.powerTiming.tapped } : null, ball: { pos: vec(bp), vel: vec(match.ball.velocity) }, owner: id(match.ball.owner), footToBall: match.footPoint(user, new THREE.Vector3()).distanceTo(bp), opponents: foes.map((p) => ({ pos: vec(p.pos), dist: Math.hypot(p.pos.x - user.pos.x, p.pos.z - user.pos.z) })), keys: [...keys] });
     };
     capture(0, []);
     let nextSample = 1;
