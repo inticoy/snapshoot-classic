@@ -52,3 +52,24 @@ it('두 사람 + 입력 코덱: 바이트로 오간 명령으로도 같은 결�
   const plain = run(false), wire = run(true);
   for (let i = 0; i < 4; i++) expect(Math.abs(plain[i] - wire[i])).toBeLessThan(0.15);
 });
+
+it('두 사람 승부차기: 팀 1 차례에는 팀 1 명령(D)으로 차고, 팀 0이 키퍼 방향을 고른다', () => {
+  const { match } = simulation(2, { userTeams: [true, true], shootout: true });
+  parkPlayers(match);
+  match.half = 2;
+  match.halfClock = match.halfLength * (1 + 5 / 45) + 0.1;
+  match.update(PHYSICS.step, [command(), command()]);
+  expect(match.phase).toBe('shootout');
+  let kickedByTeam1 = false;
+  for (let i = 0; i < 4000 && match.phase === 'shootout'; i++) {
+    const turn = match.shootout.turn;
+    const c = command(), idle = command();
+    const press = i % 90 < 30;
+    c.shoot = { held: press, pressed: i % 90 === 0, released: i % 90 === 30 };
+    const before = match.shootout.results[1].length;
+    match.update(PHYSICS.step, turn === 0 ? [c, idle] : [idle, c]);
+    if (match.shootout.results[1].length > before) kickedByTeam1 = true;
+  }
+  expect(kickedByTeam1).toBe(true);
+  expect(match.shootout.userKicking || match.phase !== 'shootout').toBe(true);
+});

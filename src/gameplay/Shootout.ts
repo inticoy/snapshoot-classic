@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { BALL, GOAL, PITCH, RULES, SHOT } from '../config';
 import type { Player } from '../entities/Player';
-import type { Match, UserCommand } from './Match';
+import { IDLE_COMMAND, type Match, type UserCommand } from './Match';
 import { diveKeeper, keeperGuess, kickOrder, penaltyAim, penaltySpot, shootoutDecided, shotLineZ, sideFromInput } from './Penalty';
 
 const tmp = new THREE.Vector3();
@@ -27,13 +27,15 @@ export class Shootout {
 
   constructor(private readonly m: Match) {}
 
+  private keeperCmd: UserCommand = IDLE_COMMAND;
+
   get score(): [number, number] {
     return [this.results[0].filter(Boolean).length, this.results[1].filter(Boolean).length];
   }
 
   /** 사용자 팀이 지금 차는 차례 */
   get userKicking(): boolean {
-    return this.active && this.turn === 0 && this.m.userControl;
+    return this.active && this.m.sides[this.turn].active;
   }
 
   /** 지금 HUD에 보여 줄 파워 게이지 (0..1) */
@@ -89,7 +91,7 @@ export class Shootout {
     g.pos.set(this.dir * (PITCH.halfL - 0.3), 0, 0);
     g.facing.set(-this.dir, 0, 0);
     m.keepers.reset();
-    if (this.turn === 0) m.controlled = k;
+    if (m.sides[this.turn].active) m.sides[this.turn].controlled = k;
     this.holdBall();
   }
 
@@ -102,8 +104,11 @@ export class Shootout {
     b.body.angularVelocity.setZero();
   }
 
-  update(dt: number, cmd: UserCommand): void {
+  update(dt: number, cmds: readonly [UserCommand | null, UserCommand | null]): void {
     const m = this.m;
+    // 차는 팀 명령으로 차고, 막는 팀 명령으로 키퍼 방향을 고른다
+    const cmd = cmds[this.turn] ?? IDLE_COMMAND;
+    this.keeperCmd = cmds[1 - this.turn] ?? IDLE_COMMAND;
     this.timer += dt;
     for (const p of m.players) {
       if (!p.busy) p.steer(tmp.set(0, 0, 0), false, false, dt);
@@ -160,8 +165,9 @@ export class Shootout {
     this.charge = null;
     m.shoot(k, charge, false, penaltyAim(this.spot, this.dir, aim), true);
     const z = shotLineZ(this.spot, m.ball.velocity, this.dir);
-    const userKeeper = this.turn === 1 && m.userControl;
-    diveKeeper(this.keeper!, userKeeper ? sideFromInput(cmd.move.z) : keeperGuess(() => m.random.next(), this.keeper!, z));
+    void cmd;
+    const userKeeper = m.sides[1 - this.turn].active;
+    diveKeeper(this.keeper!, userKeeper ? sideFromInput(this.keeperCmd.move.z) : keeperGuess(() => m.random.next(), this.keeper!, z));
     this.stage = 'flight';
     this.timer = 0;
   }

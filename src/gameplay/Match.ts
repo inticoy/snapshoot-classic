@@ -137,7 +137,7 @@ export interface MatchOptions {
  */
 const btn = (): ButtonState => ({ held: false, pressed: false, released: false });
 /** 입력 없음 */
-const IDLE_COMMAND: UserCommand = { move: new THREE.Vector3(), sprint: false, shoot: btn(), pass: btn(), through: btn(), lob: btn(), modifier: btn(), finesse: btn(), contain: btn(), tackle: btn() };
+export const IDLE_COMMAND: UserCommand = { move: new THREE.Vector3(), sprint: false, shoot: btn(), pass: btn(), through: btn(), lob: btn(), modifier: btn(), finesse: btn(), contain: btn(), tackle: btn() };
 
 export class UserSide {
   /** 사람이 이 팀을 조작 중인지 */
@@ -417,11 +417,21 @@ export class Match {
     }
   }
 
+  /** team 조작 측을 지금 처리 중인 측으로 두고 fn 실행 (세트피스·승부차기에서 그 팀 게이지·조작 선수를 쓰게) */
+  withSide<T>(team: 0 | 1, fn: () => T): T {
+    const prev = this.side;
+    this.side = this.sides[team];
+    try { return fn(); } finally { this.side = prev; }
+  }
+
+  /** 조작 선수가 키퍼면 가까운 필드 선수로 (사람이 조작하는 모든 팀) */
+  switchOffKeepers(): void {
+    for (const side of this.sides) if (side.active && side.controlled.isKeeper) this.withSide(side.team, () => this.switchToNearest());
+  }
+
   /** cmd: 팀 0 명령(한 사람) 또는 [팀0, 팀1] 명령 (두 사람, 멀티플레이) */
   update(dt: number, input: UserCommand | readonly [UserCommand | null, UserCommand | null]): void {
     const cmds = Array.isArray(input) ? input as readonly [UserCommand | null, UserCommand | null] : [input as UserCommand, null] as const;
-    // 세트피스·승부차기는 아직 팀 0 사람 기준 (명령이 없으면 빈 명령)
-    const cmd = cmds[0] ?? cmds[1] ?? IDLE_COMMAND;
     this.elapsed += dt;
     this.phaseTimer -= dt;
 
@@ -453,7 +463,7 @@ export class Match {
         this.clock += dt;
         this.halfClock += dt;
         if (this.phase === 'playing') this.updatePlaying(dt, cmds);
-        else this.setPieces.update(dt, cmd);
+        else this.setPieces.update(dt, cmds);
         if (!this.stoppage && this.halfClock >= this.halfLength) {
           this.stoppage = this.rules.stoppageMinutes(this.half);
           this.events.push({ type: 'stoppage', minutes: this.stoppage });
@@ -472,7 +482,7 @@ export class Match {
         if (this.phaseTimer <= 0) this.startSecondHalf();
         break;
       case 'shootout':
-        this.shootout.update(dt, cmd);
+        this.shootout.update(dt, cmds);
         break;
       case 'goal':
         for (const p of this.players) {

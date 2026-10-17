@@ -3,7 +3,7 @@ import { BALL, GOAL, PASS, PITCH, RULES } from '../config';
 import { diveKeeper, keeperGuess, penaltyAim, penaltySpot, shotLineZ, sideFromInput } from './Penalty';
 import { CORNER_RUN_SPOTS } from '../data/SetPiecePositions';
 import type { Player } from '../entities/Player';
-import type { Match, UserCommand, KickKind } from './Match';
+import { IDLE_COMMAND, type Match, type UserCommand, type KickKind } from './Match';
 
 export type RestartKind = 'throwin' | 'corner' | 'goalkick' | 'freekick' | 'indirect' | 'penalty';
 
@@ -143,9 +143,16 @@ export class SetPieces {
   }
 
   /** 'out' / 'setpiece' 단계 업데이트 */
-  update(dt: number, cmd: UserCommand): void {
+  update(dt: number, cmds: readonly [UserCommand | null, UserCommand | null]): void {
     const m = this.m;
     const sp = this.current!;
+    // 차는 팀의 명령. 게이지(m.charge)도 그 팀 조작 측 것을 쓴다
+    const cmd = cmds[sp.team] ?? IDLE_COMMAND;
+    m.withSide(sp.team, () => this.updateTaker(dt, sp, cmd, cmds));
+  }
+
+  private updateTaker(dt: number, sp: SetPiece, cmd: UserCommand, cmds: readonly [UserCommand | null, UserCommand | null]): void {
+    const m = this.m;
     if (m.phase === 'out') {
       // 공은 굴러가게 두고 선수들은 멈춘다
       for (const p of m.players) {
@@ -167,7 +174,8 @@ export class SetPieces {
     this.holdBall(sp);
     const t = sp.taker;
     const userTakes = m.isUserControlled(t);
-    if (sp.kind === 'penalty' && sp.team !== 0) this.userDive = cmd.move.z;
+    // PK 수비 키퍼를 사람이 조작하면 누르고 있는 방향으로 몸을 던진다
+    if (sp.kind === 'penalty' && m.sides[1 - sp.team].active) this.userDive = cmds[1 - sp.team]?.move.z ?? 0;
 
     if (userTakes) {
       // 방향키로 조준 (제자리에서 몸만 돌린다). PK는 뗄 때 누른 방향으로 바로 찬다
@@ -291,8 +299,8 @@ export class SetPieces {
     for (const p of m.players) if (p !== taker) p.faceTowards(spot.x, spot.z);
 
     // 사용자 팀이면 키커를 조종 (골킥은 키퍼)
-    if (team === 0) m.controlled = taker;
-    else if (m.controlled.isKeeper) m.switchToNearest();
+    if (m.sides[team].active) m.sides[team].controlled = taker;
+    if (m.sides[1 - team].active && m.sides[1 - team].controlled.isKeeper) m.withSide((1 - team) as 0 | 1, () => m.switchToNearest());
 
     m.ball.owner = null;
     m.ball.lastTouch = taker;
@@ -428,7 +436,7 @@ export class SetPieces {
         // 키퍼는 차는 순간 한쪽을 골라 몸을 던진다 (사용자 키퍼면 누르고 있던 방향)
         const keeper = m.teams[1 - sp.team][0];
         const z = shotLineZ(sp.spot, m.ball.velocity, t.attackDir);
-        const side = sp.team === 1 && m.userControl ? sideFromInput(this.userDive) : keeperGuess(() => m.random.next(), keeper, z);
+        const side = m.sides[1 - sp.team].active ? sideFromInput(this.userDive) : keeperGuess(() => m.random.next(), keeper, z);
         diveKeeper(keeper, side);
       }
     } else if (sp.kind === 'throwin') {
@@ -440,6 +448,6 @@ export class SetPieces {
     // 키커는 다른 선수가 건드리기 전에 다시 만질 수 없다 (더블 터치 금지)
     t.kickCooldown = 0.8;
     this.current = null;
-    if (m.controlled.isKeeper) m.switchToNearest();
+    m.switchOffKeepers();
   }
 }
