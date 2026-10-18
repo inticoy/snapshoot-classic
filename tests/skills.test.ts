@@ -157,4 +157,21 @@ describe('실제 키 입력으로 개인기 실행 (플레이그라운드 스크
     ]), skill: 5 });
     expect(skillEvents(r)).toEqual(['step_over_r']);
   });
+
+  it('볼 롤 컷: Shift + ← 꾹(사이드 스텝) 중 → → 오른쪽 볼 롤 컷으로 이어져 오른쪽 앞으로 빠진다', () => {
+    const r = runScript({ ...base([
+      { t: 0, keys: [] },
+      { t: 0.5, keys: ['ShiftLeft'] },
+      { t: 0.55, keys: ['ShiftLeft', 'ArrowLeft'] },
+      { t: 1.2, keys: ['ShiftLeft', 'ArrowRight'] },
+      { t: 1.3, keys: ['ShiftLeft'] },
+      { t: 1.6, keys: [] },
+    ], 2.4), skill: 5 });
+    expect(skillEvents(r)).toEqual(['side_step_l', 'ball_roll_cut_r']);
+    expect(r.summary.losses).toBe(0);
+    // 플레이그라운드 전진 +X, 오른쪽 +Z: 롤 컷 뒤 공은 오른쪽 앞으로 굴러간다
+    const start = r.frames.find((f) => f.t >= 1.2)!, end = r.frames.find((f) => f.t >= 1.9)!;
+    expect(end.ball.pos[2] - start.ball.pos[2]).toBeGreaterThan(0.4);
+    expect(end.ball.pos[0] - start.ball.pos[0]).toBeGreaterThan(0.2);
+  });
 });

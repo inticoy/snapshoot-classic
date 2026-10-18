@@ -346,6 +346,21 @@ export class Match {
     return Math.abs(x - gx) < PITCH.boxDepth && Math.abs(z) < PITCH.boxWidth / 2 && Math.sign(x) === Math.sign(gx);
   }
 
+  /**
+   * 감아차기는 주발로: 공이 약발 쪽에 있고 약발이 3 이하면 한 발 맞춰 공을 주발 쪽으로 옮겨 찬다
+   * (휘는 방향이 차는 발로 정해지므로 오른발잡이는 늘 왼쪽으로 감기는 슛을 쓴다). 약발 4~5는 그대로 약발로 찬다.
+   */
+  private preferStrongFoot(p: Player): void {
+    const foot = this.kicks.footFactor(p);
+    if (!foot.weak || p.profile.weakFoot > 3) return;
+    const b = this.ball.body.position;
+    const rx = -p.facing.z, rz = p.facing.x; // 몸 오른쪽
+    const side = (b.x - p.pos.x) * rx + (b.z - p.pos.z) * rz;
+    const shift = -2 * side + (side >= 0 ? -0.12 : 0.12);
+    b.x += rx * shift;
+    b.z += rz * shift;
+  }
+
   /** 발 위치 (공을 다루는 기준점) */
   footPoint(p: Player, out: THREE.Vector3): THREE.Vector3 {
     return out.copy(p.pos).addScaledVector(p.facing, 0.35);
@@ -1329,6 +1344,7 @@ export class Match {
   /** 슛. charge 0..1, aim = 입력 방향. 파워가 너무 세면 공이 뜬다 (FIFA식) */
   shoot(p: Player, charge: number, finesse: boolean, aim: THREE.Vector3, instant = false): void {
     if (this.windups.has(p)) return;
+    if (finesse) this.preferStrongFoot(p);
     this.applyShot(p, this.kicks.shot(p, charge, finesse, aim, this.assistFor(p, 'shot')), instant, finesse ? 'finesseShot' : 'shot');
   }
 

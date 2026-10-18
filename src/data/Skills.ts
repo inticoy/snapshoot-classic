@@ -216,6 +216,20 @@ export function makeSkillDefs(): SkillDef[] {
     bait: { t: 0.35, dir: 0, strength: 0.6 }, shield: 0.6,
   };
 
+  /** 볼 롤 컷 (Shift + ← 꾹 → 사이드 스텝 중 → 짧게, ★4): 옆으로 끌던 공을 반대발 바닥으로 몸 앞을 가로질러 굴린 뒤 대각선으로 빠져나간다.
+   *  ← 꾹이 곧 사이드 스텝이라 인식기가 아니라 사이드 스텝 진행 중 반대 방향 입력으로 이어진다 (SkillRunner.hold) */
+  const ROLL_CUT: SkillDef = {
+    id: 'ball_roll_cut_r', name: '오른쪽 볼 롤 컷', stars: 4,
+    trigger: { kind: 'shift', seq: [{ dir: 'L', hold: true }, { dir: 'R', tap: true }] },
+    duration: 0.55, carry: 0,
+    body: [{ t: 0, x: 0, z: 0, yaw: 0 }, { t: 0.24, x: 0.05, z: 0.05, yaw: 0.15 }, { t: 0.55, x: 0.35, z: 0.25, yaw: Math.PI / 4 }],
+    ball: [{ t: 0, x: -0.25, z: 0.35 }, { t: 0.24, x: -0.05, z: 0.38 }, { t: 0.55, x: 0.6, z: 0.6 }],
+    contacts: [{ t: 0.24, foot: 'R' }],
+    motion: { id: 'grf_ballcontrol_idle_045', flat: true, kind: 'control', angle: Math.PI / 4 },
+    exit: { dir: Math.PI / 4, speed: 2.8, body: 2.6 },
+    bait: { t: 0.1, dir: -Math.PI / 2, strength: 1 }, shield: 0.7,
+  };
+
   const defs: SkillDef[] = [FAKE_SHOT, FAKE_RUN,
     { ...FAKE_SHOT, id: 'fake_pass', name: '페이크 크로스', trigger: { kind: 'fake', from: 'lob' } },
     DRAG_BACK, FEINT_RIGHT, mirror(FEINT_RIGHT, 'feint_l', '왼쪽 속임 동작'),
@@ -230,6 +244,7 @@ export function makeSkillDefs(): SkillDef[] {
     ELASTICO, mirror(ELASTICO, 'reverse_elastico', '리버스 엘라스티코'),
     ELASTICO_CHOP, mirror(ELASTICO_CHOP, 'elastico_chop_l', '왼쪽 엘라스티코 촙'),
     QUICK_ROLL, RAINBOW,
+    ROLL_CUT, mirror(ROLL_CUT, 'ball_roll_cut_l', '왼쪽 볼 롤 컷'),
   ];
   // 좌우 반전한 클립도 GLB 골격의 미세한 비대칭을 반영해 접촉 키를 따로 굽는다.
   return defs.map((def) => {

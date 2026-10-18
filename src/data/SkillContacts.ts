@@ -259,5 +259,21 @@ export const SKILL_CONTACTS: Record<string, Key[]> = {
       "z": 0.00724,
       "y": 0.11203
     }
+  ],
+  "ball_roll_cut_r": [
+    {
+      "t": 0.24,
+      "x": 0.38964,
+      "z": 0.14976,
+      "y": 0.13757
+    }
+  ],
+  "ball_roll_cut_l": [
+    {
+      "t": 0.24,
+      "x": -0.39376,
+      "z": 0.2647,
+      "y": 0.15461
+    }
   ]
 };

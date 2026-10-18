@@ -230,6 +230,7 @@ interface Active {
   cut: number | null;
 }
 
+const def = (id: string) => SKILLS.find((s) => s.id === id);
 const pose = { x: 0, z: 0, y: 0, yaw: 0 };
 const w = new THREE.Vector3();
 
@@ -275,12 +276,21 @@ export class SkillRunner {
     return true;
   }
 
-  /** 시작 때 잡은 기준 방향을 써야 몸이 돌아도 hold가 끊기지 않는다. */
+  /** 시작 때 잡은 기준 방향을 써야 몸이 돌아도 hold가 끊기지 않는다. 사이드 스텝 중 반대 방향이면 볼 롤 컷으로 이어진다 */
   hold(p: Player, shift: boolean, move: THREE.Vector3): void {
     const a = this.active.get(p);
     if (!a?.def.sustained) return;
     const trigger = a.def.trigger;
-    a.holding = shift && trigger.kind !== 'fake' && dirOf(move, a.fwd) === trigger.seq[0].dir;
+    const dir = dirOf(move, a.fwd);
+    a.holding = shift && trigger.kind !== 'fake' && dir === trigger.seq[0].dir;
+    // 사이드 스텝 중 반대 방향 = 볼 롤 컷 (← 꾹 → → / → 꾹 → ←)
+    const back = trigger.kind !== 'fake' && trigger.seq[0].dir === 'L' ? 'R' : 'L';
+    const cut = shift && dir === back && def(`ball_roll_cut_${back === 'R' ? 'r' : 'l'}`);
+    if (cut && cut.stars <= p.profile.skill) {
+      this.finish(a, false);
+      this.start(p, cut);
+      return;
+    }
     if (!a.holding) this.finish(a, true);
   }
 
