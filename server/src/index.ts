@@ -33,11 +33,13 @@ export default {
   },
 };
 
-interface Seat { ws: WebSocket; rtt: number | null }
+/** 각 사람의 설정 (보정 수준·경기 시간 등). 경기 규칙은 방장(팀 0) 것을 양쪽에 쓴다 */
+type Prefs = Record<string, unknown>;
+interface Seat { ws: WebSocket; rtt: number | null; prefs: Prefs | null }
 
 export class MatchRoom {
   private readonly seats: (Seat | null)[] = [null, null];
-  private started: { seed: number; delay: number } | null = null;
+  private started: { seed: number; delay: number; prefs: [Prefs, Prefs] } | null = null;
   /** 팀별 입력 메시지 기록 (재접속 때 다시 보낸다) */
   private readonly log: [Uint8Array[], Uint8Array[]] = [[], []];
   private readonly hashes = new Map<number, [number | null, number | null]>();
@@ -52,11 +54,12 @@ export class MatchRoom {
     server.accept();
     // 바이너리는 ArrayBuffer로 받는다 (기본 Blob이면 읽기 전에 비동기 변환이 필요하다)
     (server as unknown as { binaryType: string }).binaryType = 'arraybuffer';
-    const seat: Seat = { ws: server, rtt: null };
+    const seat: Seat = { ws: server, rtt: null, prefs: null };
     this.seats[team] = seat;
     server.send(JSON.stringify({ type: 'joined', team, waiting: this.seats[1 - team] === null }));
     // 재접속: 이미 시작한 경기면 시작 정보와 지금까지의 입력을 다시 보낸다
     if (this.started) {
+      this.other(team as 0 | 1)?.ws.send(JSON.stringify({ type: 'opponentBack' }));
       server.send(JSON.stringify({ type: 'start', team, ...this.started, resume: true }));
       for (const t of [0, 1] as const) for (const msg of this.log[t]) server.send(this.tagged(t, msg));
     }
@@ -88,10 +91,13 @@ export class MatchRoom {
 
   private onMessage(team: 0 | 1, data: string | ArrayBuffer): void {
     if (typeof data === 'string') {
-      const msg = JSON.parse(data) as { type: string; t?: number; rtt?: number };
+      const msg = JSON.parse(data) as { type: string; t?: number; rtt?: number; prefs?: Prefs; away?: boolean };
+      // 탭을 벗어남/돌아옴 같은 상태는 상대에게 그대로 알린다
+      if (msg.type === 'away') this.other(team)?.ws.send(JSON.stringify({ type: 'opponentAway', away: !!msg.away }));
       if (msg.type === 'ping') this.seats[team]?.ws.send(JSON.stringify({ type: 'pong', t: msg.t }));
       if (msg.type === 'ready' && typeof msg.rtt === 'number') {
         this.seats[team]!.rtt = msg.rtt;
+        this.seats[team]!.prefs = msg.prefs ?? {};
         this.maybeStart();
       }
       return;
@@ -119,7 +125,7 @@ export class MatchRoom {
     // 입력 지연: 두 사람의 서버 왕복을 더한 것이 상대 입력이 도착하는 시간 (120Hz 틱)
     const rttTicks = Math.ceil(((a.rtt + b.rtt) / 1000) * 120);
     const delay = Math.max(4, Math.ceil(rttTicks / 2) + 2);
-    this.started = { seed: (Math.random() * 2 ** 31) | 0, delay };
+    this.started = { seed: (Math.random() * 2 ** 31) | 0, delay, prefs: [a.prefs ?? {}, b.prefs ?? {}] };
     for (const t of [0, 1] as const) this.seats[t]!.ws.send(JSON.stringify({ type: 'start', team: t, ...this.started }));
   }
 }

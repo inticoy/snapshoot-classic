@@ -59,7 +59,11 @@ export class Lockstep {
   receive(data: Uint8Array, fromTeam: 0 | 1): void {
     const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
     const t = view.getUint32(1);
-    if (data[0] === MSG.input) this.put(t, fromTeam, data.slice(5, 5 + COMMAND_BYTES));
+    if (data[0] === MSG.input) {
+      this.put(t, fromTeam, data.slice(5, 5 + COMMAND_BYTES));
+      // 재접속: 서버가 보낸 내 입력 기록이면 다음 예약을 그 뒤로
+      if (fromTeam === this.team) this.scheduled = Math.max(this.scheduled, t);
+    }
     else if (data[0] === MSG.hash) {
       this.remoteHashes.set(t, view.getUint32(5));
       this.checkHash(t);
@@ -70,6 +74,16 @@ export class Lockstep {
     const f = this.frames.get(t) ?? [null, null];
     f[team] = bytes;
     this.frames.set(t, f);
+  }
+
+  /** 두 팀 입력이 모두 있어 바로 계산할 수 있는 틱 수 (재접속 따라잡기용) */
+  get backlog(): number {
+    let n = 0;
+    for (let t = this.tick; ; t++) {
+      const f = this.frames.get(t);
+      if (!f || !f[0] || !f[1]) return n;
+      n++;
+    }
   }
 
   /** 이번 틱을 계산할 수 있는가 (두 팀 입력이 다 왔는가) */

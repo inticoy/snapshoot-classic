@@ -18,11 +18,26 @@ pnpm dev                                                                        
 - 다른 중계 서버: `&relay=https://…`
 - 확인: `SNAPSHOOT_URL=… node scripts/online-smoke.mjs` (Chromium 두 개), `SECOND=webkit …` (Chromium 대 WebKit), `node scripts/determinism-check.mjs 300` (엔진별 5분 해시)
 
-## 배포 (아직 안 함)
-`cd server && npx wrangler deploy` → 나온 주소를 게임 기본 relay로 넣는다. Cloudflare 계정에 Worker·Durable Object가 생긴다.
+## 배포
+중계 서버: https://snapshoot-relay.woojoo.workers.dev (게임 기본값). 다시 올리기: `cd server && CLOUDFLARE_API_TOKEN=… npx wrangler deploy` (Node 22).
+
+## 화면마다 달라질 수 있는 것 (모두 맞춰 둠)
+| 항목 | 처리 |
+|---|---|
+| 패스·슛·이동 보정 | 각자 자기 팀에만 적용 (시작 신호로 서로의 설정을 받는다) |
+| 경기 시간·승부차기·물리 프리셋 | 방장(팀 0) 설정을 양쪽에 |
+| 일시정지(Esc) | 메뉴만 뜨고 경기는 계속 (내 선수는 입력 없음). 메뉴: 계속하기 / 경기 나가기 |
+| 하프타임 | 메뉴로 멈추지 않고 안내만, 정해진 시간 뒤 자동 후반 |
+| 경기 종료 | 다시 하기 없음 (한쪽만 재시작하면 갈라짐) → 새 방 만들기 / 메인 메뉴 |
+| UI로 게이지 취소 | 온라인에서는 안 함 (입력 기록 밖 변경) |
+| 탭 전환 | 상대 화면에 '화면을 벗어났어요' (돌아올 때까지 경기는 멈춤) |
+| 연결 끊김 | '상대 연결이 끊겼어요' → 같은 링크로 다시 들어오면 기록을 빠르게 재생해 따라잡는다 |
+| 상대 입력 지연 | 0.5초 넘게 기다리면 '상대 입력을 기다리는 중' |
+
+확인: `node scripts/online-flow-smoke.mjs` (설정이 다른 두 사람, 일시정지 중 진행, 재접속 따라잡기)
 
 ## 남은 것
 - 롤백(지연 없이 반응): 킥 준비(`windups`)가 함수로 저장돼 상태 저장이 안 된다 → 데이터로 바꾼 뒤
 - Firefox: Playwright Firefox가 이 macOS에서 실행되지 않아 미검증
-- 로비 UI(방 코드 입력·복사), 끊김 처리 UI, 재접속 테스트(브라우저), 매칭 대기열
+- 매칭 대기열(코드 없이 빠른 상대 찾기)
 - HUD·이름 바가 팀 1 화면에서 맞는지 확인

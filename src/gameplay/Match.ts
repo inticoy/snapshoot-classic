@@ -8,7 +8,7 @@ import { Player, type PlayerModelFactory } from '../entities/Player';
 import type { PhysicsWorld } from '../physics/PhysicsWorld';
 import { TeamAI } from '../ai/TeamAI';
 import { Kicks, type KickResult, type PassKind } from './Kicks';
-import { MOVE_ASSIST_TIME, settings, type AssistLevel } from '../core/Settings';
+import { MOVE_ASSIST_TIME, settings, type AssistLevel, type MoveAssist } from '../core/Settings';
 import { n } from '../data/Stats';
 import { activePhysics } from '../physics/presets';
 import type { ButtonState } from '../core/Input';
@@ -106,7 +106,12 @@ const cv = new CANNON.Vec3();
 const cspin = new CANNON.Vec3();
 
 
+/** 한 팀(사람)의 보정 설정 */
+export interface TeamAssist { pass: AssistLevel; shot: AssistLevel; move: MoveAssist }
+
 export interface MatchOptions {
+  /** 팀별 보정 설정 (온라인: 각자 자기 설정). 없으면 팀 0만 로컬 설정, 팀 1은 보조 */
+  assists?: [TeamAssist, TeamAssist];
   /** 이 화면에서 조작하는 팀 (온라인에서 팀 1일 수 있다). HUD·카메라·Match의 조작 필드가 이 팀을 가리킨다 */
   localTeam?: 0 | 1;
   /** 사람이 조작하는 팀 [팀0, 팀1]. 없으면 userControl(기본 켜짐)로 팀 0만 */
@@ -978,7 +983,7 @@ export class Match {
       const hasInput = move.lengthSq() > 0.01;
       const towardBall = hasInput && dd > 0.3 && move.clone().normalize().dot(tmp.clone().normalize()) > 0.35;
       // 원터치를 미리 눌러 둔 동안 방향키는 조준이다 → 이동은 계속 공을 받으러 간다 (조준 방향으로 걸어가 공을 지나치지 않게)
-      if (!hasInput || towardBall || this.queued || this.receiveTimer < MOVE_ASSIST_TIME[settings.moveAssist]) {
+      if (!hasInput || towardBall || this.queued || this.receiveTimer < MOVE_ASSIST_TIME[this.options.assists?.[this.side.team].move ?? settings.moveAssist]) {
         move.copy(dd > 0.25 ? tmp.normalize().multiplyScalar(Math.min(1, dd / 1.8)) : tmp.set(0, 0, 0));
         autoSprint = dd > 4 && (cmd.sprint || bp.y > 1.2);
         if (dd < 2) p.faceTowards(bp.x, bp.z);
@@ -1261,6 +1266,8 @@ export class Match {
 
   /** 사용자 팀은 설정한 보정, AI는 항상 보조 (오차는 능력치로) */
   assistFor(p: Player, kind: 'pass' | 'shot'): AssistLevel {
+    const a = this.options.assists?.[p.team];
+    if (a) return kind === 'pass' ? a.pass : a.shot;
     if (p.team !== 0) return 'assisted';
     return kind === 'pass' ? settings.passAssist : settings.shotAssist;
   }

@@ -8,12 +8,12 @@ import { Stadium } from '../environment/Stadium';
 import { SKILLS } from '../gameplay/Skills';
 import { Lockstep } from '../net/Lockstep';
 import type { NetSession, StartInfo } from '../net/NetSession';
-import { Match, type UserCommand } from '../gameplay/Match';
+import { IDLE_COMMAND, Match, type TeamAssist, type UserCommand } from '../gameplay/Match';
 import { CAMERA_LABEL, CameraRig } from '../camera/CameraRig';
 import { Hud } from '../ui/Hud';
 import { Menu, assistPanel, controlsPanel, matchupPanel, playerDetailPanel, squadPanel, statsPanel, type MenuScreen } from '../ui/Menu';
 import { ASSIST_LABEL, MOVE_ASSIST_LABEL, GRAPHICS_LABEL, cycleAssist, cycleMoveAssist, cycleGraphics, graphicsQuality, settings, togglePhysicsPreset, toggleShootout } from './Settings';
-import { PRESET_LABEL, activePhysics } from '../physics/presets';
+import { PRESET_LABEL, activePhysics, setActivePhysics } from '../physics/presets';
 import { Sound } from '../audio/Sound';
 import { categoryVolume, decideTouchSound } from '../audio/Mix';
 import { TEAMS } from '../data/Teams';
@@ -65,6 +65,7 @@ export class Game {
 
   /** 온라인 1:1 (중계 서버 락스텝) */
   private lockstep: Lockstep | null = null;
+  private online: { session: NetSession; start: StartInfo } | null = null;
 
   constructor(canvas: HTMLCanvasElement, options: { playground?: typeof Playground; online?: { session: NetSession; start: StartInfo } } = {}) {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
@@ -81,14 +82,25 @@ export class Game {
     this.scene.add(this.stadium.group);
 
     const online = options.online;
+    this.online = online ?? null;
+    // 온라인: 물리 프리셋도 방장(팀 0) 것을 양쪽에 (공 궤적이 달라지면 경기가 갈라진다)
+    if (online) setActivePhysics(online.start.prefs[0].physics === 'real' ? 'real' : 'arcade');
     this.match = new Match(this.physics, online
-      ? { random: new Random(online.start.seed), userTeams: [true, true], localTeam: online.start.team }
+      ? {
+        random: new Random(online.start.seed), userTeams: [true, true], localTeam: online.start.team,
+        // 보정은 각자 자기 팀에, 승부차기는 방장(팀 0) 설정을 양쪽에
+        assists: online.start.prefs.map((p) => ({ pass: p.pass, shot: p.shot, move: p.move })) as [TeamAssist, TeamAssist],
+        shootout: online.start.prefs[0].shootout,
+      }
       : { practice: !!options.playground });
     if (online) {
       this.lockstep = new Lockstep(this.match, online.start.team, online.session, online.start.delay);
       online.session.onData = (team, data) => this.lockstep!.receive(data, team);
       online.session.onDesync = (tick) => this.hud.tick(`동기화 어긋남 (틱 ${tick})`, 4);
-      online.session.onOpponentLeft = () => this.hud.tick('상대가 나갔어요', 4);
+      online.session.onOpponentLeft = () => this.hud.tick('상대 연결이 끊겼어요 · 같은 링크로 다시 들어오면 이어서 해요', 6);
+      online.session.onOpponentBack = () => this.hud.tick('상대가 돌아왔어요', 2.5);
+      online.session.onOpponentAway = (away) => this.hud.tick(away ? '상대가 화면을 벗어났어요 · 돌아올 때까지 멈춰요' : '상대가 돌아왔어요', away ? 6 : 2);
+      document.addEventListener('visibilitychange', () => online.session.setAway(document.hidden));
       online.session.flushEarly();
     }
     for (const g of this.match.goals) this.scene.add(g.group);
@@ -302,7 +314,10 @@ export class Game {
       title: '일시정지',
       panel: () => statsPanel(this.match.stats, [h, a], `경기 진행 ${this.clockText()}`),
       onBack: () => this.resume(),
-      items: [
+      items: this.lockstep ? [
+        { id: 'resume', label: '계속하기 (온라인 경기는 멈추지 않아요)', onSelect: () => this.resume() },
+        { id: 'quit', label: '경기 나가기', onSelect: () => this.leaveOnline() },
+      ] : [
         { id: 'resume', label: '계속하기', onSelect: () => this.resume() },
         { id: 'restart', label: '다시 시작', onSelect: () => void this.startMatch() },
         ...this.linkItems(() => this.openPauseMenu(), false),
@@ -323,7 +338,11 @@ export class Game {
       eyebrow: `경기 종료 · ${TEAMS[0].abbr} ${h} : ${a} ${TEAMS[1].abbr}${pk}`,
       title: verdict,
       panel: () => statsPanel(this.match.stats, [h, a], `경기 종료 · ${verdict}`),
-      items: [
+      // 온라인: 한쪽만 다시 시작하면 두 경기가 갈라지므로 새 방으로
+      items: this.lockstep ? [
+        { id: 'again', label: '새 방 만들기', onSelect: () => { location.search = '?online'; } },
+        { id: 'menu', label: '메인 메뉴', onSelect: () => this.leaveOnline() },
+      ] : [
         { id: 'again', label: '다시 하기', onSelect: () => void this.startMatch() },
         { id: 'menu', label: '메인 메뉴', onSelect: () => this.openMainMenu() },
       ],
@@ -356,6 +375,42 @@ export class Game {
     return min > base ? `${base}+${min - base}'` : `${Math.max(1, min)}'`;
   }
 
+  /** 온라인 스텝 하나: 내 입력 예약 + 두 입력이 다 온 틱 계산. 못 했으면 false (상대 입력 대기) */
+  private stepOnline(cmd: UserCommand): boolean {
+    const ls = this.lockstep!;
+    if (ls.ready) ls.pushLocal(cmd);
+    if (!ls.step()) {
+      this.waiting += PHYSICS.step;
+      if (this.waiting > 0.5 && this.waiting - PHYSICS.step <= 0.5) this.hud.tick('상대 입력을 기다리는 중…', 1.5);
+      return false;
+    }
+    this.waiting = 0;
+    // 재접속 등으로 계산할 틱이 쌓여 있으면 한 프레임에 많이 따라잡는다 (입력은 이미 기록에 있다)
+    // 평소에도 입력 지연만큼 몇 틱은 준비돼 있으므로, 그보다 훨씬 많이 밀렸을 때만 (재접속 등)
+    const behind = ls.backlog - ls.delay * 2;
+    if (behind > 30) for (let i = 0; i < Math.min(600, behind); i++) if (!ls.step()) break;
+    return true;
+  }
+
+  /** 메뉴가 열려 있어도 온라인 경기를 계속 진행 */
+  private runOnline(dt: number, cmd: UserCommand): void {
+    this.accumulator += dt;
+    let steps = 0;
+    while (this.accumulator >= PHYSICS.step && steps < 12) {
+      if (!this.stepOnline(cmd)) { this.accumulator = Math.min(this.accumulator, PHYSICS.step * 4); break; }
+      this.accumulator -= PHYSICS.step;
+      steps++;
+    }
+    this.handleEvents();
+  }
+
+  /** 온라인 경기에서 나가기 (방 주소를 지우고 처음 화면으로) */
+  private leaveOnline(): void {
+    location.search = '';
+  }
+
+  private waiting = 0;
+
   /** UI로 게이지 취소. 온라인에서는 입력 기록 밖에서 경기 상태를 바꾸면 두 화면이 갈라지므로 하지 않는다 */
   private cancelCharge(): void {
     if (!this.lockstep) this.match.cancelUserCharge();
@@ -371,7 +426,8 @@ export class Game {
     this.menu.close();
     this.state = 'playing';
     this.hud.show(true);
-    this.match.duration = DURATIONS[this.durationIndex];
+    // 온라인: 경기 시간은 방장(팀 0) 설정
+    this.match.duration = this.online ? this.online.start.prefs[0].duration : DURATIONS[this.durationIndex];
     this.match.restart();
     this.hud.tick(`${TEAMS[0].name} vs ${TEAMS[1].name}`, 2.2);
     await this.sound.unlock();
@@ -409,6 +465,8 @@ export class Game {
     if (menuWasVisible) {
       for (const code of this.input.drainPresses()) if (MENU_KEYS.includes(code)) this.menu.handleKey(code);
       this.input.endFrame();
+      // 온라인: 메뉴(일시정지)를 열어도 경기는 멈추지 않는다 — 내 선수는 입력 없음으로 계속 진행 (상대를 멈춰 세우지 않게)
+      if (this.lockstep && this.state === 'paused') this.runOnline(dt, IDLE_COMMAND);
     } else if (this.state === 'playing') {
       if (this.input.wasPressed('pause') && this.match.phase !== 'fulltime') {
         this.input.endFrame();
@@ -421,9 +479,7 @@ export class Game {
           this.buildCommand();
           const stepCommand = this.playground?.commandForStep() ?? this.cmd;
           if (this.lockstep) {
-            // 온라인: 두 사람 입력이 다 온 틱만 계산한다 (상대 입력이 늦으면 이 틱에서 기다린다)
-            if (this.lockstep.ready) this.lockstep.pushLocal(stepCommand);
-            if (!this.lockstep.step()) {
+            if (!this.stepOnline(stepCommand)) {
               this.input.endFrame();
               this.accumulator = Math.min(this.accumulator, PHYSICS.step * 4);
               break;
@@ -604,7 +660,9 @@ export class Game {
           else if (e.kind === 'halftime') {
             this.sound.whistle([0.35, 0.9]);
             this.hud.tick('전반 종료', 2.4);
-            setTimeout(() => {
+            // 온라인: 하프타임 메뉴로 멈추지 않는다 (경기가 정해진 시간 뒤 후반을 시작한다)
+            if (this.lockstep) this.hud.tick('하프타임 · 잠시 뒤 후반 시작', 3);
+            else setTimeout(() => {
               if (this.match.phase === 'halftime' && this.state === 'playing') this.openHalftime();
             }, 2200);
           } else if (this.match.phase === 'shootout') {

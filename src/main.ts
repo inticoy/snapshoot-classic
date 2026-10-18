@@ -1,6 +1,8 @@
 import './net/installMath';
 import { Game } from './core/Game';
 import { NetSession } from './net/NetSession';
+import { settings } from './core/Settings';
+import { MATCH } from './config';
 import { loadCharacterAsset, loadMotionLibrary } from './entities/SkinnedPlayerModel';
 
 const canvas = document.getElementById('scene') as HTMLCanvasElement;
@@ -31,7 +33,9 @@ if (params.has('online') && !params.get('room')) {
     overlay.querySelector('#copy-room')?.addEventListener('click', () => void navigator.clipboard?.writeText(link));
   };
   status('중계 서버 접속 중');
-  const start = await session.connect(status).catch(() => {
+  // 내 설정: 보정은 내 팀에만, 경기 시간·승부차기·물리는 방장(팀 0) 것이 양쪽에 쓰인다
+  const prefs = { pass: settings.passAssist, shot: settings.shotAssist, move: settings.moveAssist, duration: MATCH.durationSeconds, shootout: settings.shootout, physics: settings.physicsPreset };
+  const start = await session.connect(prefs, status).catch(() => {
     status('중계 서버에 접속하지 못했어요. 새로고침해 주세요');
     throw new Error('relay unavailable');
   });
