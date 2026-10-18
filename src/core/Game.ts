@@ -441,6 +441,10 @@ export class Game {
   /** 온라인 경기: 메뉴 없이 바로 킥오프 */
   startOnline(): void {
     void this.startMatch();
+    const me = this.match.localTeam;
+    // 내 팀 표시: 점수판의 내 팀 약칭을 강조하고 시작 안내
+    document.getElementById(me === 0 ? 'abbr-h' : 'abbr-a')?.classList.add('sb-me');
+    setTimeout(() => this.hud.tick(`온라인 · 나는 ${me === 0 ? '홈' : '원정'} ${TEAMS[me].name}`, 4), 2400);
   }
 
   private async startMatch(): Promise<void> {
