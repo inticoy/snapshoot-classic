@@ -297,6 +297,8 @@ export const COMMAND = {
   dinkSpeed: 0.9, dinkHeight: 0.8,
   lowThroughHeight: 2.1, lobThroughTime: 1.35, lowThroughSpeed: 1.25,
   oneTwoLead: 0.35, flairError: 1.35,
+  /** 침투 지시(Q) · 원투(Q+S) 뒤 달리기: 앞으로 이만큼(m) 뛰고, 이 시간(초)이 지나면 멈춘다. 오프사이드 라인 앞에서 선다 */
+  runLength: 12, runTime: 2.6, runOnside: 0.6,
   drivenShotSpeed: 1.1, drivenShotLift: 0.65, drivenShotError: 1.18, drivenCurl: 0.35,
   /** D+D 최소 게이지: 빠른 두 번 탭이라 게이지가 거의 0인 채로 나가던 문제 */
   drivenMinCharge: 0.6,

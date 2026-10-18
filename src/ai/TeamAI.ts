@@ -144,6 +144,15 @@ export class TeamAI {
       return;
     }
 
+    // 침투 지시(Q·원투)를 받았으면 그 지점까지 전력으로
+    const run = m.runs.get(p);
+    if (run) {
+      intent.target.copy(run.target);
+      intent.sprint = true;
+      intent.look = new THREE.Vector3(bp.x, 0, bp.z);
+      return;
+    }
+
     if (p === chaser && !teamHasBall) {
       if (oppHasBall) {
         // 압박: 상대와 자기 골대 사이로 들어간다

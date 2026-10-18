@@ -735,6 +735,10 @@ export class Game {
           }
           break;
         }
+        case 'run':
+          // 내 팀 침투 지시만 알린다 (상대 화면에는 안 보이게)
+          if (e.player.team === this.match.localTeam) this.hud.tick(`${e.player.profile.short} 침투`, 1);
+          break;
         case 'offside':
           this.sound.whistle([0.16, 0.16]);
           this.hud.tick(`오프사이드 · ${e.player.profile.short}`, 2.2);
