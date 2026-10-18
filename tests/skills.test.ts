@@ -53,8 +53,10 @@ describe('개인기 커맨드 인식', () => {
     ...dirs.map((d) => ({ shift: true, move: D[d], secs: each })), { shift: true, move: null, secs: 0.3 },
   ];
 
-  it('마르세유는 대각선을 빼고 상하좌우만 돌려도 나간다 (↓ ← ↑ →)', () => {
-    expect(run(roll(['B', 'L', 'F', 'R'], 0.08))).toEqual(['roulette_r']);
+  it('마르세유 = 진행 반대에서 진행 방향까지 반 바퀴 (↓↘→↗↑), 대각선을 빼고 ↓→↑만 돌려도 나간다', () => {
+    expect(run(roll(['B', 'BR', 'R', 'FR', 'F'], 0.06))).toEqual(['roulette_r']);
+    expect(run(roll(['B', 'R', 'F'], 0.08))).toEqual(['roulette_r']);
+    expect(run(roll(['B', 'L', 'F'], 0.08))).toEqual(['roulette_l']);
   });
 
   it('짧은 커맨드는 대각선을 건너뛰지 않는다 (↑ → 은 헛다리가 아니다)', () => {

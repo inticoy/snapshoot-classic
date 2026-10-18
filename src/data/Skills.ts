@@ -118,10 +118,10 @@ export function makeSkillDefs(): SkillDef[] {
     motion: { id: 'grf_trap_idle_000_IB000', kind: 'trap', angle: 0 },
     exit: { dir: 0, speed: 0.8, body: 0.5 }, shield: 0.7,
   };
-  /** 마르세유 턴 */
+  /** 마르세유 턴 (Shift + ↓↘→↗↑): 진행 방향 반대에서 오른쪽을 돌아 진행 방향까지 반 바퀴 굴린다. 오른쪽으로 돌아 나간다 */
   const ROULETTE: SkillDef = rigged({
     id: 'roulette_r', name: '오른쪽 룰렛', stars: 3,
-    trigger: { kind: 'shift', seq: ['B', 'BL', 'L', 'FL', 'F', 'FR', 'R'].map((dir) => ({ dir: dir as Dir })) },
+    trigger: { kind: 'shift', seq: ['B', 'BR', 'R', 'FR', 'F'].map((dir) => ({ dir: dir as Dir })) },
     duration: 0.9, carry: 0.15,
     body: [{ t: 0, x: 0, z: 0 }, { t: 0.25, x: 0.15, z: 0.08, yaw: Math.PI / 2 }, { t: 0.5, x: 0.35, z: 0.2, yaw: Math.PI }, { t: 0.75, x: 0.4, z: 0.5, yaw: Math.PI * 1.5 }, { t: 1, x: 0.4, z: 0.8, yaw: Math.PI * 2 }],
     ball: [{ t: 0, x: 0.1, z: 0.4 }, { t: 0.3, x: 0.5, z: 0.1 }, { t: 0.55, x: 0.25, z: -0.05 }, { t: 0.8, x: 0.1, z: 0.6 }, { t: 1, x: 0.4, z: 1.25 }],
