@@ -60,7 +60,8 @@ export function makeSkillDefs(): SkillDef[] {
     body: [{ t: 0, x: 0, z: 0, yaw: 0 }, { t: 0.17, x: 0.12, z: 0, yaw: 0.45 }, { t: 0.45, x: 0.02, z: 0, yaw: 0 }],
     ball: [{ t: 0, x: 0, z: 0.5 }, { t: 0.45, x: 0, z: 0.55 }],
     contacts: [],
-    motion: { id: 'grf_ballcontrol_idle_000', kind: 'control', angle: Math.PI / 4, toKey: 0.7 },
+    // 몸: Mixamo Dodging Right의 앞 절반. 원본은 선수 기준 왼쪽으로 기울어서 오른쪽은 반전본, 왼쪽은 원본
+    motion: { id: 'mx_dodge_r~m', kind: 'control', angle: 0, toKey: 1 },
     exit: { dir: 0, speed: 2.2, body: 2.5 },
     bait: { t: 0.12, dir: Math.PI / 2, strength: 1 },
     shield: 0.8,

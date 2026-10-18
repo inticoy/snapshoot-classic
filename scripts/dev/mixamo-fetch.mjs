@@ -34,13 +34,16 @@ async function exportAndSave(body, file) {
   throw new Error(`timeout ${file}`);
 }
 
-const list = (await api(`products?page=1&limit=96&order=&type=Motion%2CMotionPack&query=${encodeURIComponent(query)}`)).results.slice(0, Number(count));
+// query가 .json 파일이면 [{id, name, type}] 목록을 그대로 받는다 (추가 동작용, 파일 이름은 x00_부터)
+const fromFile = query.endsWith('.json');
+const list = fromFile ? JSON.parse(fs.readFileSync(query, 'utf8'))
+  : (await api(`products?page=1&limit=96&order=&type=Motion%2CMotionPack&query=${encodeURIComponent(query)}`)).results.slice(0, Number(count));
 const anims = path.join(dir, 'anims');
 fs.mkdirSync(anims, { recursive: true });
 for (const [i, item] of list.entries()) {
   try {
     const d = await api(`products/${item.id}?similar=0&character_id=${cid}`);
-    const base = `${String(i).padStart(2, '0')}_${item.name.replace(/[^A-Za-z0-9]+/g, '_')}_${item.id.slice(0, 8)}`;
+    const base = `${fromFile ? 'x' : ''}${String(i).padStart(2, '0')}_${item.name.replace(/[^A-Za-z0-9]+/g, '_')}_${item.id.slice(0, 8)}`;
     for (const mirror of item.type === 'MotionPack' ? [false] : [false, true]) {
       const hashes = (d.details.gms_hash ? [d.details.gms_hash] : d.details.motions?.map((m) => m.gms_hash) ?? []).map((g) => ({
         ...g, inplace: g.inplace !== undefined ? true : g.inplace, mirror,

@@ -227,6 +227,40 @@ for (const [prefix, name, kind, keyFrac] of MIXAMO_FULL) {
   }
   mxCount++;
 }
+// 추가로 받은 동작 (x00~: scripts/dev/mixamo-fetch.mjs에 목록 파일로 받은 것)
+{
+  const src = mixamo('x00'); // 오버헤드킥: 높은 공에만 고르도록 터치 높이를 높게
+  if (src) {
+    const toe = fasterToe(src), c = kickContact(src, toe, 0.1, src.duration - 0.1), body = bodyYaw(src.sample(0));
+    for (const mirror of [false, true]) add({ name: 'mx_bicycle', kind: 'shot', source: 'mocap', side: toe === 'lToe' ? 'L' : 'R', speed: 'idle', key: c.t, ballAngle: relAngle(c.dir, body), power: 1, height: 1.6 }, src, mirror);
+    mxCount++;
+  }
+}
+const MIXAMO_EXTRA: [string, string, MotionKind, number, boolean][] = [
+  ['x14', 'mx_dodge_r', 'control', 0.5, true], ['x15', 'mx_dodge', 'control', 0.5, true],
+  ['x10', 'mx_sidestep_r', 'control', 0.5, true], ['x11', 'mx_sidestep_r2', 'control', 0.5, true],
+  ['x01', 'mx_turn_180', 'turn', 0.5, true], ['x02', 'mx_run_turn_180', 'turn', 0.5, true], ['x05', 'mx_sprint_turn', 'turn', 0.5, true],
+  ['x19', 'mx_celebrate_fist_1', 'celebrate', 0, true], ['x20', 'mx_celebrate_fist_2', 'celebrate', 0, true], ['x21', 'mx_celebrate_fist_3', 'celebrate', 0, true],
+  ['x22', 'mx_celebrate_cheer', 'celebrate', 0, false], ['x23', 'mx_celebrate_victory_1', 'celebrate', 0, false], ['x24', 'mx_celebrate_victory_2', 'celebrate', 0, false],
+  ['x26', 'mx_tripping', 'fall', 0.3, true], ['x27', 'mx_fall_flat', 'fall', 0.3, true], ['x28', 'mx_stumble', 'fall', 0.3, true],
+  ['x29', 'mx_getting_up_1', 'getup', 0, false], ['x30', 'mx_getting_up_2', 'getup', 0, false], ['x31', 'mx_stand_up_2', 'getup', 0, false],
+];
+for (const [prefix, name, kind, keyFrac, both] of MIXAMO_EXTRA) {
+  const src = mixamo(prefix);
+  if (!src) continue;
+  for (const mirror of both ? [false, true] : [false]) add({ name, kind, source: 'mocap', side: null, speed: kind === 'turn' || kind === 'fall' ? 'walk' : 'idle', key: src.duration * keyFrac, ballAngle: 0, power: 1, height: 0 }, src, mirror);
+  mxCount++;
+}
+{
+  // 달리며 미끄러지는 동작 = 슬라이딩 태클 (엉덩이가 가장 낮은 순간이 핵심)
+  const src = mixamo('x25');
+  if (src) {
+    let low = Infinity, key = 0;
+    for (let t = 0; t <= src.duration; t += 0.02) { const y = src.sample(t).get('hips')!.y; if (y < low) { low = y; key = t; } }
+    for (const mirror of [false, true]) add({ name: 'mx_running_slide', kind: 'slide', source: 'mocap', side: null, speed: 'sprint', key, ballAngle: 0, power: 1, height: 0 }, src, mirror);
+    mxCount++;
+  }
+}
 console.log(`Mixamo ${mxCount}개 (+좌우 반전)`);
 
 // ---------------------------------------------------------------- Google Research Football
