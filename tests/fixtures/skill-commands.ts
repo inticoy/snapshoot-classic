@@ -12,8 +12,8 @@ export const COMMANDS: { id: string; dirs: Dir[]; modifier?: string; fake?: stri
   { id: 'reverse_step_over_r', dirs: ['R', 'FR', 'F'] }, { id: 'reverse_step_over_l', dirs: ['L', 'FL', 'F'] },
   { id: 'side_step_r', dirs: ['R'], hold: true }, { id: 'side_step_l', dirs: ['L'], hold: true },
   { id: 'heel_flick', dirs: ['F', 'B'] }, { id: 'ball_lift', dirs: ['F', 'F', 'F'] },
-  { id: 'roulette_r', dirs: ['B', 'BL', 'L', 'FL', 'F', 'FR', 'R'] },
-  { id: 'roulette_l', dirs: ['B', 'BR', 'R', 'FR', 'F', 'FL', 'L'] },
+  { id: 'roulette_r', dirs: ['B', 'BR', 'R', 'FR', 'F'] },
+  { id: 'roulette_l', dirs: ['B', 'BL', 'L', 'FL', 'F'] },
   { id: 'feint_exit_r', dirs: ['L', 'BL', 'B', 'BR', 'R'], upgrade: 'reverse_elastico' },
   { id: 'feint_exit_l', dirs: ['R', 'BR', 'B', 'BL', 'L'], upgrade: 'elastico' },
   // 2차
