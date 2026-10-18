@@ -105,3 +105,20 @@ it('새 경기에는 바뀐 선수의 능력치·등번호·외형 생성 정보
   online.restart();
   expect(online.teams.map((team) => team.map((p) => p.profile))).toEqual(TEAMS.map((t) => t.players));
 });
+
+it('교체한 선발 선수도 경기에서 AI로 움직인다', async () => {
+  const { simulation, command } = await import('./helpers');
+  const { TEAMS } = await import('../src/data/Teams');
+  const { PHYSICS } = await import('../src/config');
+  const { match } = simulation(2);
+  const lineups = [TEAMS[0].players.slice(), TEAMS[1].players.slice()];
+  const bench = TEAMS[0].bench.find((b) => b.pos === 'CM')!;
+  const slot = lineups[0].findIndex((p) => p.pos === 'CM');
+  lineups[0][slot] = bench;
+  match.restart(lineups);
+  const sub = match.players.find((p) => p.profile === bench)!;
+  expect(sub).toBeDefined();
+  const start = sub.pos.clone();
+  for (let t = 0; t < 8; t += PHYSICS.step) match.update(PHYSICS.step, command());
+  expect(sub.pos.distanceTo(start)).toBeGreaterThan(1);
+});

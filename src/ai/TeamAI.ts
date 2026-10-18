@@ -40,6 +40,9 @@ export class TeamAI {
   /** 시나리오 재시작 때 이전 목표·회피 방향·반응 시간을 이어받지 않는다. */
   reset(): void {
     this.skillCooldown.clear();
+    // 스쿼드에서 선수를 바꿨으면 새 선수로 다시 채운다 (빠진 선수의 목표는 버린다)
+    for (const p of [...this.intents.keys()]) if (!this.match.players.includes(p)) { this.intents.delete(p); this.timers.delete(p); }
+    for (const p of this.match.players) if (!this.intents.has(p)) this.intents.set(p, { target: p.pos.clone(), sprint: false, look: null, dribbleDir: null });
     for (const [p, intent] of this.intents) {
       intent.target.copy(p.pos);
       intent.sprint = false;

@@ -2105,6 +2105,8 @@ export class Match {
       p.sentOff = false;
       p.model.root.visible = true;
     }
+    // 명단이 바뀌었으면 AI도 새 선수로
+    if (lineups) this.ai.reset();
     this.setSides(1);
     this.startKickoff(0);
   }
