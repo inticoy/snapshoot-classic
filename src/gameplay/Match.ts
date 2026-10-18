@@ -680,6 +680,7 @@ export class Match {
     this.separatePlayers();
     this.resolveTackles();
     if (this.phase !== 'playing') return; // 반칙 휘슬
+    this.contestBall(dt);
     this.rules.update(dt);
     if (this.phase !== 'playing') return; // 어드밴티지 무효 → 프리킥
     this.updateWindups(dt);
@@ -972,7 +973,8 @@ export class Match {
     // S (수비 시) = 선수 변경
     if (cmd.pass.pressed && !attacking && !teamHasBall) this.switchToNearest();
     // Shift + 방향 (수비) = 그 화면 방향에 있는 동료로 전환 (오른쪽 스틱 전환)
-    const sm = cmd.skillMove;
+    // 수비 중 Shift는 다른 쓰임이 없으므로 Shift 전부터 누르던 방향(달리던 방향)으로도 전환한다
+    const sm = cmd.skillMove && cmd.skillMove.lengthSq() > 0.25 ? cmd.skillMove : !attacking || !teamHasBall ? cmd.move : cmd.skillMove;
     const aimNow = !!cmd.skill?.held && !!sm && sm.lengthSq() > 0.25;
     if (!attacking && !teamHasBall && aimNow && !this.switchAimHeld) this.switchToward(p, sm!);
     this.switchAimHeld = aimNow;
@@ -1694,6 +1696,37 @@ export class Match {
         this.ball.kick(cv, cspin.set(0, 0, 0), p);
         this.ball.shot = null;
         p.kickCooldown = 0.12;
+      }
+    }
+  }
+
+  /**
+   * 몸싸움 뺏기: 상대가 공에 발을 대고 있으면(소유자 발보다 가깝거나 비슷하게) 태클 없이도 공을 빼앗을 수 있다.
+   * 가만히 서서 공을 끼고 있으면 빨리 뺏기고, 드리블·볼 지키기·개인기 중이면 버틴다. 사람·AI 공통.
+   */
+  private contestBall(dt: number): void {
+    const o = this.ball.owner;
+    if (!o || o.isKeeper || o.busy && o.tackleTimer > 0) return;
+    const bp = this.ball.position;
+    // 달리며 치고 나가는 드리블은 태클로만 뺏는다 (몸싸움 뺏기는 멈추거나 천천히 끄는 공만)
+    if (bp.y > 0.5 || Math.hypot(o.vel.x, o.vel.z) > 2.5) return;
+    const own = Math.hypot(bp.x - o.pos.x - o.facing.x * 0.35, bp.z - o.pos.z - o.facing.z * 0.35);
+    for (const q of this.teams[1 - o.team]) {
+      if (q.isKeeper || q.busy || q.stunned > 0 || q.kickCooldown > 0) continue;
+      this.footPoint(q, tmp);
+      const d = Math.hypot(bp.x - tmp.x, bp.z - tmp.z);
+      if (d > 0.45 || d > own + 0.15) continue;
+      const qs = q.profile.stats, os = o.profile.stats;
+      const still = Math.hypot(o.vel.x, o.vel.z) < 1.2 ? 1.6 : 1;
+      const win = (0.5 + n(qs.defAwareness) * 0.5 + n(qs.strength) * 0.3) / (0.6 + n(os.ballControl) * 0.4 + n(os.strength) * 0.4);
+      const rate = 1.4 * still * win * this.skills.shield(o) * (o.shielding ? 0.75 - 0.35 * n(os.strength) : 1);
+      if (this.random.next() < 1 - Math.exp(-rate * dt)) {
+        o.stunned = Math.max(o.stunned, 0.25);
+        this.sides[o.team].charge = null;
+        this.stats.tackles[q.team]++;
+        this.events.push({ type: 'tackle', success: true });
+        this.gainPossession(q);
+        return;
       }
     }
   }
