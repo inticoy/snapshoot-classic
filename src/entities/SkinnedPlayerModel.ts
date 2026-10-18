@@ -84,6 +84,30 @@ const CLIP_NAMES: Record<Clip, string> = {
 // 클립 원래 속도에 해당하는 이동 속도 (m/s) — 발 미끄러짐을 줄이기 위한 재생 속도 보정
 const CLIP_SPEED = { walk: 1.6, jog: 4.2, sprint: 7.2 };
 
+/** 축구화 크기 (m) */
+const BOOT = { width: 0.1, height: 0.085 };
+const BOOT_MATERIAL = new THREE.MeshStandardMaterial({ color: 0x15171c, roughness: 0.45, metalness: 0.05 });
+const bootGeometries = new Map<number, THREE.BufferGeometry>();
+/** 앞이 둥근 신발 모양: 상자를 둥글린 캡슐을 납작하게 (길이 방향 = +Z) */
+function bootGeometry(length: number): THREE.BufferGeometry {
+  const key = Math.round(length * 100);
+  let g = bootGeometries.get(key);
+  if (!g) {
+    g = new THREE.CapsuleGeometry(BOOT.width / 2, Math.max(0.01, length - BOOT.width), 4, 10);
+    g.rotateX(Math.PI / 2);
+    g.scale(1, BOOT.height / BOOT.width, 1);
+    bootGeometries.set(key, g);
+  }
+  return g;
+}
+function toeLength(toe: THREE.Bone): number {
+  const child = toe.children.find((c) => (c as THREE.Bone).isBone);
+  return child ? child.position.length() : 0.06;
+}
+
+/** 목 세우기 각도 (rad, 음수 = 뒤로) */
+const NECK_UP = -0.35;
+
 type Overlay = 'kick' | 'tackle' | 'dive' | 'hold' | 'header' | 'advance' | 'smother';
 
 const HAIR_TONES = [0x1d1510, 0x3a2516, 0x6b4a2a, 0xc9a25a, 0x111111];
@@ -149,6 +173,8 @@ export class SkinnedPlayerModel implements CharacterModel {
       if ((o as THREE.Bone).isBone) this.bones.set(o.name, o as THREE.Bone);
     });
 
+    this.addBoots(model);
+
     this.mixer = new THREE.AnimationMixer(model);
     for (const [key, name] of Object.entries(CLIP_NAMES) as [Clip, string][]) {
       const clip = asset.animations.find((a) => a.name === name);
@@ -159,6 +185,31 @@ export class SkinnedPlayerModel implements CharacterModel {
       // 선수마다 시작 위상은 다르되 걷기·조깅·질주는 같은 발 디딤 위상을 쓴다.
       action.time = (key === 'walk' || key === 'jog' || key === 'sprint' ? this.stridePhase : visualRandom.next()) * clip.duration;
       this.actions[key] = action;
+    }
+  }
+
+  /**
+   * 축구화: 원본 몸 모델은 맨발이라 발·발가락 뼈에 신발 모양을 붙인다 (뼈를 따라 움직이므로 IK·동작 그대로).
+   * 바인드 자세에서 발목→발끝 방향과 땅 쪽 방향을 뼈 기준으로 구해 맞춘다.
+   */
+  private addBoots(model: THREE.Object3D): void {
+    model.updateMatrixWorld(true);
+    for (const side of ['L', 'R'] as const) {
+      const foot = this.bones.get(`DEF-foot${side}`), toe = this.bones.get(`DEF-toe${side}`);
+      if (!foot || !toe) continue;
+      const ankle = foot.getWorldPosition(new THREE.Vector3());
+      const tip = toe.localToWorld(new THREE.Vector3(0, 1, 0).multiplyScalar(toeLength(toe)));
+      const along = tip.clone().sub(ankle);
+      const length = along.length();
+      // 신발 중심: 발목과 발끝 사이, 바닥 쪽으로 내려 밑창이 땅에 닿게
+      const center = ankle.clone().addScaledVector(along, 0.5);
+      center.y = Math.max(BOOT.height / 2, ankle.y - 0.03);
+      const boot = new THREE.Mesh(bootGeometry(length + 0.05), BOOT_MATERIAL);
+      boot.castShadow = true;
+      // 월드에서 자리 잡은 뒤 발 뼈의 자식으로 옮긴다
+      boot.position.copy(center);
+      boot.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), along.clone().setY(0).normalize());
+      foot.attach(boot);
     }
   }
 
@@ -308,6 +359,9 @@ export class SkinnedPlayerModel implements CharacterModel {
     const k = 1 - Math.exp(-10 * dt);
     this.gestureW.raise += ((this.gesture === 'raise' ? 1 : 0) - this.gestureW.raise) * k;
     this.gestureW.point += ((this.gesture === 'point' ? 1 : 0) - this.gestureW.point) * k;
+    // 자세 보정: 원본 동작이 목을 앞으로 빼고 있어(거북목) 목을 세우고 머리는 시선이 수평이 되게 살짝 숙인다
+    this.rotateBone('DEF-neck', X_AXIS, NECK_UP);
+    this.rotateBone('DEF-head', X_AXIS, -NECK_UP * 0.5);
     this.applyLegs(dt);
     if (this.gestureW.raise > 0.002) this.rotateBone('DEF-upper_armR', Z_AXIS, -2.75 * this.gestureW.raise);
     if (this.gestureW.point > 0.002) {
