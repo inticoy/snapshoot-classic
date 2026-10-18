@@ -874,6 +874,30 @@ export class Match {
     }
   }
 
+  /**
+   * 공을 손에 든 키퍼 (FC 온라인 키보드): 방향키로 겨누고
+   *  S 던지기 · Z+S 강하게 던지기 · D 또는 A 드롭킥 · Z+A 낮고 빠른 킥 · W 발 앞에 내려놓기 (그 뒤엔 발로 플레이)
+   */
+  private keeperHands(p: Player, cmd: UserCommand): void {
+    const aim = cmd.move.lengthSq() > 0.01 ? cmd.move.clone().setY(0).normalize() : p.facing.clone();
+    if (cmd.move.lengthSq() > 0.01) p.faceTowards(p.pos.x + aim.x, p.pos.z + aim.z);
+    if (this.windups.has(p)) return;
+    const z = cmd.finesse.held;
+    if (cmd.pass.pressed) this.pass(p, aim, z ? 'driven' : 'short', z ? 0.8 : 0.45);
+    else if (cmd.shoot.pressed || cmd.lob.pressed) this.pass(p, aim, z ? 'lowLob' : 'lob', 0.8);
+    else if (cmd.through.pressed) {
+      // 내려놓기: 공을 발 앞 땅에 두고 키퍼가 발로 다룬다
+      this.footPoint(p, tmp2);
+      this.ball.body.position.set(tmp2.x, BALL.radius, tmp2.z);
+      this.ball.body.velocity.set(0, 0, 0);
+      p.basePose = null;
+      return;
+    } else return;
+    p.basePose = null;
+    // 받을 동료가 없어 조작이 키퍼에 남았으면 가까운 필드 선수로
+    if (this.controlled === p) this.switchToNearest();
+  }
+
   private handleUser(dt: number, cmd: UserCommand): void {
     const p = this.controlled;
     const owner = this.ball.owner;
@@ -883,6 +907,10 @@ export class Match {
     const bp = this.ball.position;
     const clearance = !owner && this.ball.lastTouch?.team !== p.team && this.passTarget !== p && Math.hypot(bp.x - p.pos.x, bp.z - p.pos.z) <= COMMAND.clearanceRange && bp.y < 0.8;
     const attacking = this.userAttacking && !clearance;
+    if (p.isKeeper && hasBall && bp.y > 0.4) {
+      this.keeperHands(p, cmd);
+      return;
+    }
     let consumed = false;
     const queued = this.queued;
     if (queued && !hasBall && !oppHasBall && cmd[queued.kind].pressed && this.elapsed - (queued.started ?? -Infinity) <= INPUT.doubleTap + 1e-9) {
@@ -1709,6 +1737,8 @@ export class Match {
     }
     const side = this.sides[best.team];
     if (side.active && !best.isKeeper && !this.practiceControlLocked) side.controlled = best;
+    // 사람 팀 키퍼가 손으로 잡으면 그 키퍼를 직접 조작한다 (S 던지기 · D/A 드롭킥 · W 내려놓기)
+    else if (side.active && best.isKeeper && hands && !this.practiceControlLocked) side.controlled = best;
     // 방향 첫 터치: 받는 순간 누르고 있던 방향으로 공을 잡아 놓는다
     if (best === side.controlled && side.lastMove.lengthSq() > 0.01) best.facing.copy(side.lastMove).setY(0).normalize();
     // 터치 드리블에서는 받은 공의 속도를 죽여 발 앞에 놓아야 한다 (안 그러면 패스 속도 그대로 굴러가 버린다)

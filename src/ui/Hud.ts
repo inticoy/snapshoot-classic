@@ -36,6 +36,7 @@ const SETPIECE_HINTS: Record<string, [string, string][]> = {
   indirect: [['←→', '조준'], ['S', '패스'], ['A', '롱킥']],
   penalty: [['↑↓', '구석 선택'], ['D', '슛 (꾹 = 세기)']],
   keeper: [['↑↓', '차는 순간 다이빙 방향']],
+  hands: [['방향키', '조준'], ['S', '던지기'], ['Z+S', '강하게 던지기'], ['D·A', '드롭킥'], ['W', '내려놓기']],
 };
 const SETPIECE_TITLE: Record<string, string> = {
   throwin: '스로인', corner: '코너킥', goalkick: '골킥', freekick: '프리킥', indirect: '간접 프리킥', penalty: '페널티킥', keeper: '페널티 방어',
@@ -286,7 +287,8 @@ export class Hud {
     const userSetPiece = match.phase === 'setpiece' && sp && sp.taker === match.local.controlled;
     const so = match.shootout;
     const me = match.localTeam;
-    const mode = match.phase === 'shootout' ? (so.turn === me ? 'penalty' : 'keeper')
+    const hands = owner === match.local.controlled && !!owner?.isKeeper && match.ball.position.y > 0.4;
+    const mode = hands ? 'hands' : match.phase === 'shootout' ? (so.turn === me ? 'penalty' : 'keeper')
       : userSetPiece ? sp!.kind
       : match.phase === 'setpiece' && sp?.kind === 'penalty' ? 'keeper'
       : owner && owner.team === me ? 'attack' : owner ? 'defence'

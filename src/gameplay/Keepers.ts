@@ -70,11 +70,16 @@ export class Keepers {
     const m = this.m, ball = m.ball, bp = ball.position, bv = ball.velocity;
     const a = k.attackDir, gx = m.ownGoalX(k.team), state = this.states.get(k)!;
     k.keeperAdvancing = false;
+    // 사람이 조작하는 키퍼가 공을 발 앞에 내려놓았으면 필드 선수처럼 움직인다 (handleUser가 조작)
+    if (ball.owner === k && m.isUserControlled(k) && bp.y < 0.4) return;
     if (ball.owner === k) {
       state.holdTime += dt;
       k.steer(new THREE.Vector3(), false, true, dt);
-      k.faceTowards(k.pos.x + a, k.pos.z);
-      if (state.holdTime > KEEPER.holdTime && !k.busy) {
+      if (!m.isUserControlled(k)) k.faceTowards(k.pos.x + a, k.pos.z);
+      // 사람이 조작하는 키퍼는 직접 배급한다 (6초 규정을 넘기면 자동으로)
+      const human = m.isUserControlled(k);
+      if (human) k.faceTowards(k.pos.x + k.facing.x, k.pos.z + k.facing.z);
+      if (state.holdTime > (human ? 6 : KEEPER.holdTime) && !k.busy) {
         const target = m.teams[k.team].filter((p) => !p.isKeeper).sort((p, q) => m.openness(q) - m.openness(p))[0];
         // 키퍼만 남긴 연습에서는 받을 동료가 없으므로 공을 잡은 채 R 리셋을 기다린다.
         if (target) {
