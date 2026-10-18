@@ -49,7 +49,8 @@ it('실제 F·D 입력의 준비 중 머리 위 타이밍 막대와 초록 창·
 it('실제 GLB의 플레어 오버레이는 일반 킥과 다른 발목·허벅지·상체 회전을 재생한다', async () => {
   const data = readFileSync('public/assets/models/player.glb');
   const parsed = await new Promise<Awaited<ReturnType<GLTFLoader['loadAsync']>>>((resolve, reject) => {
-    new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).parse(data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength), '', resolve, reject);
+    new GLTFLoader().setMeshoptDecoder(MeshoptDecoder)
+    .register((parser) => { (parser as unknown as { loadTexture: () => Promise<null> }).loadTexture = async () => null; return { name: 'skip-textures' }; }).parse(data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength), '', resolve, reject);
   });
   vi.spyOn(GLTFLoader.prototype, 'loadAsync').mockResolvedValue(parsed);
   expect(await loadCharacterAsset('/test-player.glb')).toBe(true);

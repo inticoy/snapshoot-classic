@@ -14,7 +14,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { bakeClip, bodyYaw, sliceSource, type Joint, type PoseSource } from '../src/anim/Retarget';
-import { fbxSource, grfSource, parseGrf, toThree, GRF_FPS, type GrfAnim } from '../src/anim/Sources';
+import { fbxSource, MIXAMO, grfSource, parseGrf, toThree, GRF_FPS, type GrfAnim } from '../src/anim/Sources';
 
 const FPS = 30;
 const ROOT = 'mocap-local';
@@ -22,7 +22,10 @@ const ROOT = 'mocap-local';
 // ---------------------------------------------------------------- 캐릭터
 const glb = readFileSync('public/assets/models/player.glb');
 const gltf = await new Promise<{ scene: THREE.Group }>((res, rej) =>
-  new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).parse(glb.buffer.slice(glb.byteOffset, glb.byteOffset + glb.byteLength), '', res as never, rej));
+  new GLTFLoader().setMeshoptDecoder(MeshoptDecoder)
+    // Node에는 이미지 디코더가 없다. 뼈대만 쓰므로 텍스처는 건너뛴다
+    .register((parser) => { (parser as unknown as { loadTexture: () => Promise<null> }).loadTexture = async () => null; return { name: 'skip-textures' }; })
+    .parse(glb.buffer.slice(glb.byteOffset, glb.byteOffset + glb.byteLength), '', res as never, rej));
 const character = gltf.scene;
 character.updateMatrixWorld(true);
 
@@ -170,6 +173,59 @@ const ROHR_FULL: [string, string, [number, number], MotionKind, number][] = [
 for (const [name, file, w, kind, key] of ROHR_FULL) {
   add({ name, kind, source: 'mocap', side: null, speed: 'idle', key, ballAngle: 0, power: 1, height: 0 }, sliceSource(rohr(file), { start: w[0], end: w[1] }), false);
 }
+
+// ---------------------------------------------------------------- Mixamo (축구 동작, 저장소 밖 mocap-local/mixamo/anims)
+// 파일 이름 앞 번호로 고른다 (scripts/dev/mixamo-fetch.mjs가 검색 결과 순서대로 붙인다). 좌우 반전은 여기서 굽는다
+function mixamo(prefix: string): PoseSource | null {
+  const dir = join(ROOT, 'mixamo', 'anims');
+  let file: string | undefined;
+  try { file = readdirSync(dir).find((f) => f.startsWith(`${prefix}_`) && f.endsWith('.fbx') && !f.includes('_mirror')); } catch { return null; }
+  if (!file) return null;
+  const b = readFileSync(join(dir, file));
+  const obj = fbx.parse(b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength), '');
+  return fbxSource(file, obj, obj.animations[0], MIXAMO);
+}
+const fasterToe = (src: PoseSource): Joint => {
+  const l = kickContact(src, 'lToe', 0.1, src.duration - 0.1), r = kickContact(src, 'rToe', 0.1, src.duration - 0.1);
+  return l.v > r.v ? 'lToe' : 'rToe';
+};
+const MIXAMO_KICKS: [string, string, MotionKind, Entry['speed']][] = [
+  ['05', 'mx_pass', 'pass', 'idle'], ['12', 'mx_kick', 'shot', 'idle'], ['08', 'mx_penalty', 'shot', 'walk'],
+  ['39', 'mx_strike_jog', 'shot', 'walk'], ['37', 'mx_chip', 'lob', 'idle'],
+];
+let mxCount = 0;
+for (const [prefix, name, kind, speed] of MIXAMO_KICKS) {
+  const src = mixamo(prefix);
+  if (!src) continue;
+  const toe = fasterToe(src);
+  const c = kickContact(src, toe, 0.1, src.duration - 0.1);
+  const body = bodyYaw(src.sample(0));
+  for (const mirror of [false, true]) add({ name, kind, source: 'mocap', side: toe === 'lToe' ? 'L' : 'R', speed, key: c.t, ballAngle: relAngle(c.dir, body), power: 1, height: 0.1 }, src, mirror);
+  mxCount++;
+  console.log(`${name}: 터치 ${c.t.toFixed(2)}s`);
+}
+for (const [prefix, name] of [['48', 'mx_dive_1'], ['60', 'mx_dive_2']] as const) {
+  const src = mixamo(prefix);
+  if (!src) continue;
+  const m = diveMoment(src);
+  for (const mirror of [false, true]) add({ name, kind: 'dive', source: 'mocap', side: m.side, speed: 'idle', key: m.t, ballAngle: 0, power: 1, height: 0.5 }, src, mirror);
+  mxCount++;
+}
+const MIXAMO_FULL: [string, string, MotionKind, number][] = [
+  ['44', 'mx_catch_1', 'save', 0.5], ['46', 'mx_catch_2', 'save', 0.5], ['57', 'mx_catch_3', 'save', 0.5],
+  ['55', 'mx_block_1', 'save', 0.5], ['56', 'mx_block_2', 'save', 0.5],
+  ['02', 'mx_trip', 'fall', 0.3], ['38', 'mx_stand_up', 'getup', 0], ['35', 'mx_throw_in', 'throw', 0.6],
+  ['20', 'mx_receive_1', 'trap', 0.4], ['23', 'mx_receive_2', 'trap', 0.4],
+];
+for (const [prefix, name, kind, keyFrac] of MIXAMO_FULL) {
+  const src = mixamo(prefix);
+  if (!src) continue;
+  for (const mirror of kind === 'throw' || kind === 'getup' ? [false] : [false, true]) {
+    add({ name, kind, source: 'mocap', side: null, speed: 'idle', key: src.duration * keyFrac, ballAngle: 0, power: 1, height: kind === 'save' ? 1 : 0.1 }, src, mirror);
+  }
+  mxCount++;
+}
+console.log(`Mixamo ${mxCount}개 (+좌우 반전)`);
 
 // ---------------------------------------------------------------- Google Research Football
 function files(dir: string): string[] {

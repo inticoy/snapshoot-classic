@@ -12,6 +12,7 @@ import { simulation } from './helpers';
 beforeAll(async () => {
   const glb = readFileSync('public/assets/models/player.glb');
   const gltf = await new Promise<GLTF>((resolve, reject) => new GLTFLoader().setMeshoptDecoder(MeshoptDecoder)
+    .register((parser) => { (parser as unknown as { loadTexture: () => Promise<null> }).loadTexture = async () => null; return { name: 'skip-textures' }; })
     .parse(glb.buffer.slice(glb.byteOffset, glb.byteOffset + glb.byteLength), '', resolve, reject));
   vi.spyOn(GLTFLoader.prototype, 'loadAsync').mockResolvedValue(gltf);
   expect(await loadCharacterAsset('/assets/models/player.glb')).toBe(true);

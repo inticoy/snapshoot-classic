@@ -11,6 +11,7 @@ import { Random, visualRandom } from '../../src/core/Random';
 
 const glb = readFileSync('public/assets/models/player.glb');
 const gltf = await new Promise<GLTF>((resolve, reject) => new GLTFLoader().setMeshoptDecoder(MeshoptDecoder)
+    .register((parser) => { (parser as unknown as { loadTexture: () => Promise<null> }).loadTexture = async () => null; return { name: 'skip-textures' }; })
   .parse(glb.buffer.slice(glb.byteOffset, glb.byteOffset + glb.byteLength), '', resolve, reject));
 GLTFLoader.prototype.loadAsync = async () => gltf;
 await loadCharacterAsset('/assets/models/player.glb');

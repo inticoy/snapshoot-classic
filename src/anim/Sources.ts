@@ -12,13 +12,29 @@ const ROKOKO: Record<Joint, string> = {
   rHip: 'RightThigh', rKnee: 'RightShin', rAnkle: 'RightFoot', rToe: 'RightToeTip',
 };
 
+/** Mixamo 뼈대 → 공통 관절. 뼈 이름 앞에 'mixamorig5:' 같은 접두어가 붙어 있어 끝부분으로 찾는다 */
+export const MIXAMO: Record<Joint, string> = {
+  hips: 'Hips', spine: 'Spine', chest: 'Spine2', neck: 'Neck', head: 'Head', headTop: 'HeadTop_End',
+  lShoulder: 'LeftShoulder', lArm: 'LeftArm', lElbow: 'LeftForeArm', lHand: 'LeftHand', lHandTip: 'LeftHandMiddle1',
+  rShoulder: 'RightShoulder', rArm: 'RightArm', rElbow: 'RightForeArm', rHand: 'RightHand', rHandTip: 'RightHandMiddle1',
+  lHip: 'LeftUpLeg', lKnee: 'LeftLeg', lAnkle: 'LeftFoot', lToe: 'LeftToe_End',
+  rHip: 'RightUpLeg', rKnee: 'RightLeg', rAnkle: 'RightFoot', rToe: 'RightToe_End',
+};
+
+function findJoint(root: THREE.Object3D, name: string, bySuffix: boolean): THREE.Object3D | undefined {
+  if (!bySuffix) return root.getObjectByName(name);
+  let found: THREE.Object3D | undefined;
+  root.traverse((o) => { if (!found && (o.name === name || o.name.endsWith(`:${name}`) || o.name.endsWith(name) && /mixamorig\d*$/.test(o.name.slice(0, -name.length)))) found = o; });
+  return found;
+}
+
 /** FBXLoader로 읽은 장면 + 첫 클립. 같은 이름이 둘이면 먼저 나오는(위쪽) 노드가 실제 관절이다 */
-export function fbxSource(name: string, root: THREE.Object3D, clip: THREE.AnimationClip): PoseSource {
+export function fbxSource(name: string, root: THREE.Object3D, clip: THREE.AnimationClip, map: Record<Joint, string> = ROKOKO): PoseSource {
   const mixer = new THREE.AnimationMixer(root);
   mixer.clipAction(clip).play();
   const nodes = new Map<Joint, THREE.Object3D>();
-  for (const [joint, node] of Object.entries(ROKOKO) as [Joint, string][]) {
-    const o = root.getObjectByName(node);
+  for (const [joint, node] of Object.entries(map) as [Joint, string][]) {
+    const o = findJoint(root, node, map !== ROKOKO);
     if (!o) throw new Error(`FBX에 ${node} 관절이 없음`);
     nodes.set(joint, o);
   }

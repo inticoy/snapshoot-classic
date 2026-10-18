@@ -84,6 +84,13 @@ const CLIP_NAMES: Record<Clip, string> = {
 // 클립 원래 속도에 해당하는 이동 속도 (m/s) — 발 미끄러짐을 줄이기 위한 재생 속도 보정
 const CLIP_SPEED = { walk: 1.6, jog: 4.2, sprint: 7.2 };
 
+/** 옷 부위별로 나뉜 캐릭터(Mixamo)의 재질 이름 → 부위 번호. 0이면 예전처럼 한 메시를 높이로 나눠 칠한다 */
+const PART_INDEX: Record<string, number> = { skin: 1, shirt: 2, shorts: 3, socks: 4, boots: 5, hair: 6 };
+function partOf(m: THREE.Mesh): number {
+  const name = ((m.material as THREE.Material).name ?? '').replace(/\.\d+$/, '');
+  return PART_INDEX[name] ?? 0;
+}
+
 /** 축구화 크기 (m) */
 const BOOT = { width: 0.1, height: 0.085 };
 const BOOT_MATERIAL = new THREE.MeshStandardMaterial({ color: 0x15171c, roughness: 0.45, metalness: 0.05 });
@@ -162,18 +169,26 @@ export class SkinnedPlayerModel implements CharacterModel {
     this.root.add(this.pivot);
     this.pivot.add(model);
 
-    const material = makeKitMaterial(colors);
+    const materials = new Map<number, THREE.Material>();
+    let hasBoots = false;
     model.traverse((o) => {
       const m = o as THREE.SkinnedMesh;
       if (m.isSkinnedMesh) {
-        m.material = material;
+        const part = partOf(m);
+        hasBoots ||= part === 5;
+        // 맨살(얼굴·팔다리)은 캐릭터 텍스처 그대로, 옷·머리는 팀 색
+        if (part !== 1) {
+          if (!materials.has(part)) materials.set(part, makeKitMaterial(colors, part));
+          m.material = materials.get(part)!;
+        }
         m.castShadow = true;
         m.frustumCulled = false;
       }
       if ((o as THREE.Bone).isBone) this.bones.set(o.name, o as THREE.Bone);
     });
 
-    this.addBoots(model);
+    // 맨발 몸 모델이면 신발을 붙인다 (옷이 나뉜 캐릭터는 신발 메시가 있다)
+    if (!hasBoots) this.addBoots(model);
 
     this.mixer = new THREE.AnimationMixer(model);
     for (const [key, name] of Object.entries(CLIP_NAMES) as [Clip, string][]) {
@@ -638,7 +653,7 @@ export class SkinnedPlayerModel implements CharacterModel {
  * 등번호·이름·가슴 번호·얼굴은 선수별 데칼 아틀라스(KitDecal)를 좌표 투영으로 입힌다.
  * 모델은 +Z를 바라본다 (등 = -Z). 수치는 메시 바인드 포즈 실측값.
  */
-function makeKitMaterial(colors: ModelColors): THREE.MeshStandardMaterial {
+function makeKitMaterial(colors: ModelColors, part = 0): THREE.MeshStandardMaterial {
   const mat = new THREE.MeshStandardMaterial({ roughness: 0.65, metalness: 0 });
   const decal = colors.decal && typeof document !== 'undefined' ? makeDecalTexture(colors.decal) : null;
   const uniforms = {
@@ -655,6 +670,7 @@ function makeKitMaterial(colors: ModelColors): THREE.MeshStandardMaterial {
     uKeeper: { value: colors.keeper ? 1 : 0 },
     uDecal: { value: decal },
     uHasDecal: { value: decal ? 1 : 0 },
+    uPart: { value: part },
   };
   mat.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, uniforms);
@@ -667,7 +683,7 @@ function makeKitMaterial(colors: ModelColors): THREE.MeshStandardMaterial {
         `#include <common>
 varying vec3 vKit;
 uniform vec3 uShirt, uShorts, uSocks, uSkin, uHair, uBoots, uTrim, uGloves;
-uniform float uStyle, uHairStyle, uKeeper, uHasDecal;
+uniform float uStyle, uHairStyle, uKeeper, uHasDecal, uPart;
 uniform sampler2D uDecal;
 
 bool isHair(vec3 p) {
@@ -724,15 +740,31 @@ vec3 kitColor(vec3 p) {
   if (p.y > 0.6) return (uStyle > 0.5 && ax > 0.185 && ax < 0.205) ? uTrim : uShorts; // 바지 옆선
   if (p.y > 0.1) return uSocks;
   return uBoots;
+}
+
+// 옷이 나뉜 캐릭터: 메시마다 부위가 정해져 있다 (상의 무늬·깃만 위치로)
+vec3 partColor(vec3 p) {
+  float ax = abs(p.x);
+  if (uPart < 2.5) {
+    if (uKeeper < 0.5 && ax > 0.42) return uSkin;
+    if (p.y > 1.5 && ax < 0.1) return uTrim;
+    if (uStyle > 0.5 && uStyle < 1.5 && p.y > 1.42 && ax > 0.2) return uTrim;
+    if (uStyle > 1.5 && fract(p.x * 9.0 + 0.5) < 0.2) return uTrim;
+    return uShirt;
+  }
+  if (uPart < 3.5) return (uStyle > 0.5 && ax > 0.17 && ax < 0.19) ? uTrim : uShorts;
+  if (uPart < 4.5) return uSocks;
+  if (uPart < 5.5) return uBoots;
+  return uHair;
 }`,
       )
       .replace(
         '#include <color_fragment>',
         `#include <color_fragment>
 vec4 dec = decalAt(vKit);
-diffuseColor.rgb = mix(kitColor(vKit), dec.rgb, dec.a);`,
+diffuseColor.rgb = mix(uPart > 0.5 ? partColor(vKit) : kitColor(vKit), dec.rgb, uPart < 0.5 || uPart > 1.5 && uPart < 2.5 ? dec.a : 0.0);`,
       );
   };
-  mat.customProgramCacheKey = () => 'kit-v7';
+  mat.customProgramCacheKey = () => 'kit-v8';
   return mat;
 }

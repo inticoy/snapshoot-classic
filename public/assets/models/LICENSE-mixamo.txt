@@ -1,0 +1,5 @@
+player.glb body, clothes and hair: Mixamo character "Shannon" (Adobe Mixamo), rebound to the existing DEF-* skeleton.
+Mixamo characters and animations may be used royalty-free in games and projects; the raw Mixamo files are not redistributed here.
+Rebuild: blender -b --python scripts/character/build_player_mixamo.py -- <old player.glb> <Shannon .fbx> public/assets/models/player.glb
+Soccer motions in public/assets/motions.json (ids mx_*) are retargeted from Mixamo animations by scripts/bake-motions.ts.
+Skeleton and locomotion clips: Quaternius (see LICENSE-quaternius.txt).

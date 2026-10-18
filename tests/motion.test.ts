@@ -147,7 +147,8 @@ it('실제 GLB 부모 변환으로도 낮아지고 월드 수평 이동은 제�
   const { vi } = await import('vitest');
   const glb = readFileSync('public/assets/models/player.glb');
   const gltf = await new Promise<{ scene: THREE.Group }>((resolve, reject) => {
-    new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).parse(glb.buffer.slice(glb.byteOffset, glb.byteOffset + glb.byteLength), '', resolve as never, reject);
+    new GLTFLoader().setMeshoptDecoder(MeshoptDecoder)
+    .register((parser) => { (parser as unknown as { loadTexture: () => Promise<null> }).loadTexture = async () => null; return { name: 'skip-textures' }; }).parse(glb.buffer.slice(glb.byteOffset, glb.byteOffset + glb.byteLength), '', resolve as never, reject);
   });
   const data = JSON.parse(readFileSync('public/assets/motions.json', 'utf8'));
   vi.stubGlobal('fetch', async () => ({ ok: true, json: async () => data }));
