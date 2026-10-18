@@ -973,7 +973,7 @@ export class Match {
     this.switchAimHeld = aimNow;
 
     const move = cmd.move.clone();
-    // 치고 달리기: 질주 중 Shift 짧게(긴 녹온) / E 두 번(짧은 녹온) / E 세 번(아주 긴 녹온)
+    // 치고 달리기: 움직이는 중 Shift 짧게(짧은 녹온, EE보다 짧다) / E 두 번(녹온) / E 세 번(아주 긴 녹온)
     this.knockTimer = Math.max(0, this.knockTimer - dt);
     if (cmd.sprint && !this.prevSprint) {
       this.sprintTaps = this.elapsed - this.lastSprintTap < 0.3 ? this.sprintTaps + 1 : 1;
@@ -982,10 +982,10 @@ export class Match {
     this.prevSprint = cmd.sprint;
     if (cmd.skill?.pressed) this.shiftDownAt = this.elapsed;
     if (hasBall && attacking && !this.charge && !this.skills.isActive(p) && this.kickoffTaker !== p) {
-      const shiftTap = cmd.skill?.released && cmd.sprint && this.elapsed - this.shiftDownAt < 0.25 && (cmd.skillMove?.lengthSq() ?? 0) < 0.01;
+      const shiftTap = cmd.skill?.released && cmd.move.lengthSq() > 0.04 && this.elapsed - this.shiftDownAt < 0.25 && (cmd.skillMove?.lengthSq() ?? 0) < 0.01;
       const eTaps = this.elapsed - this.lastSprintTap > 0.3 && this.sprintTaps >= 2 ? this.sprintTaps : 0;
       if (shiftTap || eTaps) {
-        this.knockOn(p, shiftTap ? 5 : eTaps >= 3 ? 7 : 3.2, move);
+        this.knockOn(p, shiftTap ? 2.2 : eTaps >= 3 ? 7 : 3.2, move);
         this.sprintTaps = 0;
       }
     }

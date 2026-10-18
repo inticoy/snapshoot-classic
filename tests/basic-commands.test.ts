@@ -29,7 +29,7 @@ function sprintGap(knock: boolean) {
   return { maxGap, owned: match.ball.owner === p };
 }
 
-it('질주 중 Shift 짧게 = 녹온: 그냥 질주보다 공을 2m 이상 더 길게 치고 소유를 유지한다', () => {
+it('Shift 짧게 = 짧은 녹온(EE보다 짧다): 그냥 질주보다 공을 2m 이상 더 길게 치고 소유를 유지한다', () => {
   const plain = sprintGap(false), knock = sprintGap(true);
   expect(knock.maxGap).toBeGreaterThan(plain.maxGap + 2);
   expect(knock.owned).toBe(true);
