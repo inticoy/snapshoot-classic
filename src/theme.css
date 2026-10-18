@@ -374,3 +374,12 @@ kbd {
 
 /* 온라인: 점수판에서 내 팀 */
 .sb-me { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
+
+/* 온라인 상태 줄: 핑·일시정지 (오른쪽 위 구석에 작게) */
+.net-status { position: fixed; top: max(6px, env(safe-area-inset-top)); right: max(8px, env(safe-area-inset-right)); z-index: 6; display: flex; gap: 8px; align-items: center; font: 600 11px/1 system-ui, sans-serif; color: #fff; pointer-events: none; text-shadow: 0 1px 2px #000a; }
+.net-ping { opacity: .85; font-variant-numeric: tabular-nums; }
+.net-ping.good { color: #5fe08a; }
+.net-ping.ok { color: #f2d14b; }
+.net-ping.bad { color: #ff6b5e; }
+.net-paused { background: #000a; padding: 4px 8px; border-radius: 4px; font-size: 12px; }
+.touch-device .net-status { top: calc(50px + env(safe-area-inset-top)); }

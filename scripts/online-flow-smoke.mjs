@@ -11,10 +11,10 @@ const relay = process.env.RELAY ?? 'https://snapshoot-relay.woojoo.workers.dev';
 let code = '';
 const url = new URL(`?quick&relay=${encodeURIComponent(relay)}`, base).href;
 const browser = await chromium.launch({ executablePath: await chromePath() });
-async function open(assist, at = url) {
-  const ctx = await browser.newContext({ viewport: { width: 640, height: 360 } });
+async function open(assist, at = url, reuse = null) {
+  const ctx = reuse ?? await browser.newContext({ viewport: { width: 640, height: 360 } });
   // 설정이 다른 두 사람: 한쪽은 수동 보정·이동 보조 없음
-  await ctx.addInitScript((a) => localStorage.setItem('snapshoot-classic:settings', JSON.stringify(a)), assist);
+  if (!reuse) await ctx.addInitScript((a) => localStorage.setItem('snapshoot-classic:settings', JSON.stringify(a)), assist);
   const page = await ctx.newPage();
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
@@ -34,19 +34,30 @@ const hold = async (p, keys, ms) => { for (const k of keys) await p.page.keyboar
 
 // 1) 서로 다른 설정으로 조작
 await Promise.all([hold(a, ['ArrowRight', 'KeyS'], 4000), hold(b, ['ArrowLeft', 'KeyE'], 4000)]);
-// 2) a가 일시정지 → 경기는 계속 (b의 틱이 늘어난다)
+// 2) a가 일시정지 → 둘 다 멈추고, 핑과 남은 시간이 보인다. 재개하면 둘 다 다시 진행
 await a.page.keyboard.press('Escape');
+await b.page.waitForFunction(() => /상대 일시정지/.test(document.querySelector('.net-status')?.textContent ?? ''), null, { timeout: 5000 });
 const before = (await state(b)).tick;
-await hold(b, ['ArrowUp'], 3000);
+await hold(b, ['ArrowUp'], 2000);
 const afterPause = (await state(b)).tick;
-assert.ok(afterPause - before > 240, `일시정지 중에도 진행해야 함 (${before}→${afterPause})`);
+assert.ok(afterPause - before < 30, `일시정지 중에는 둘 다 멈춰야 함 (${before}→${afterPause})`);
+assert.match(await a.page.locator('.net-status').textContent(), /\d+ms/, '핑 표시');
 assert.equal(await a.page.evaluate(() => window.__game.game.state), 'paused');
 await a.page.keyboard.press('Escape');
+await b.page.waitForTimeout(1500);
+assert.ok((await state(b)).tick - afterPause > 120, '재개 뒤 다시 진행');
+assert.equal(await a.page.evaluate(() => window.__game.game.pausesLeft), 2, '일시정지 횟수 차감');
 // 3) b가 나갔다가 같은 링크로 다시 들어온다
 const bTeam = (await state(b)).team;
-await b.ctx.close();
+await b.page.close();
 await a.page.waitForTimeout(2500);
-b = await open({ passAssist: 'assisted', shotAssist: 'assisted', moveAssist: 'high' }, roomUrl);
+// 방 코드만 아는 다른 사람은 빈자리를 차지하지 못한다
+const intruder = await open({ passAssist: 'assisted', shotAssist: 'assisted', moveAssist: 'high' }, roomUrl);
+await intruder.page.waitForTimeout(5000);
+assert.equal(await intruder.page.evaluate(() => !!window.__game?.game?.lockstep), false, '토큰 없는 사람은 못 들어옴');
+await intruder.ctx.close();
+// 같은 브라우저(토큰 보관)로는 다시 들어온다
+b = await open({ passAssist: 'assisted', shotAssist: 'assisted', moveAssist: 'high' }, roomUrl, b.ctx);
 await b.page.waitForFunction(() => window.__game?.game?.lockstep?.tick > 300, null, { timeout: 30000 });
 await Promise.all([hold(a, ['ArrowDown', 'KeyD'], 3000), hold(b, ['ArrowRight'], 3000)]);
 await a.page.waitForTimeout(2000);

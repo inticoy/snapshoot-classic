@@ -232,11 +232,12 @@ export class Hud {
     const me = match.local.controlled;
     // 오른쪽: 상대 공 소유자, 없으면 공에 가장 가까운 상대
     const owner = match.ball.owner;
-    let opp: Player | null = owner && owner.team === 1 ? owner : null;
+    const them = 1 - match.localTeam;
+    let opp: Player | null = owner && owner.team === them ? owner : null;
     if (!opp) {
       const b = match.ball.position;
       let best = Infinity;
-      for (const o of match.teams[1]) {
+      for (const o of match.teams[them]) {
         if (o.isKeeper) continue;
         const d = Math.hypot(o.pos.x - b.x, o.pos.z - b.z);
         if (d < best) {

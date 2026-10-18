@@ -9,9 +9,9 @@ import type { UserCommand } from '../gameplay/Match';
  *  [4] 개인기 방향, [5] 개인기 크기
  * 방향은 이미 카메라와 무관한 월드 좌표다(Game.buildCommand에서 변환).
  */
-export const BUTTONS = ['shoot', 'pass', 'through', 'lob', 'modifier', 'finesse', 'contain', 'tackle', 'skill'] as const;
+export const BUTTONS = ['shoot', 'pass', 'through', 'lob', 'modifier', 'finesse', 'contain', 'tackle', 'skill', 'power'] as const;
 type ButtonKey = (typeof BUTTONS)[number];
-const SPRINT_BIT = 1 << 15;
+const KEYBOARD_KICK_BIT = 1 << 14, SPRINT_BIT = 1 << 15;
 export const COMMAND_BYTES = 6;
 
 function packVec(v: THREE.Vector3 | undefined, out: Uint8Array, at: number): void {
@@ -27,8 +27,12 @@ function unpackVec(buf: Uint8Array, at: number, out: THREE.Vector3): THREE.Vecto
 }
 
 export function encodeCommand(cmd: UserCommand, out = new Uint8Array(COMMAND_BYTES)): Uint8Array {
-  let bits = cmd.sprint ? SPRINT_BIT : 0;
-  BUTTONS.forEach((k, i) => { if ((cmd[k as keyof UserCommand] as ButtonState | undefined)?.held) bits |= 1 << i; });
+  let bits = (cmd.sprint ? SPRINT_BIT : 0) | (cmd.keyboardKick ? KEYBOARD_KICK_BIT : 0);
+  // 한 스텝 안에 눌렀다 뗀 짧은 탭도 이 틱은 누름으로 보낸다 (다음 틱에 뗌이 된다)
+  BUTTONS.forEach((k, i) => {
+    const b = cmd[k as keyof UserCommand] as ButtonState | undefined;
+    if (b?.held || b?.pressed) bits |= 1 << i;
+  });
   out[0] = bits & 255;
   out[1] = bits >> 8;
   packVec(cmd.move, out, 2);
@@ -46,7 +50,7 @@ export class CommandDecoder {
       const now = !!(bits & (1 << i)), before = !!(this.last & (1 << i));
       return { held: now, pressed: now && !before, released: !now && before };
     };
-    const cmd = { move: unpackVec(buf, 2, new THREE.Vector3()), sprint: !!(bits & SPRINT_BIT), skillMove: unpackVec(buf, 4, new THREE.Vector3()) } as UserCommand;
+    const cmd = { move: unpackVec(buf, 2, new THREE.Vector3()), sprint: !!(bits & SPRINT_BIT), keyboardKick: !!(bits & KEYBOARD_KICK_BIT), skillMove: unpackVec(buf, 4, new THREE.Vector3()) } as UserCommand;
     BUTTONS.forEach((k: ButtonKey, i) => { (cmd as unknown as Record<string, ButtonState>)[k] = button(i); });
     this.last = bits;
     return cmd;

@@ -20,3 +20,16 @@ it('명령은 6바이트로 오가고, 눌림·뗌 순간은 직전 틱과 비�
   const zero = dec.decode(encodeCommand(command()));
   expect(zero.move.length()).toBe(0);
 });
+
+it('파워슛(F)·키보드 킥 표시도 보내고, 한 스텝 안의 짧은 탭도 잃지 않는다', () => {
+  const dec = new CommandDecoder();
+  const a = command();
+  a.power = { held: true, pressed: true, released: false };
+  a.keyboardKick = true;
+  a.pass = { held: false, pressed: true, released: true };
+  const r = dec.decode(encodeCommand(a));
+  expect(r.power?.held).toBe(true);
+  expect(r.keyboardKick).toBe(true);
+  expect(r.pass.pressed).toBe(true);
+  expect(dec.decode(encodeCommand(command())).pass.released).toBe(true);
+});

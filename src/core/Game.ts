@@ -84,7 +84,11 @@ export class Game {
     const online = options.online;
     this.online = online ?? null;
     // 온라인: 물리 프리셋도 방장(팀 0) 것을 양쪽에 (공 궤적이 달라지면 경기가 갈라진다)
-    if (online) setActivePhysics(online.start.prefs[0].physics === 'real' ? 'real' : 'arcade');
+    if (online) {
+      setActivePhysics(online.start.prefs[0].physics === 'real' ? 'real' : 'arcade');
+      // 월드는 필드 초기화 때 내 설정으로 만들어졌으니 방장 값으로 다시 맞춘다
+      this.physics.applyPreset(activePhysics());
+    }
     this.match = new Match(this.physics, online
       ? {
         random: new Random(online.start.seed), userTeams: [true, true], localTeam: online.start.team,
@@ -100,9 +104,29 @@ export class Game {
       online.session.onDesync = (tick) => {
         if (this.resyncing) return;
         this.resyncing = true;
-        this.hud.tick(`동기화 복구 중 (틱 ${tick})`, 3);
         online.session.close();
+        // 같은 기록으로 다시 계산해도 또 어긋나면(원인이 결정적이면) 새로고침이 끝없이 돌므로 두 번까지만
+        const key = `snapshoot-resync:${online.session.code}`;
+        const tries = (() => { try { return Number(sessionStorage.getItem(key)) || 0; } catch { return 0; } })();
+        if (tries >= 2) {
+          this.netNotice('동기화를 복구하지 못했어요 · 경기를 끝낼게요');
+          setTimeout(() => this.leaveOnline(), 4000);
+          return;
+        }
+        try { sessionStorage.setItem(key, String(tries + 1)); } catch { /* 저장 못 해도 진행 */ }
+        this.hud.tick(`동기화 복구 중 (틱 ${tick})`, 3);
         setTimeout(() => location.reload(), 600);
+      };
+      online.session.onClosed = () => {
+        if (this.resyncing) return;
+        this.netNotice('서버 연결이 끊겼어요 · 다시 연결할게요');
+        setTimeout(() => location.reload(), 2500);
+      };
+      online.session.onPause = (p) => {
+        this.netPause = p ? { team: p.team, until: performance.now() + p.ms } : null;
+        if (p) this.pausesLeft = p.left[online.start.team] ?? this.pausesLeft;
+        if (!p && this.menu.visible && this.state === 'paused') this.resume();
+        if (p && p.team !== online.start.team) this.hud.tick('상대가 경기를 멈췄어요', 2);
       };
       online.session.onOpponentLeft = () => this.hud.tick('상대 연결이 끊겼어요 · 같은 링크로 다시 들어오면 이어서 해요', 6);
       online.session.onOpponentBack = () => this.hud.tick('상대가 돌아왔어요', 2.5);
@@ -157,6 +181,7 @@ export class Game {
       const dt = Math.min(0.1, (now - this.last) / 1000);
       this.last = now;
       this.frame(dt);
+      this.updateNetStatus();
       requestAnimationFrame(loop);
     };
     requestAnimationFrame(loop);
@@ -327,6 +352,9 @@ export class Game {
   }
 
   private openPauseMenu(): void {
+    // 온라인: 남은 횟수가 있으면 둘 다 멈춘다 (서버가 횟수·시간을 확인해 양쪽에 알린다)
+    const canPause = !!this.online && !this.netPause && this.pausesLeft > 0;
+    if (canPause) this.online!.session.requestPause(true);
     this.state = 'paused';
     this.cancelCharge();
     this.input.clearVirtual();
@@ -337,7 +365,7 @@ export class Game {
       panel: () => statsPanel(this.match.stats, [h, a], `경기 진행 ${this.clockText()}`),
       onBack: () => this.resume(),
       items: this.lockstep ? [
-        { id: 'resume', label: '계속하기 (온라인 경기는 멈추지 않아요)', onSelect: () => this.resume() },
+        { id: 'resume', label: canPause ? `계속하기 (일시정지 남은 횟수 ${this.pausesLeft - 1}회 · 최대 60초)` : this.netPause ? '계속하기' : '계속하기 (일시정지를 다 써서 경기는 계속돼요)', onSelect: () => this.resume() },
         { id: 'quit', label: '경기 나가기', onSelect: () => this.leaveOnline() },
       ] : [
         { id: 'resume', label: '계속하기', onSelect: () => this.resume() },
@@ -402,7 +430,10 @@ export class Game {
   /** 온라인 스텝 하나: 내 입력 예약 + 두 입력이 다 온 틱 계산. 못 했으면 false (상대 입력 대기) */
   private stepOnline(cmd: UserCommand): boolean {
     const ls = this.lockstep!;
-    if (ls.ready) ls.pushLocal(cmd);
+    // 일시정지 중이거나 재접속 기록을 아직 다 못 받았으면 진행하지 않는다
+    if (this.netPause || this.online!.session.resuming) return false;
+    // 내 입력은 늘 지금 틱 + delay까지 예약해 둔다 (재접속 따라잡기 뒤에도 간격이 벌어진 채 멈추지 않게)
+    while (ls.scheduled < ls.tick + ls.delay) ls.pushLocal(cmd);
     if (!ls.step()) {
       this.waiting += PHYSICS.step;
       if (this.waiting > 0.5 && this.waiting - PHYSICS.step <= 0.5) this.hud.tick('상대 입력을 기다리는 중…', 1.5);
@@ -412,7 +443,14 @@ export class Game {
     // 재접속 등으로 계산할 틱이 쌓여 있으면 한 프레임에 많이 따라잡는다 (입력은 이미 기록에 있다)
     // 평소에도 입력 지연만큼 몇 틱은 준비돼 있으므로, 그보다 훨씬 많이 밀렸을 때만 (재접속 등)
     const behind = ls.backlog - ls.delay * 2;
-    if (behind > 30) for (let i = 0; i < Math.min(600, behind); i++) if (!ls.step()) break;
+    if (behind > 30) {
+      // 지나간 장면의 골·휘슬·소리를 한꺼번에 재생하지 않게 따라잡는 동안의 이벤트는 버린다
+      for (let i = 0; i < Math.min(600, behind); i++) {
+        this.match.events.length = 0;
+        if (!ls.step()) break;
+      }
+      this.hud.tick('경기 따라잡는 중…', 0.5);
+    }
     return true;
   }
 
@@ -435,6 +473,32 @@ export class Game {
 
   private waiting = 0;
   private resyncing = false;
+  /** 온라인 일시정지 (둘 다 멈춤). until = 자동 재개 시각 */
+  private netPause: { team: 0 | 1; until: number } | null = null;
+  private pausesLeft = 3;
+  private netEl: HTMLElement | null = null;
+
+  /** 온라인 상태 줄: 핑, 일시정지 남은 시간 (화면 구석에 작게) */
+  private updateNetStatus(): void {
+    const s = this.online?.session;
+    if (!s) return;
+    if (!this.netEl) {
+      this.netEl = document.createElement('div');
+      this.netEl.className = 'net-status';
+      document.body.append(this.netEl);
+    }
+    const ms = s.rtt === null ? null : Math.round(s.rtt);
+    const level = ms === null ? '' : ms < 60 ? 'good' : ms < 120 ? 'ok' : 'bad';
+    const ping = `<span class="net-ping ${level}">● ${ms === null ? '—' : `${ms}ms`}</span>`;
+    const p = this.netPause;
+    const pause = p ? `<b class="net-paused">${p.team === this.online!.start.team ? '일시정지' : '상대 일시정지'} ${Math.max(0, Math.ceil((p.until - performance.now()) / 1000))}초</b>` : '';
+    const html = ping + pause;
+    if (this.netEl.innerHTML !== html) this.netEl.innerHTML = html;
+  }
+
+  private netNotice(text: string): void {
+    this.hud.tick(text, 6);
+  }
   /** 연습장 느린 화면 (경기·온라인은 늘 1) */
   private timeScale = 1;
 
@@ -466,6 +530,8 @@ export class Game {
   }
 
   private resume(): void {
+    // 내가 건 온라인 일시정지면 풀기
+    if (this.online && this.netPause?.team === this.online.start.team) this.online.session.requestPause(false);
     this.menu.close();
     this.state = 'playing';
     this.hud.show(true);

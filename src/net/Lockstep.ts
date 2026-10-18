@@ -20,7 +20,7 @@ export class Lockstep {
   /** 다음에 계산할 틱 */
   tick = 0;
   /** 내 입력을 마지막으로 예약한 틱 */
-  private scheduled: number;
+  scheduled: number;
   private readonly frames = new Map<number, [Uint8Array | null, Uint8Array | null]>();
   private readonly decoders = [new CommandDecoder(), new CommandDecoder()] as const;
   private readonly remoteHashes = new Map<number, number>();
@@ -57,14 +57,18 @@ export class Lockstep {
 
   /** 상대(또는 서버)에서 온 메시지 */
   receive(data: Uint8Array, fromTeam: 0 | 1): void {
+    // 깨진·짧은 메시지는 버린다 (예외로 수신 처리가 멈추지 않게)
+    if (data.length < 5) return;
     const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
     const t = view.getUint32(1);
     if (data[0] === MSG.input) {
+      if (data.length < 5 + COMMAND_BYTES || t < this.tick) return;
       this.put(t, fromTeam, data.slice(5, 5 + COMMAND_BYTES));
       // 재접속: 서버가 보낸 내 입력 기록이면 다음 예약을 그 뒤로
       if (fromTeam === this.team) this.scheduled = Math.max(this.scheduled, t);
     }
     else if (data[0] === MSG.hash) {
+      if (data.length < 9 || t < this.tick - this.hashEvery * 10) return;
       this.remoteHashes.set(t, view.getUint32(5));
       this.checkHash(t);
     }
