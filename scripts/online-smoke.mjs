@@ -21,14 +21,20 @@ for (const { page } of pages) await page.waitForFunction(() => window.__game?.ga
 const state = (p) => p.evaluate(() => { const g = window.__game.game, ls = g.lockstep; return { team: ls.team, tick: ls.tick, desync: ls.desyncAt, stalls: ls.stalls, delay: ls.delay, score: [...window.__game.match.score] }; });
 // 각자 다른 키로 6초 조작 (팀 0: → 질주·S, 팀 1: ← ↑·D)
 const play = async ({ page }, keys) => { for (const k of keys) await page.keyboard.down(k); await page.waitForTimeout(3000); for (const k of keys) await page.keyboard.up(k); };
-await Promise.all([play(pages[0], ['ArrowRight', 'KeyE']), play(pages[1], ['ArrowLeft', 'ArrowUp'])]);
-await Promise.all([play(pages[0], ['ArrowUp', 'KeyS']), play(pages[1], ['ArrowDown', 'Space'])]);
+// 녹온(질주 중 Shift)·드래그백(Z+↓)·원터치·태클을 섞어 ROUNDS × 6초 (기본 7 → 약 45초)
+const tap = async ({ page }, key) => { await page.keyboard.down(key); await page.waitForTimeout(60); await page.keyboard.up(key); };
+for (let r = 0; r < Number(process.env.ROUNDS ?? 7); r++) {
+  await Promise.all([
+    (async () => { await play(pages[0], ['ArrowRight', 'KeyE']); await tap(pages[0], 'ShiftLeft'); await play(pages[0], ['ArrowUp', 'KeyS']); })(),
+    (async () => { await play(pages[1], ['ArrowLeft', 'ArrowUp']); await pages[1].page.keyboard.down('KeyZ'); await play(pages[1], ['ArrowDown']); await pages[1].page.keyboard.up('KeyZ'); await tap(pages[1], 'Space'); })(),
+  ]);
+}
 await pages[0].page.waitForTimeout(2500);
 const [a, b] = await Promise.all(pages.map((p) => state(p.page)));
 // 같은 틱에서의 상태를 비교: 둘 다 해시 교환으로 이미 검사됐다 (desync=null)
 console.log(JSON.stringify({ code, a, b, errors: pages.map((p) => p.errors) }));
 assert.deepEqual([a.team, b.team].sort(), [0, 1]);
-assert.ok(a.tick > 1000 && b.tick > 1000, '경기가 진행되지 않음');
+assert.ok(a.tick > 3000 && b.tick > 3000, '경기가 진행되지 않음');
 assert.equal(a.desync, null);
 assert.equal(b.desync, null);
 assert.ok(Math.abs(a.tick - b.tick) < 240, '두 화면 틱 차이가 큼');

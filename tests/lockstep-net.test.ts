@@ -59,3 +59,28 @@ it('입력 지연을 왕복 시간에 맞추면 10틱 지연에서도 거의 멈
   expect(peers[0].tick).toBeGreaterThan(1150);
   expect(peers[0].desyncAt).toBeNull();
 });
+
+it('팀 0 화면과 팀 1 화면(localTeam만 다름)이 녹온·개인기·원터치가 섞인 입력에서도 같은 경기다', async () => {
+  const { headlessMatch: make, InputLog, replay } = await import('../src/net/Replay');
+  const log = new InputLog();
+  for (let t = 0; t < 7200; t++) {
+    const a = command(), b = command();
+    const k = Math.floor(t / 40) % 8;
+    a.move.set(Math.cos(k), 0, Math.sin(k)); b.move.set(-Math.sin(k), 0, Math.cos(k));
+    a.sprint = b.sprint = t % 400 < 250;
+    const tap = (on: boolean) => ({ held: on, pressed: on, released: false });
+    a.skill = tap(t % 120 === 30); a.skillMove = a.move.clone();       // 질주 중 Shift = 녹온
+    b.skill = tap(t % 150 === 10);
+    a.pass = { held: t % 200 < 6, pressed: t % 200 === 0, released: t % 200 === 6 };
+    b.shoot = { held: t % 260 < 20, pressed: t % 260 === 0, released: t % 260 === 20 };
+    b.finesse = { held: t % 300 < 30, pressed: t % 300 === 0, released: t % 300 === 30 }; // Z (드래그백)
+    log.push([a, b]);
+  }
+  const setupFor = (localTeam: 0 | 1) => ({ seed: 5, options: { userTeams: [true, true] as [boolean, boolean], localTeam } });
+  const m0 = make(setupFor(0), () => new SimulationModel()), m1 = make(setupFor(1), () => new SimulationModel());
+  for (let t = 0; t < log.length; t += 120) {
+    replay(m0, log, t, t + 120);
+    replay(m1, log, t, t + 120);
+    expect(stateHash(m1), `tick ${t + 120}`).toBe(stateHash(m0));
+  }
+});

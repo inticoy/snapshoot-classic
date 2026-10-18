@@ -114,7 +114,7 @@ export class Game {
       if (e.code === 'KeyM' && this.state === 'playing') this.hud.tick(this.toggleSound() ? '사운드 끔' : '사운드 켬');
     });
 
-    this.touch = new TouchControls(this.input, () => this.match.cancelUserCharge(), () => this.applyGraphics(true), () => {
+    this.touch = new TouchControls(this.input, () => this.cancelCharge(), () => this.applyGraphics(true), () => {
       if (this.state === 'playing') this.openPauseMenu();
     });
     this.applyGraphics(this.touch.detected);
@@ -123,7 +123,7 @@ export class Game {
       this.menu.close();
       this.state = 'playing';
       this.accumulator = 0;
-      this.match.cancelUserCharge();
+      this.cancelCharge();
       this.input.clearVirtual();
       this.input.endFrame();
       this.touch.reset();
@@ -294,7 +294,7 @@ export class Game {
 
   private openPauseMenu(): void {
     this.state = 'paused';
-    this.match.cancelUserCharge();
+    this.cancelCharge();
     this.input.clearVirtual();
     const [h, a] = this.match.score;
     this.menu.open({
@@ -333,7 +333,7 @@ export class Game {
   private openHalftime(): void {
     this.state = 'paused';
     this.hud.show(false);
-    this.match.cancelUserCharge();
+    this.cancelCharge();
     this.input.clearVirtual();
     const [h, a] = this.match.score;
     this.menu.open({
@@ -354,6 +354,11 @@ export class Game {
     const base = m.half * 45;
     const min = Math.floor(m.matchMinutes) + 1;
     return min > base ? `${base}+${min - base}'` : `${Math.max(1, min)}'`;
+  }
+
+  /** UI로 게이지 취소. 온라인에서는 입력 기록 밖에서 경기 상태를 바꾸면 두 화면이 갈라지므로 하지 않는다 */
+  private cancelCharge(): void {
+    if (!this.lockstep) this.match.cancelUserCharge();
   }
 
   /** 온라인 경기: 메뉴 없이 바로 킥오프 */
@@ -468,7 +473,7 @@ export class Game {
     } else if (live) {
       const celebrate =
         this.match.phase === 'goal' && this.match.phaseTimer < 2.6 ? (this.match.lastScorer?.pos ?? null) : null;
-      this.rig.update(dt, this.match.ball.position, this.match.controlled.pos, celebrate);
+      this.rig.update(dt, this.match.ball.position, this.match.local.controlled.pos, celebrate);
       this.hud.update(dt, this.match, this.rig.camera);
     }
     this.renderer.render(this.scene, this.rig.camera);
@@ -636,7 +641,7 @@ export class Game {
   }
 
   private updateMarker(dt: number): void {
-    const p = this.match.controlled;
+    const p = this.match.local.controlled;
     const visible = this.state === 'playing' && this.match.phase !== 'goal';
     this.marker.visible = visible;
     if (!visible) return;

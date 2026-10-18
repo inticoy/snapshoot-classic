@@ -191,7 +191,7 @@ export class Hud {
   }
 
   private updateIndicator(match: Match, camera: THREE.Camera, live: boolean): void {
-    const p = match.controlled;
+    const p = match.local.controlled;
     this.proj.set(p.pos.x, 2.3, p.pos.z).project(camera);
     const visible = live && this.proj.z < 1;
     this.pi.style.display = visible ? 'flex' : 'none';
@@ -206,11 +206,11 @@ export class Hud {
     }
 
     const sp = match.shootout.power;
-    const timing = match.powerTiming;
+    const timing = match.local.powerTiming;
     this.power.classList.toggle('timing', !!timing);
     this.power.style.setProperty('--timing-start', `${(COMMAND.powerCenter - COMMAND.powerWindow / 2) / COMMAND.powerWindup * 100}%`);
     this.power.style.setProperty('--timing-end', `${(COMMAND.powerCenter + COMMAND.powerWindow / 2) / COMMAND.powerWindup * 100}%`);
-    const charge = (timing ? { ...timing.kick, value: timing.elapsed / COMMAND.powerWindup } : match.charge) ?? (sp !== null ? { kind: 'shoot' as const, value: sp, finesse: false, chip: false } : null);
+    const charge = (timing ? { ...timing.kick, value: timing.elapsed / COMMAND.powerWindup } : match.local.charge) ?? (sp !== null ? { kind: 'shoot' as const, value: sp, finesse: false, chip: false } : null);
     this.power.classList.toggle('show', !!charge && live);
     if (charge) {
       this.proj.set(p.pos.x, timing ? 2.7 : 0, p.pos.z).project(camera);
@@ -228,7 +228,7 @@ export class Hud {
   }
 
   private updateNameBars(match: Match, live: boolean): void {
-    const me = match.controlled;
+    const me = match.local.controlled;
     // 오른쪽: 상대 공 소유자, 없으면 공에 가장 가까운 상대
     const owner = match.ball.owner;
     let opp: Player | null = owner && owner.team === 1 ? owner : null;
@@ -283,7 +283,7 @@ export class Hud {
     this.hints.style.display = live ? 'flex' : 'none';
     const owner = match.ball.owner;
     const sp = match.setPieces.current;
-    const userSetPiece = match.phase === 'setpiece' && sp && sp.taker === match.controlled;
+    const userSetPiece = match.phase === 'setpiece' && sp && sp.taker === match.local.controlled;
     const so = match.shootout;
     const mode = match.phase === 'shootout' ? (so.turn === 0 ? 'penalty' : 'keeper')
       : userSetPiece ? sp!.kind
@@ -332,7 +332,7 @@ export class Hud {
       g.lineWidth = 1.5;
       g.strokeStyle = 'rgba(0,0,0,0.6)';
       g.stroke();
-      if (p === match.controlled) {
+      if (p === match.local.controlled) {
         // 내 선수: 위쪽 삼각형 마커
         g.beginPath();
         g.moveTo(x, y - 7);
