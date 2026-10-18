@@ -1,7 +1,7 @@
 import { TEAMS, type PlayerProfile } from '../data/Teams';
 import { STAT_LABELS, faceStats } from '../data/Stats';
 import { FORMATION_433 } from '../data/Formation';
-import { PITCH } from '../config';
+import { PITCH, SQUAD_UI } from '../config';
 import type { MatchStats } from '../gameplay/Match';
 
 export interface MenuItem {
@@ -315,22 +315,23 @@ export class SquadView {
       // 킥오프 슬롯이 모여 있는 자기 진영을 세로로 펼쳐 모든 카드 사이의 간격을 확보한다.
       const lineWidth = slot ? Math.max(1, ...FORMATION_433.filter((s) => s.role === slot.role).map((s) => Math.abs(s.z))) : 1;
       const position = slot ? `left:${50 + slot.z / lineWidth * 38}%;top:${8 + (-slot.fx / PITCH.halfL) * 82}%` : '';
-      return `<button type="button" class="squad-player ${team === 0 ? 'home' : 'away'}" data-player="${index}" data-bench="${bench}" style="${position}" aria-expanded="${selected}" aria-controls="squad-detail">
-        <span class="squad-position">${slot?.label ?? '벤치'} · ${p.pos}</span>
-        <span class="squad-rating"><b>${p.ovr}</b><small>종합</small><span>#${p.number}</span></span>
-        <span class="squad-name">${p.name}</span></button>`;
+      const role = p.pos === 'GK' ? 'GK' : /^(LB|RB|CB)$/.test(p.pos) ? 'DEF' : /^(LW|RW|ST|CF)$/.test(p.pos) ? 'FWD' : 'MID';
+      const initials = p.short.split(/[ .]+/).filter(Boolean).map((part) => part[0]).slice(0, 2).join('');
+      return `<button type="button" class="squad-player role-${role} ${team === 0 ? 'home' : 'away'}" data-player="${index}" data-bench="${bench}" style="${position}" aria-expanded="${selected}" aria-controls="squad-detail" aria-label="${slot?.label ?? '벤치'} ${p.name}, ${p.pos}, 종합 ${p.ovr}, 등번호 ${p.number}">
+        <span class="squad-rating"><b>${p.ovr}</b><span class="squad-position">${slot?.label ?? p.pos}</span></span>
+        <span class="squad-portrait" aria-hidden="true">${initials}</span>
+        <span class="squad-name">${p.name}</span><span class="squad-number">#${p.number} · ${p.pos}</span></button>`;
     };
     const p = this.selected ? (this.selected.bench ? this.benches : this.lineups)[team][this.selected.index] : null;
     return `<section class="squad-view">
       <div class="squad-tabs" role="group" aria-label="팀 선택">${TEAMS.map((t, i) => `<button type="button" data-team="${i}" aria-pressed="${team === i}">${t.name}</button>`).join('')}</div>
-      <h3>${TEAMS[team].name} · 4-3-3</h3>
-      <p>카드를 누르면 능력치가 펼쳐져요. 선발과 벤치 선수를 차례로 누르면 맞바꿔요. 골키퍼는 골키퍼끼리 바꿀 수 있어요.</p>
-      <p>선발은 다음 경기부터 적용돼요. 온라인에서는 기본 명단을 사용해요. 키보드는 Tab·방향키로 이동하고 Enter·Space로 선택해요.</p>
-      <div class="squad-pitch" aria-label="선발 포메이션"><div class="pitch-lines" aria-hidden="true"><i></i></div>${this.lineups[team].map((p, i) => card(p, i, false)).join('')}</div>
-      <h4>벤치</h4><div class="squad-bench">${this.benches[team].map((p, i) => card(p, i, true)).join('')}</div>
-      <div class="squad-actions"><button type="button" data-clear>선택 해제</button><button type="button" data-reset>기본 명단</button></div>
-      <p role="status" aria-live="polite">${this.notice}</p>
-      <div id="squad-detail">${p ? `<h4>${p.name} · #${p.number} · ${p.pos}</h4>${playerDetailPanel(team, 0, p)}` : '<p>선수를 선택하면 여기에서 능력치를 볼 수 있어요.</p>'}</div>
+      <div class="squad-heading"><h3>4-3-3 <span>STARTING XI</span></h3><div class="squad-actions"><button type="button" data-clear>선택 해제</button><button type="button" data-reset>기본 명단</button></div></div>
+      <div class="squad-board"><div class="squad-stage">
+        <div class="squad-pitch" aria-label="선발 포메이션"><div class="pitch-lines" aria-hidden="true"><i></i></div>${this.lineups[team].map((p, i) => card(p, i, false)).join('')}</div>
+      </div><aside class="squad-reserves" aria-label="교체 선수"><h4>BENCH <span>05</span></h4><div class="squad-bench">${this.benches[team].map((p, i) => card(p, i, true)).join('')}</div></aside></div>
+      <p class="squad-help">끌어서 교체 · 두 카드 선택으로도 교체 · GK끼리만 교체<br>Tab·방향키 이동 / Enter·Space 선택 · 다음 경기 적용 (온라인: 기본 명단)</p>
+      <p class="squad-notice" role="status" aria-live="polite">${this.notice}</p>
+      <div id="squad-detail" ${p ? '' : 'hidden'} role="region" aria-label="선수 능력치">${p ? `<header><h4>${p.name} · #${p.number} · ${p.pos}</h4><button type="button" data-detail-close aria-label="능력치 닫기">닫기 ×</button></header>${playerDetailPanel(team, 0, p)}` : ''}</div>
     </section>`;
   };
 
@@ -350,27 +351,100 @@ export class SquadView {
         refresh(`[data-team="${this.team}"]`);
       };
     });
+    type Pick = { index: number; bench: boolean };
+    const pick = (button: HTMLElement): Pick => ({ index: Number(button.dataset.player), bench: button.dataset.bench === 'true' });
+    const selector = (p: Pick) => `[data-player="${p.index}"][data-bench="${p.bench}"]`;
+    const roster = (p: Pick) => (p.bench ? this.benches : this.lineups)[this.team];
+    const compatible = (a: Pick, b: Pick) => (a.bench !== b.bench || !a.bench)
+      && (a.bench !== b.bench || a.index !== b.index)
+      && (roster(a)[a.index].pos === 'GK') === (roster(b)[b.index].pos === 'GK');
+    const swap = (a: Pick, b: Pick) => {
+      if (!compatible(a, b)) {
+        this.notice = '골키퍼는 골키퍼끼리 바꿀 수 있어요. 다른 선수를 골라요.';
+        return;
+      }
+      const first = roster(a), second = roster(b);
+      [first[a.index], second[b.index]] = [second[b.index], first[a.index]];
+      this.notice = a.bench === b.bench ? '선수의 포지션 슬롯을 맞바꿨어요.' : '선발과 교체 선수를 맞바꿨어요.';
+      this.selected = null;
+    };
     root.querySelectorAll<HTMLButtonElement>('[data-player]').forEach((button) => {
-      button.onclick = () => {
-        const next = { index: Number(button.dataset.player), bench: button.dataset.bench === 'true' };
-        const prev = this.selected;
+      let suppressClick = false;
+      button.onclick = (event) => {
+        // 드래그 직후 브라우저가 만드는 클릭만 막고 키보드 선택은 그대로 받는다.
+        if (suppressClick && event.detail !== 0) { suppressClick = false; return; }
+        suppressClick = false;
+        const next = pick(button), prev = this.selected;
         this.notice = '';
-        if (prev && prev.bench !== next.bench) {
-          const starter = prev.bench ? next.index : prev.index;
-          const sub = prev.bench ? prev.index : next.index;
-          const lineup = this.lineups[this.team], bench = this.benches[this.team];
-          if ((lineup[starter].pos === 'GK') !== (bench[sub].pos === 'GK')) {
-            this.notice = '골키퍼는 골키퍼끼리 바꿀 수 있어요. 다른 선수를 골라요.';
-          } else {
-            [lineup[starter], bench[sub]] = [bench[sub], lineup[starter]];
-            this.notice = `${lineup[starter].name} 선수를 선발로 바꿨어요.`;
-            this.selected = null;
-          }
-        } else {
-          this.selected = prev?.bench === next.bench && prev.index === next.index ? null : next;
-        }
-        refresh(`[data-player="${next.index}"][data-bench="${next.bench}"]`);
+        if (prev && (prev.bench !== next.bench || (!prev.bench && prev.index !== next.index))) swap(prev, next);
+        else this.selected = prev?.bench === next.bench && prev.index === next.index ? null : next;
+        refresh(selector(next));
       };
+      button.onpointerdown = (event) => {
+        if (!event.isPrimary || event.button !== 0) return;
+        suppressClick = false;
+        const source = pick(button), x = event.clientX, y = event.clientY;
+        let ghost: HTMLElement | null = null;
+        let target: HTMLButtonElement | null = null;
+        button.setPointerCapture?.(event.pointerId);
+        const move = (e: PointerEvent) => {
+          if (e.pointerId !== event.pointerId) return;
+          // 작은 손 떨림은 탭으로 처리한다.
+          if (!ghost && Math.hypot(e.clientX - x, e.clientY - y) < SQUAD_UI.dragThreshold) return;
+          if (!ghost) {
+            const rect = button.getBoundingClientRect();
+            ghost = button.cloneNode(true) as HTMLElement;
+            ghost.removeAttribute('id');
+            ghost.removeAttribute('data-player');
+            ghost.removeAttribute('aria-controls');
+            ghost.setAttribute('aria-hidden', 'true');
+            ghost.tabIndex = -1;
+            ghost.classList.add('squad-drag-ghost');
+            ghost.style.width = `${rect.width}px`;
+            ghost.style.height = `${rect.height}px`;
+            root.append(ghost);
+            button.classList.add('is-dragging');
+            root.querySelectorAll<HTMLButtonElement>('[data-player]').forEach((candidate) => {
+              candidate.classList.toggle('is-droppable', compatible(source, pick(candidate)));
+            });
+          }
+          e.preventDefault();
+          ghost.style.left = `${e.clientX}px`;
+          ghost.style.top = `${e.clientY}px`;
+          target?.classList.remove('is-drop-target');
+          const hit = document.elementFromPoint(e.clientX, e.clientY)?.closest<HTMLButtonElement>('[data-player]');
+          target = hit && root.contains(hit) && compatible(source, pick(hit)) ? hit : null;
+          target?.classList.add('is-drop-target');
+        };
+        const finish = (e: PointerEvent) => {
+          if (e.pointerId !== event.pointerId) return;
+          if (ghost && e.type === 'pointerup') move(e);
+          const dragged = !!ghost;
+          ghost?.remove();
+          root.querySelectorAll('.is-dragging, .is-droppable, .is-drop-target').forEach((el) => el.classList.remove('is-dragging', 'is-droppable', 'is-drop-target'));
+          button.removeEventListener('pointermove', move);
+          button.removeEventListener('pointerup', finish);
+          button.removeEventListener('pointercancel', finish);
+          button.removeEventListener('lostpointercapture', finish);
+          if (button.hasPointerCapture?.(event.pointerId)) button.releasePointerCapture(event.pointerId);
+          if (!dragged) return;
+          suppressClick = true;
+          if (e.type === 'pointerup' && target) {
+            const next = pick(target);
+            swap(source, next);
+            refresh(selector(next));
+          }
+        };
+        button.addEventListener('pointermove', move);
+        button.addEventListener('pointerup', finish);
+        button.addEventListener('pointercancel', finish);
+        button.addEventListener('lostpointercapture', finish);
+      };
+    });
+    root.querySelector<HTMLButtonElement>('[data-detail-close]')?.addEventListener('click', () => {
+      const selected = this.selected;
+      this.selected = null;
+      refresh(selected ? selector(selected) : '[data-clear]');
     });
     root.querySelector<HTMLButtonElement>('[data-clear]')!.onclick = () => {
       this.selected = null;

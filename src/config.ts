@@ -322,3 +322,6 @@ export const STADIUM = {
   standGap: 2.5, seatSpacing: 0.62, aisleSpacing: 18, aisleWidth: 1.8,
   netSag: 0.10, netThreadRadius: 0.004, postSegments: 24,
 };
+
+/** 손 떨림을 탭으로 남겨 두기 위한 스쿼드 드래그 시작 거리(px). */
+export const SQUAD_UI = { dragThreshold: 6 };

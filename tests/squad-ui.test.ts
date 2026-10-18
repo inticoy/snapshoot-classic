@@ -122,3 +122,97 @@ it('교체한 선발 선수도 경기에서 AI로 움직인다', async () => {
   for (let t = 0; t < 8; t += PHYSICS.step) match.update(PHYSICS.step, command());
   expect(sub.pos.distanceTo(start)).toBeGreaterThan(1);
 });
+
+function dragSetup(pointerType: 'mouse' | 'touch' = 'mouse') {
+  const state = setup();
+  const card = (index: number, bench = false) => document.querySelector<HTMLButtonElement>(`[data-player="${index}"][data-bench="${bench}"]`)!;
+  const pointer = (el: HTMLElement, type: string, x: number, y: number, extra = {}) => {
+    el.dispatchEvent(new win!.PointerEvent(type, {
+      bubbles: true, cancelable: true, pointerId: 1, isPrimary: true, pointerType,
+      button: 0, clientX: x, clientY: y, ...extra,
+    }) as unknown as Event);
+  };
+  const drag = (source: HTMLButtonElement, target: HTMLButtonElement | null, end = 'pointerup') => {
+    vi.spyOn(document, 'elementFromPoint').mockReturnValue(target);
+    pointer(source, 'pointerdown', 10, 10);
+    pointer(source, 'pointermove', 100, 120);
+    expect(document.querySelector('.squad-drag-ghost')?.getAttribute('style')).toContain('left: 100px');
+    if (target?.classList.contains('is-droppable')) expect(target.classList.contains('is-drop-target')).toBe(true);
+    pointer(source, end, 100, 120);
+    expect(document.querySelectorAll('.squad-drag-ghost, .is-dragging, .is-droppable, .is-drop-target')).toHaveLength(0);
+  };
+  return { ...state, card, pointer, drag };
+}
+
+it.each(['mouse', 'touch'] as const)('%s 포인터로 벤치↔선발과 선발 슬롯을 맞바꾸고 상세 클릭을 만들지 않는다', (type) => {
+  const { squad, card, drag } = dragSetup(type);
+  drag(card(4, true), card(9));
+  expect(squad.lineups[0][9]).toBe(TEAMS[0].bench[4]);
+  expect(document.querySelector('#squad-detail')!.hasAttribute('hidden')).toBe(true);
+  drag(card(9), card(4, true));
+  expect(squad.lineups[0][9]).toBe(TEAMS[0].players[9]);
+  drag(card(9), card(10));
+  expect(squad.lineups[0][9]).toBe(TEAMS[0].players[10]);
+  expect(squad.lineups[0][10]).toBe(TEAMS[0].players[9]);
+  expect(card(9).querySelector('.squad-position')!.textContent).toBe('ST');
+  drag(card(0, true), card(0));
+  expect(squad.lineups[0][0]).toBe(TEAMS[0].bench[0]);
+});
+
+it('잘못된 드롭·영역 밖·포인터 취소·캡처 손실은 명단과 상세 선택을 바꾸지 않는다', () => {
+  const { squad, card, drag } = dragSetup('touch');
+  drag(card(4, true), card(0));
+  drag(card(9), card(9));
+  drag(card(4, true), card(3, true));
+  drag(card(4, true), null);
+  drag(card(4, true), card(9), 'pointercancel');
+  drag(card(4, true), card(9), 'lostpointercapture');
+  expect(squad.lineups[0]).toEqual(TEAMS[0].players);
+  expect(document.querySelector('#squad-detail')!.hasAttribute('hidden')).toBe(true);
+});
+
+it('작은 포인터 움직임은 탭으로 처리하고 드래그 뒤의 클릭만 억제한다', () => {
+  const { squad, card, pointer, drag } = dragSetup('touch');
+  const source = card(9);
+  pointer(source, 'pointerdown', 10, 10);
+  pointer(source, 'pointermove', 12, 12);
+  expect(document.querySelector('.squad-drag-ghost')).toBeNull();
+  pointer(source, 'pointerup', 12, 12);
+  source.click();
+  expect(document.querySelector('#squad-detail')!.hasAttribute('hidden')).toBe(false);
+  document.querySelector<HTMLButtonElement>('[data-detail-close]')!.click();
+  expect(document.querySelector('#squad-detail')!.hasAttribute('hidden')).toBe(true);
+  const current = card(9);
+  drag(current, null);
+  current.dispatchEvent(new win!.MouseEvent('click', { detail: 1, bubbles: true }) as unknown as Event);
+  expect(document.querySelector('#squad-detail')!.hasAttribute('hidden')).toBe(true);
+  current.click();
+  expect(document.querySelector('#squad-detail')!.hasAttribute('hidden')).toBe(false);
+  expect(squad.lineups[0]).toEqual(TEAMS[0].players);
+});
+
+it('선발끼리 두 번 선택해도 슬롯을 교환하고 골키퍼 슬롯은 보호한다', () => {
+  const { squad, pick, click } = setup();
+  pick(9); pick(10);
+  expect(squad.lineups[0][9]).toBe(TEAMS[0].players[10]);
+  expect(squad.lineups[0][10]).toBe(TEAMS[0].players[9]);
+  pick(0); pick(9);
+  expect(squad.lineups[0][0]).toBe(TEAMS[0].players[0]);
+  expect(document.querySelector('[role="status"]')!.textContent).toContain('골키퍼');
+  click('[data-reset]');
+  expect(squad.lineups[0]).toEqual(TEAMS[0].players);
+});
+
+
+it('취소한 드래그 다음의 실제 탭과 보조 포인터 입력을 구분한다', () => {
+  const { card, pointer, drag } = dragSetup('touch');
+  const source = card(9);
+  pointer(source, 'pointerdown', 10, 10, { isPrimary: false });
+  pointer(source, 'pointermove', 100, 120);
+  expect(document.querySelector('.squad-drag-ghost')).toBeNull();
+  drag(source, card(10), 'pointercancel');
+  pointer(source, 'pointerdown', 10, 10);
+  pointer(source, 'pointerup', 10, 10);
+  source.dispatchEvent(new win!.MouseEvent('click', { detail: 1, bubbles: true }) as unknown as Event);
+  expect(document.querySelector('#squad-detail')!.hasAttribute('hidden')).toBe(false);
+});
