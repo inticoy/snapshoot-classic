@@ -4,6 +4,7 @@ import { makeSkillDefs } from '../data/Skills';
 import { MOTION_CATALOG } from '../data/MotionCatalog';
 import type { MotionKind } from '../anim/MotionLibrary';
 import type { Player } from '../entities/Player';
+import type { LegPose } from '../entities/PlayerModel';
 import type { Match } from './Match';
 
 export { SKILL_INPUT } from '../config';
@@ -30,6 +31,15 @@ export type Trigger =
   | { kind: 'shift'; seq: Token[] } // Shift + 방향 순서
   | { kind: 'z'; seq: Token[] } // Z + 방향
   | { kind: 'fake'; from: 'shoot' | 'lob' }; // 슛(D)·로빙(A) 게이지 중 패스(S) = 페이크
+
+/** 발 하나: 발목 위치(시작 기준 좌표, m)·발끝 방향(yaw, + = 오른쪽)·발끝 들기(pitch, + = 위)·IK 가중치 */
+export interface RigFoot { x: number; y: number; z: number; yaw: number; pitch: number; w: number }
+/**
+ * 다리를 직접 움직이는 개인기의 한 순간 (모션 데이터에 없는 개인기용).
+ * 몸·공·두 발을 같은 함수에서 만들어서 공이 늘 실제로 닿는 발 부위를 따라간다.
+ * 좌표는 body/ball 키와 같다 (x = 오른쪽, z = 앞). roll/pitch/drop은 몸 기울기·낮추기
+ */
+export interface RigPose { x: number; z: number; yaw: number; ball: { x: number; y: number; z: number }; L: RigFoot; R: RigFoot; roll: number; pitch: number; drop: number }
 
 /** 선수 기준 시간별 위치. yaw = 시작 방향 기준 몸 회전 (+ = 오른쪽으로) */
 export interface Key { t: number; x: number; z: number; y?: number; yaw?: number }
@@ -59,6 +69,8 @@ export interface SkillDef {
   /** AI 수비를 속이는 순간과 방향 (rad). 가까운 수비가 잠깐 그쪽으로 몸을 싣는다 */
   bait?: { t: number; dir: number; strength: number };
   shield: number;
+  /** 다리 IK 개인기: 있으면 body·ball 키 대신 이걸로 몸·공·발을 움직인다 (body·ball 키는 이걸 샘플링한 사본) */
+  rig?: (t: number) => RigPose;
 }
 
 const flipId = (id: string) => (id.endsWith('~m') ? id.slice(0, -2) : `${id}~m`);
@@ -76,6 +88,15 @@ export function mirror(d: SkillDef, id: string, name: string): SkillDef {
     motion: d.motion && { ...d.motion, id: flipId(d.motion.id), sprintId: d.motion.sprintId && flipId(d.motion.sprintId), angle: -d.motion.angle },
     exit: { ...d.exit, dir: -d.exit.dir },
     bait: d.bait && { ...d.bait, dir: -d.bait.dir },
+    rig: d.rig && mirrorRig(d.rig),
+  };
+}
+
+function mirrorRig(rig: (t: number) => RigPose): (t: number) => RigPose {
+  const foot = (f: RigFoot): RigFoot => ({ ...f, x: -f.x, yaw: -f.yaw });
+  return (t) => {
+    const r = rig(t);
+    return { ...r, x: -r.x, yaw: -r.yaw, roll: -r.roll, ball: { ...r.ball, x: -r.ball.x }, L: foot(r.R), R: foot(r.L) };
   };
 }
 
@@ -228,6 +249,9 @@ interface Active {
   rate: number;
   /** 클립을 이 시각에 끊는다 (페이크) */
   cut: number | null;
+  /** 다리 IK 개인기의 이번 틱 자세 */
+  rig: RigPose | null;
+  legs: LegPose | null;
 }
 
 const def = (id: string) => SKILLS.find((s) => s.id === id);
@@ -247,6 +271,7 @@ export class SkillRunner {
   clear(): void {
     for (const p of this.active.keys()) {
       p.actionLock = p.facingLock = 0;
+      p.legPose = null;
       p.model.stopMotion?.();
     }
     this.active.clear();
@@ -267,7 +292,11 @@ export class SkillRunner {
     const v0 = Math.max(0, p.vel.x * fwd.x + p.vel.z * fwd.z);
     const a: Active = {
       def, p, t: 0, origin: p.pos.clone().setY(0), fwd, right: new THREE.Vector3(-fwd.z, 0, fwd.x), v0, contact: 0, baited: false, holding: false,
-      rate: 1 + (def.starScale ?? 0) * Math.max(0, p.profile.skill - def.stars), cut: null,
+      rate: 1 + (def.starScale ?? 0) * Math.max(0, p.profile.skill - def.stars), cut: null, rig: null,
+      legs: def.rig ? {
+        L: { pos: new THREE.Vector3(), toe: new THREE.Vector3(), w: 0 }, R: { pos: new THREE.Vector3(), toe: new THREE.Vector3(), w: 0 },
+        roll: 0, pitch: 0, drop: 0,
+      } : null,
     };
     this.active.set(p, a);
     p.actionLock = p.facingLock = def.duration / a.rate;
@@ -335,7 +364,11 @@ export class SkillRunner {
       }
       p.actionLock = p.facingLock = Math.max(dt * 2, (def.duration - a.t) / a.rate);
       const t = Math.min(a.t, def.duration);
-      sample(def.body, t, pose);
+      if (def.rig) {
+        a.rig = def.rig(t);
+        Object.assign(pose, { x: a.rig.x, z: a.rig.z, yaw: a.rig.yaw });
+        this.poseLegs(a, t);
+      } else sample(def.body, t, pose);
       this.toWorld(a, pose.x, pose.z + a.v0 * def.carry * t, w);
       p.vel.set((w.x - p.pos.x) / dt, 0, (w.z - p.pos.z) / dt);
       const yaw = pose.yaw;
@@ -363,7 +396,8 @@ export class SkillRunner {
       this.finish(a, true, move);
       return true;
     }
-    sample(def.ball, a.t, pose);
+    if (a.rig) Object.assign(pose, a.rig.ball);
+    else sample(def.ball, a.t, pose);
     this.toWorld(a, pose.x, pose.z + a.v0 * def.carry * a.t, w);
     const body = this.m.ball.body, bp = body.position;
     body.velocity.set((w.x - bp.x) / dt, (pose.y - bp.y) / dt, (w.z - bp.z) / dt);
@@ -372,9 +406,25 @@ export class SkillRunner {
     return true;
   }
 
+  /** 다리 IK 목표를 월드로 바꿔 선수에 건다 (화면 전용) */
+  private poseLegs(a: Active, t: number): void {
+    const r = a.rig!, legs = a.legs!;
+    const carry = a.v0 * a.def.carry * t;
+    for (const side of ['L', 'R'] as const) {
+      const f = r[side], out = legs[side];
+      this.toWorld(a, f.x, f.z + carry, out.pos).setY(f.y);
+      const c = Math.cos(f.pitch);
+      out.toe.copy(a.fwd).multiplyScalar(Math.cos(f.yaw) * c).addScaledVector(a.right, Math.sin(f.yaw) * c).setY(Math.sin(f.pitch));
+      out.w = f.w;
+    }
+    legs.roll = r.roll; legs.pitch = r.pitch; legs.drop = r.drop;
+    a.p.legPose = legs;
+  }
+
   private finish(a: Active, normal: boolean, move: THREE.Vector3 | null = null): void {
     const { def, p } = a;
     this.active.delete(p);
+    p.legPose = null;
     p.actionLock = 0;
     p.facingLock = 0;
     p.model.stopMotion?.();

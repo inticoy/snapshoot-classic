@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { GLTFLoader, type GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
-import type { AnimState, CharacterModel, Gesture, ModelColors } from './PlayerModel';
+import type { AnimState, CharacterModel, FootTarget, Gesture, LegPose, ModelColors } from './PlayerModel';
 import { visualRandom } from '../core/Random';
 import { makeDecalTexture } from './KitDecal';
 import { MotionClips } from '../anim/MotionLibrary';
@@ -95,6 +95,8 @@ const Y_AXIS = new THREE.Vector3(0, 1, 0);
 const qA = new THREE.Quaternion();
 const qB = new THREE.Quaternion();
 const qC = new THREE.Quaternion();
+const vA = new THREE.Vector3(), vB = new THREE.Vector3(), vC = new THREE.Vector3(), vT = new THREE.Vector3(), vK = new THREE.Vector3(), vP = new THREE.Vector3();
+const qI = new THREE.Quaternion();
 
 export class SkinnedPlayerModel implements CharacterModel {
   readonly root = new THREE.Group();
@@ -119,6 +121,12 @@ export class SkinnedPlayerModel implements CharacterModel {
   private outgoing: { action: THREE.AnimationAction; w: number } | null = null;
   private readonly locoW = { idle: 1, walk: 0, jog: 0, sprint: 0 };
   private stridePhase = visualRandom.next();
+  /** 개인기 다리 IK: 목표와 지금 가중치 (목표가 사라져도 마지막 자리에서 가중치만 줄여 원래 동작으로 섞여 돌아간다) */
+  private legTarget: LegPose | null = null;
+  private readonly legNow = {
+    L: { pos: new THREE.Vector3(), toe: new THREE.Vector3(0, 0, 1), w: 0 }, R: { pos: new THREE.Vector3(), toe: new THREE.Vector3(0, 0, 1), w: 0 },
+    roll: 0, pitch: 0, drop: 0,
+  };
 
   constructor(colors: ModelColors, private readonly keeper: boolean) {
     if (!asset) throw new Error('character asset not loaded');
@@ -219,6 +227,15 @@ export class SkinnedPlayerModel implements CharacterModel {
     return !!this.motion;
   }
 
+  setLegPose(pose: LegPose | null): void {
+    this.legTarget = pose;
+    if (!pose) return;
+    for (const side of ['L', 'R'] as const) {
+      this.legNow[side].pos.copy(pose[side].pos);
+      this.legNow[side].toe.copy(pose[side].toe);
+    }
+  }
+
   setGesture(gesture: Gesture): void {
     this.gesture = gesture;
   }
@@ -279,6 +296,7 @@ export class SkinnedPlayerModel implements CharacterModel {
     const k = 1 - Math.exp(-10 * dt);
     this.gestureW.raise += ((this.gesture === 'raise' ? 1 : 0) - this.gestureW.raise) * k;
     this.gestureW.point += ((this.gesture === 'point' ? 1 : 0) - this.gestureW.point) * k;
+    this.applyLegs(dt);
     if (this.gestureW.raise > 0.002) this.rotateBone('DEF-upper_armR', Z_AXIS, -2.75 * this.gestureW.raise);
     if (this.gestureW.point > 0.002) {
       this.rotateBone('DEF-upper_armR', Z_AXIS, -1.45 * this.gestureW.point);
@@ -358,6 +376,58 @@ export class SkinnedPlayerModel implements CharacterModel {
     this.actions.walk?.setEffectiveTimeScale(0);
     this.actions.jog?.setEffectiveTimeScale(0);
     this.actions.sprint?.setEffectiveTimeScale(0);
+  }
+
+  /** 개인기 다리 IK: 몸을 기울이고 낮춘 뒤 두 다리를 발목 목표로 굽힌다 (구운 동작 위에 덧입힘) */
+  private applyLegs(dt: number): void {
+    const t = this.legTarget, n = this.legNow;
+    const k = 1 - Math.exp(-dt / 0.06);
+    n.L.w += ((t ? t.L.w : 0) - n.L.w) * k;
+    n.R.w += ((t ? t.R.w : 0) - n.R.w) * k;
+    n.roll += ((t?.roll ?? 0) - n.roll) * k;
+    n.pitch += ((t?.pitch ?? 0) - n.pitch) * k;
+    n.drop += ((t?.drop ?? 0) - n.drop) * k;
+    if (n.L.w < 0.002 && n.R.w < 0.002 && Math.abs(n.roll) + Math.abs(n.pitch) + n.drop < 0.002) return;
+    this.pivot.rotation.z += n.roll;
+    this.pivot.rotation.x += n.pitch;
+    this.pivot.position.y -= n.drop;
+    this.root.updateMatrixWorld(true);
+    for (const side of ['L', 'R'] as const) if (n[side].w > 0.002) this.solveLeg(side, n[side]);
+  }
+
+  /** 두 뼈 IK: 무릎은 몸 앞쪽(조금 바깥)으로 굽힌다. 발끝은 목표 방향으로 돌린다 */
+  private solveLeg(side: 'L' | 'R', f: FootTarget): void {
+    const thigh = this.bones.get(`DEF-thigh${side}`), shin = this.bones.get(`DEF-shin${side}`), foot = this.bones.get(`DEF-foot${side}`), toe = this.bones.get(`DEF-toe${side}`);
+    if (!thigh || !shin || !foot || !toe) return;
+    thigh.getWorldPosition(vA); shin.getWorldPosition(vB); foot.getWorldPosition(vC);
+    const la = vA.distanceTo(vB), lb = vB.distanceTo(vC);
+    vT.copy(f.pos).sub(vA);
+    const d = THREE.MathUtils.clamp(vT.length(), Math.abs(la - lb) + 1e-3, la + lb - 1e-3);
+    vT.normalize();
+    // 무릎 방향: 모델 앞(+Z)에 바깥쪽(왼다리 +X)을 조금 섞는다
+    vP.set(side === 'L' ? 0.25 : -0.25, 0, 1).applyQuaternion(this.root.getWorldQuaternion(qC));
+    vP.addScaledVector(vT, -vP.dot(vT)).normalize();
+    const cosA = THREE.MathUtils.clamp((la * la + d * d - lb * lb) / (2 * la * d), -1, 1);
+    vK.copy(vA).addScaledVector(vT, la * cosA).addScaledVector(vP, la * Math.sqrt(1 - cosA * cosA));
+    this.aimBone(thigh, vB.sub(vA), vK.clone().sub(vA), f.w);
+    shin.getWorldPosition(vB); foot.getWorldPosition(vC);
+    const goal = vA.clone().addScaledVector(vT, d);
+    this.aimBone(shin, vC.sub(vB), goal.sub(vB), f.w);
+    foot.getWorldPosition(vC); toe.getWorldPosition(vB);
+    this.aimBone(foot, vB.sub(vC), f.toe, f.w);
+  }
+
+  /** 뼈를 월드에서 from 방향이 to 방향을 향하도록 돌린다 (w만큼) */
+  private aimBone(bone: THREE.Bone, from: THREE.Vector3, to: THREE.Vector3, w: number): void {
+    if (!bone.parent || from.lengthSq() < 1e-10 || to.lengthSq() < 1e-10) return;
+    qA.setFromUnitVectors(from.normalize(), to.clone().normalize());
+    // slerpQuaternions(a, b)는 먼저 a를 복사하므로 qA를 b로 넘기면 안 된다
+    if (w < 1) qA.copy(qI.clone().slerp(qA, w));
+    bone.getWorldQuaternion(qB);
+    qB.premultiply(qA);
+    bone.parent.getWorldQuaternion(qC);
+    bone.quaternion.copy(qC.invert().multiply(qB));
+    bone.updateMatrixWorld(true);
   }
 
   /** 모델 좌표계 기준 축으로 뼈를 회전 (애니메이션 위에 덧입힘) */

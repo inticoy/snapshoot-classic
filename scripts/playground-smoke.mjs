@@ -23,11 +23,13 @@ if (browser) {
     await page.waitForFunction(() => window.__game?.game.playground?.records.length > 10);
     const counts = {};
     for (const [scenario, count] of Object.entries({ free: 1, duel: 2, pressure: 4, receive: 2, slide: 2, keeper: 2 })) {
+      await page.locator('[data-tab="drills"]').click();
       await page.locator(`[data-scenario="${scenario}"]`).click();
       await page.waitForFunction((id) => window.__game.game.playground.scenarios.current === id && window.__game.game.playground.records.length > 5, scenario);
       counts[scenario] = await page.evaluate(() => window.__game.match.players.length);
       assert.equal(counts[scenario], count);
     }
+    await page.locator('[data-tab="drills"]').click();
     await page.locator('[data-scenario="free"]').click();
     await page.keyboard.down('ArrowUp');
     await page.waitForFunction(() => window.__game.game.playground.records.some((r) => r.telemetry.playerSpeed > 3));
@@ -40,6 +42,7 @@ if (browser) {
     await page.keyboard.press('KeyR');
     await page.waitForFunction(() => window.__game.match.elapsed < 0.3);
     // 슬라이더가 덮여 있는 details만 펼친다.
+    await page.locator('[data-tab="dev"]').click();
     await page.locator('#playground details > summary', { hasText: '파라미터' }).click();
     const slider = page.locator('[data-param="leadWalk"]');
     await slider.evaluate((input) => { input.value = '0.6'; input.dispatchEvent(new Event('input', { bubbles: true })); });
@@ -59,6 +62,7 @@ if (browser) {
       if (format === 'json') assert.ok(JSON.parse(text).records.length > 0);
       exported[format] = Buffer.byteLength(text);
     }
+    await page.locator('[data-tab="drills"]').click();
     await page.locator('[data-scenario="slide"]').click();
     await page.keyboard.press('KeyA');
     await page.waitForFunction(() => window.__game.game.playground.records.some((r) => r.telemetry.motionId?.includes('sliding')));

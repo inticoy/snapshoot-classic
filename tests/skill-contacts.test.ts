@@ -22,7 +22,7 @@ afterAll(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 describe('전체 개인기 실제 GLB 발끝·물리 공 접촉', () => {
   it.each(SKILLS)('$id: 정지·이동·질주, 60/120Hz 모두 0.25m 이내', (def) => {
-    expect(def.motion && MOTION_CATALOG.some((e) => e.id === def.motion!.id), def.id).toBe(true);
+    expect(!!def.rig || def.motion && MOTION_CATALOG.some((e) => e.id === def.motion!.id), def.id).toBe(true);
     let max = 0;
     for (const [speed, hz, yaw, seed] of [[0, 120, 0, 1234], [3, 120, Math.PI / 2, 7], [7, 60, -0.7, 42], [0, 60, 0, 99]]) {
       visualRandom.reset(seed);
@@ -48,7 +48,10 @@ describe('전체 개인기 실제 GLB 발끝·물리 공 접촉', () => {
         if (contact && t + 1e-6 >= cycle * def.duration + contact.t) {
           const toe = p.model.root.getObjectByName(`DEF-toe${contact.foot}`)!.getWorldPosition(new THREE.Vector3());
           const bp = match.ball.position;
-          const error = toe.distanceTo(new THREE.Vector3(bp.x, bp.y, bp.z));
+          const ball = new THREE.Vector3(bp.x, bp.y, bp.z);
+          // 다리 IK 개인기는 발바닥·뒤꿈치·발 안쪽으로도 닿으므로 발목과 발끝 중 가까운 쪽
+          const ankle = p.model.root.getObjectByName(`DEF-foot${contact.foot}`)!.getWorldPosition(new THREE.Vector3());
+          const error = def.rig ? Math.min(toe.distanceTo(ball), ankle.distanceTo(ball)) : toe.distanceTo(ball);
           max = Math.max(max, error);
           expect(error, `${def.id}: v=${speed}, ${hz}Hz t=${t.toFixed(4)}`).toBeLessThanOrEqual(0.25);
           contactIndex++; checked++;

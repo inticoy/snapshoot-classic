@@ -146,6 +146,9 @@ export class Game {
       this.input.clearVirtual();
       this.input.endFrame();
       this.touch.reset();
+    }, {
+      setSpeed: (scale) => { this.timeScale = scale; },
+      setCloseUp: (view, snap) => this.rig.setCloseUp(view, snap),
     }) : null;
   }
 
@@ -432,6 +435,8 @@ export class Game {
 
   private waiting = 0;
   private resyncing = false;
+  /** 연습장 느린 화면 (경기·온라인은 늘 1) */
+  private timeScale = 1;
 
   /** UI로 게이지 취소. 온라인에서는 입력 기록 밖에서 경기 상태를 바꾸면 두 화면이 갈라지므로 하지 않는다 */
   private cancelCharge(): void {
@@ -501,7 +506,7 @@ export class Game {
         this.openPauseMenu();
       } else {
         if (this.input.wasPressed('camera')) this.hud.tick(`${CAMERA_LABEL[this.rig.toggle()]} 카메라`, 1);
-        this.accumulator += dt;
+        this.accumulator += this.playground ? dt * this.timeScale : dt;
         let steps = 0;
         while (this.accumulator >= PHYSICS.step && steps < 12) {
           this.buildCommand();

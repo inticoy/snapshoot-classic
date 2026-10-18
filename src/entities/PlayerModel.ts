@@ -49,9 +49,16 @@ export interface CharacterModel {
   resetAnimation?(): void;
   /** 손 월드 위치 (카드·깃발을 쥐여 줄 때, 기본 오른손) */
   handPosition?(out: THREE.Vector3, side?: 'L' | 'R'): THREE.Vector3 | null;
+  /** 개인기 다리 IK. null이면 부드럽게 원래 동작으로 돌아간다 */
+  setLegPose?(pose: LegPose | null): void;
 }
 
 export type Gesture = 'none' | 'raise' | 'point';
+
+/** 다리 IK 목표 (개인기). 발목 월드 위치·발끝 방향(월드, 단위 벡터)·가중치 */
+export interface FootTarget { pos: THREE.Vector3; toe: THREE.Vector3; w: number }
+/** 몸 기울기는 모델 기준: roll + = 오른쪽으로, pitch + = 앞으로, drop = 엉덩이를 낮추는 높이(m) */
+export interface LegPose { L: FootTarget; R: FootTarget; roll: number; pitch: number; drop: number }
 
 export interface ModelColors {
   shirt: number;

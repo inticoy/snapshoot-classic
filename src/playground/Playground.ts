@@ -7,6 +7,7 @@ import { PLAYGROUND_PARAMETERS, PLAYGROUND_SCENARIOS, type PlaygroundScenario } 
 import { PlaygroundScenarios } from './Scenarios';
 import { parameterSnapshot, setParameter } from './Parameters';
 import { runScript, scriptCommand, validateScript, type PlaygroundScript, type ScriptResult } from './Script';
+import { SkillPanel, type PlaygroundView } from './SkillPanel';
 import { initialTelemetry, recentHistory, recordsToCsv, updateTelemetry, type TelemetryMetrics, type TelemetrySample, type Vec3 } from './Telemetry';
 import './style.css';
 
@@ -38,17 +39,29 @@ export class Playground {
   private scriptRows = 0;
   private scriptHeld: string[] = [];
 
-  constructor(private readonly match: Match, private readonly onReset: () => void) {
+  private readonly skills: SkillPanel;
+
+  constructor(private readonly match: Match, private readonly onReset: () => void, view: PlaygroundView) {
     this.scenarios = new PlaygroundScenarios(match);
     document.body.classList.add('playground');
     this.root.id = 'playground';
     this.root.open = true;
-    this.root.innerHTML = `<summary>플레이그라운드 <span>접기 / 펼치기</span></summary>
+    this.root.innerHTML = `<summary>연습장 <span>접기 / 펼치기</span></summary>
+      <div class="pg-tabs" role="tablist">
+        <button role="tab" data-tab="skills" aria-selected="true">개인기</button>
+        <button role="tab" data-tab="drills" aria-selected="false">상황 연습</button>
+        <button role="tab" data-tab="dev" aria-selected="false">개발 도구</button>
+      </div>
       <div class="pg-body">
+        <section data-panel="skills"></section>
+        <section data-panel="drills" hidden>
         <nav aria-label="시나리오">${PLAYGROUND_SCENARIOS.map((s) => `<button data-scenario="${s.id}">${s.label}</button>`).join('')}</nav>
-        <p id="pg-hint"></p><p class="pg-help">방향키 이동 · E 질주 · S 패스 · W 스루 · A 로빙/슬라이딩 · D 슛 · Space 스탠딩 · V 카메라 · Esc 일시정지 · R 리셋. 모바일: 기존 조이스틱·버튼·스와이프.</p>
-        <button id="pg-reset">R · 같은 시나리오 리셋</button>
-        <label class="pg-parameter">상대 행동 <select id="pg-opponent"><option value="stand">정지</option><option value="follow">따라가기</option><option value="press" selected>압박</option><option value="tackle">태클</option></select></label>
+        <p id="pg-hint"></p>
+        <div class="pg-row"><button id="pg-reset">R · 다시 시작</button>
+        <label class="pg-inline">상대 <select id="pg-opponent"><option value="stand">정지</option><option value="follow">따라가기</option><option value="press" selected>압박</option><option value="tackle">태클</option></select></label></div>
+        <p class="pg-help">방향키 이동 · E 질주 · S 패스 · W 스루 · A 로빙/슬라이딩 · D 슛 · Space 스탠딩 · V 카메라 · Tab 상대 조작 · R 리셋</p>
+        </section>
+        <section data-panel="dev" hidden>
         <details><summary>스크립트 실행</summary><textarea id="pg-script" aria-label="스크립트 JSON" placeholder="JSON을 붙여넣거나 파일을 놓으세요"></textarea><input id="pg-script-file" type="file" accept=".json,application/json"><button id="pg-script-run">실행</button><button id="pg-script-download" disabled>결과 JSON 다운로드</button></details>
         <p id="pg-status" role="status"></p>
         <p class="pg-help">그래프: 최근 5초 / 각 항목 자동 축척. 방향 없는 정지는 —. 전환 완료는 공 방향이 입력 ±30° 안에 들어온 시점.</p>
@@ -59,6 +72,7 @@ export class Playground {
         <button id="pg-defaults">파라미터 원래 값</button><button id="pg-copy">현재 값 복사 (JSON)</button><textarea id="pg-values" aria-label="현재 파라미터 JSON" hidden readonly></textarea></details>
         <div class="pg-exports"><button id="pg-json">JSON 내보내기</button><button id="pg-csv">CSV 내보내기</button></div>
         <p class="pg-help">리셋하면 기록이 비워집니다. 먼저 내보내세요. 패스·슛의 의도적 방출은 소유 상실에서 제외합니다. 골·아웃·휘슬 뒤에는 R로 재시작합니다.</p>
+        </section>
       </div>`;
     document.body.append(this.root);
     // 슬라이더의 방향키는 값을 조정한다. 경기 입력은 캔버스·일반 버튼에서 계속 쓴다.
@@ -66,6 +80,10 @@ export class Playground {
       if (e.target instanceof HTMLInputElement && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) e.stopPropagation();
     });
     this.output = this.root.querySelector('#pg-status')!;
+    this.skills = new SkillPanel(match, this.root.querySelector('[data-panel="skills"]')!, view, () => this.reset('free'));
+    this.root.querySelectorAll<HTMLButtonElement>('[data-tab]').forEach((tab) => {
+      tab.onclick = () => this.showTab(tab.dataset.tab!);
+    });
     this.root.querySelectorAll<HTMLButtonElement>('[data-scenario]').forEach((button) => {
       button.onclick = () => this.reset(button.dataset.scenario as PlaygroundScenario);
     });
@@ -116,6 +134,13 @@ export class Playground {
   }
 
   get running(): boolean { return this.match.phase === 'playing'; }
+
+  private showTab(id: string): void {
+    for (const tab of this.root.querySelectorAll<HTMLElement>('[data-tab]')) tab.setAttribute('aria-selected', String(tab.dataset.tab === id));
+    for (const panel of this.root.querySelectorAll<HTMLElement>('[data-panel]')) panel.hidden = panel.dataset.panel !== id;
+    // 개인기 탭을 떠나면 느린 화면·가까운 카메라를 끈다
+    this.skills.setActive(id === 'skills');
+  }
 
   reset(id?: PlaygroundScenario, opponent = this.scenarios.opponent): void {
     this.onReset();
@@ -181,6 +206,7 @@ export class Playground {
   /** Match.events가 Game의 사운드 처리에서 비워지기 전에 호출해야 한다. */
   step(dt: number, cmd: UserCommand): void {
     const m = this.match, p = m.controlled;
+    this.skills.step(dt);
     this.ball.set(m.ball.position.x, m.ball.position.y, m.ball.position.z);
     let footDistance = Infinity;
     for (const side of ['L', 'R'] as const) {

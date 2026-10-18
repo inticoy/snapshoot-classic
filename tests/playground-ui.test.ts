@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Window as HappyWindow } from 'happy-dom';
 import { Playground } from '../src/playground/Playground';
 import { DRIBBLE, PHYSICS } from '../src/config';
@@ -22,7 +22,8 @@ beforeEach(() => {
   vi.spyOn(win.HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
     clearRect() {}, fillRect() {}, beginPath() {}, moveTo() {}, lineTo() {}, stroke() {},
   } as never);
-  pg = new Playground(match, vi.fn());
+  view = { setSpeed: vi.fn(), setCloseUp: vi.fn() };
+  pg = new Playground(match, vi.fn(), view);
 });
 afterEach(async () => {
   Object.assign(DRIBBLE, original.DRIBBLE);
@@ -31,6 +32,7 @@ afterEach(async () => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
+let view: { setSpeed: ReturnType<typeof vi.fn>; setCloseUp: ReturnType<typeof vi.fn> };
 const button = (selector: string) => document.querySelector<HTMLButtonElement>(selector)!;
 const step = () => {
   const cmd = command();
@@ -110,3 +112,27 @@ it('Tab은 상대 수비수 조작을 전환하고 상대 모드 선택을 유�
   select.dispatchEvent(new win.Event('change') as unknown as Event);
   expect(match.practiceOpponent).toBe('stand');
 });
+
+describe('개인기 탭', () => {
+  it('목록에 헛다리·위아래·마르세유·사포가 커맨드와 함께 있고 ▶로 시범을 낸다', () => {
+    const text = document.querySelector('[data-panel="skills"]')!.textContent!;
+    for (const nick of ['헛다리', '위아래', '마르세유', '사포']) expect(text).toContain(nick);
+    expect(text).toContain('Shift + ↑↓ (짧게)');
+    button('[data-demo="roulette_r"]').click();
+    expect(match.skills.current(match.controlled)?.id).toBe('roulette_r');
+    match.update(PHYSICS.step, command());
+    pg.step(PHYSICS.step, command());
+    expect(document.querySelector('#pg-last-skill')!.textContent).toBe('오른쪽 룰렛');
+  });
+
+  it('느린 화면·카메라 버튼이 화면 조작으로 이어지고, 다른 탭으로 가면 원래대로', () => {
+    button('[data-speed="0.25"]').click();
+    expect(view.setSpeed).toHaveBeenLastCalledWith(0.25);
+    button('[data-view="front"]').click();
+    expect(view.setCloseUp.mock.lastCall![0].angle).toBeCloseTo(Math.PI / 2);
+    button('[data-tab="drills"]').click();
+    expect(view.setSpeed).toHaveBeenLastCalledWith(1);
+    expect(view.setCloseUp).toHaveBeenLastCalledWith(null, false);
+  });
+});
+

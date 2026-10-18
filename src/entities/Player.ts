@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 import { GOAL, KEEPER, PITCH, PLAYER, TEAM_COLORS, VISUAL } from '../config';
-import { PlayerModel, type AnimState, type CharacterModel, type ModelColors } from './PlayerModel';
+import { PlayerModel, type AnimState, type CharacterModel, type LegPose, type ModelColors } from './PlayerModel';
 import { SkinnedPlayerModel, hasCharacterAsset } from './SkinnedPlayerModel';
 import type { PlayerProfile } from '../data/Teams';
 import type { Role, Slot } from '../data/Formation';
@@ -60,6 +60,8 @@ export class Player {
   private animTimer = 0;
   private visualTime = 0;
   private visualYaw: number | null = null;
+  /** 개인기 다리 IK 목표 (SkillRunner가 매 틱 채운다). 화면 전용이라 경기 상태에는 들어가지 않는다 */
+  legPose: LegPose | null = null;
   private shadowEnabled: boolean | null = null;
 
   constructor(
@@ -298,11 +300,14 @@ export class Player {
     const targetYaw = Math.atan2(this.facing.x, this.facing.z);
     if (this.visualYaw === null) this.visualYaw = targetYaw;
     const yawDelta = Math.atan2(Math.sin(targetYaw - this.visualYaw), Math.cos(targetYaw - this.visualYaw));
-    this.visualYaw += THREE.MathUtils.clamp(yawDelta, -VISUAL.maxYawRate * dt, VISUAL.maxYawRate * dt);
+    // 다리를 직접 움직이는 개인기는 발 목표가 몸 방향 기준이라 몸을 늦추지 않고 바로 돌린다
+    if (this.legPose) this.visualYaw = targetYaw;
+    else this.visualYaw += THREE.MathUtils.clamp(yawDelta, -VISUAL.maxYawRate * dt, VISUAL.maxYawRate * dt);
     this.model.root.rotation.y = this.visualYaw;
 
     const speed = Math.hypot(this.vel.x, this.vel.z);
     this.model.setLocomotion(speed, this.sprinting);
+    this.model.setLegPose?.(this.legPose);
 
     this.animTimer = Math.max(0, this.animTimer - dt);
     const inAction = this.animTimer > 0 || this.tackleTimer > 0 || this.diveTimer > 0 || this.stunned > 0;

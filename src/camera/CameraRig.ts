@@ -33,6 +33,18 @@ export class CameraRig {
   private readonly desiredPos = new THREE.Vector3();
   private readonly desiredLook = new THREE.Vector3();
   private shake = 0;
+  /** 연습장 개인기 보기: 선수 가까이에서 이 각도(rad, 0 = 선수 오른쪽 옆)로 본다. null이면 평소 카메라 */
+  private closeUp: { angle: number; facing: THREE.Vector3 } | null = null;
+
+  private snapNext = false;
+
+  /** snap: 다음 프레임에 미끄러지지 않고 바로 그 자리로 (시범을 처음부터 보이게) */
+  setCloseUp(view: { angle: number; facing: THREE.Vector3 } | null, snap = false): void {
+    const was = this.closeUp;
+    this.closeUp = view;
+    this.snapNext = snap && !!view;
+    if (was && !view) this.applyFov();
+  }
 
   constructor(aspect: number) {
     this.camera = new THREE.PerspectiveCamera(CAMERA.fov, aspect, 0.1, 500);
@@ -64,6 +76,22 @@ export class CameraRig {
     focus: THREE.Vector3,
     celebrate: THREE.Vector3 | null,
   ): void {
+    if (this.closeUp && !celebrate) {
+      // 선수 몸 방향 기준으로 돌아가며 4.2m 거리에서 온몸이 들어오게 본다
+      const f = this.closeUp.facing, a = this.closeUp.angle;
+      const rx = -f.z, rz = f.x;
+      const dx = rx * Math.cos(a) + f.x * Math.sin(a), dz = rz * Math.cos(a) + f.z * Math.sin(a);
+      this.desiredPos.set(focus.x + dx * 4.2, 1.6, focus.z + dz * 4.2);
+      this.desiredLook.set(focus.x * 0.6 + ball.x * 0.4, 0.75, focus.z * 0.6 + ball.z * 0.4);
+      const k = this.snapNext ? 1 : 1 - Math.exp(-5 * dt);
+      this.snapNext = false;
+      this.pos.lerp(this.desiredPos, k);
+      this.look.lerp(this.desiredLook, k);
+      this.camera.position.copy(this.pos);
+      this.camera.lookAt(this.look);
+      if (Math.abs(this.camera.fov - 40) > 0.01) { this.camera.fov = 40; this.camera.updateProjectionMatrix(); }
+      return;
+    }
     if (celebrate) {
       // 득점자 클로즈업
       this.desiredPos.set(celebrate.x + (this.mode === 'pro' ? -6 : 0), 3.2, celebrate.z + (this.mode === 'pro' ? 0 : 7));

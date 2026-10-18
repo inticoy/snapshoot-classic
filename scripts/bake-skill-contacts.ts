@@ -19,7 +19,8 @@ globalThis.fetch = (async () => ({ ok: true, json: async () => JSON.parse(readFi
 await loadMotionLibrary('/assets/motions.json');
 const result: Record<string, { t: number; x: number; z: number; y: number }[]> = {};
 for (const def of SKILLS) {
-  if (!def.contacts.length) continue;
+  // 다리 IK 개인기는 공이 발 부위를 직접 따라가므로 굽지 않는다
+  if (!def.contacts.length || def.rig) continue;
   visualRandom.reset(1234);
   const m = new Match(new PhysicsWorld(), { random: new Random(5), goalVisuals: false,
     createPlayerModel: (colors, _number, keeper) => new SkinnedPlayerModel(colors, keeper) });

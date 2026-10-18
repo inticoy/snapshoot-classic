@@ -1,5 +1,11 @@
 import { SKILL_CONTACTS } from './SkillContacts';
 import { mirror, type Dir, type SkillDef } from '../gameplay/Skills';
+import { heelFlickRig, rainbowRig, rigKeys, rouletteRig, stepOverRig } from './SkillRigs';
+
+/** 다리 IK 개인기: rig에서 body·ball 키를 만든다 */
+function rigged(def: SkillDef, rig: NonNullable<SkillDef['rig']>): SkillDef {
+  return { ...def, rig, ...rigKeys(rig, def.duration) };
+}
 
 export function makeSkillDefs(): SkillDef[] {
   /** 페이크 슛 (D 게이지 중 S): 슛 동작을 공 직전에 멈추고 발바닥으로 공을 세운다. 누른 방향이 있으면 그쪽으로 접는다 */
@@ -61,20 +67,24 @@ export function makeSkillDefs(): SkillDef[] {
   };
 
   /** 스텝오버는 공 바깥으로 발을 돌리고 마지막에 전진 터치를 한다. */
-  const STEP_OVER: SkillDef = {
+  const STEP_OVER: SkillDef = rigged({
     id: 'step_over_r', name: '오른쪽 스텝오버', stars: 2,
     trigger: { kind: 'shift', seq: [{ dir: 'F' }, { dir: 'FR' }, { dir: 'R' }] },
     duration: 0.6, carry: 0.3,
     body: [{ t: 0, x: 0, z: 0 }, { t: 0.3, x: 0.12, z: 0.12, yaw: 0.3 }, { t: 0.6, x: 0.06, z: 0.3 }],
     ball: [{ t: 0, x: 0.1, z: 0.4 }, { t: 0.3, x: 0.12, z: 0.42 }, { t: 0.6, x: 0.06, z: 0.78 }],
-    contacts: [{ t: 0.42, foot: 'R' }],
-    motion: { id: 'grf_ballcontrol_idle_045', kind: 'control', angle: Math.PI / 4 },
-    exit: { dir: 0, speed: 2.4, body: 2.2 },
+    // 오른발이 공 위를 넘는 순간(소리 없음)은 접촉이 아니다. 왼발 발등으로 치고 나가는 순간만
+    contacts: [{ t: 0.46, foot: 'L' }],
+    motion: { id: 'grf_ballcontrol_idle_000', flat: true, kind: 'control', angle: 0 },
+    exit: { dir: -0.12, speed: 2.6, body: 2.4, input: true },
     bait: { t: 0.22, dir: Math.PI / 2, strength: 0.8 }, shield: 0.8,
-  };
+  }, stepOverRig());
   const REVERSE_STEP: SkillDef = {
     ...STEP_OVER, id: 'reverse_step_over_r', name: '오른쪽 리버스 스텝오버',
     trigger: { kind: 'shift', seq: [{ dir: 'R' }, { dir: 'FR' }, { dir: 'F' }] },
+    rig: undefined, contacts: [{ t: 0.42, foot: 'R' }], exit: { dir: 0, speed: 2.4, body: 2.2 },
+    body: [{ t: 0, x: 0, z: 0 }, { t: 0.3, x: 0.12, z: 0.12, yaw: 0.3 }, { t: 0.6, x: 0.06, z: 0.3 }],
+    ball: [{ t: 0, x: 0.1, z: 0.4 }, { t: 0.3, x: 0.12, z: 0.42 }, { t: 0.6, x: 0.06, z: 0.78 }],
     motion: { id: 'grf_ballcontrol_idle_045_accel', kind: 'control', angle: -Math.PI / 4 },
   };
   const SIDE_STEP: SkillDef = {
@@ -87,16 +97,17 @@ export function makeSkillDefs(): SkillDef[] {
     motion: { id: 'grf_ballcontrol_idle_000', kind: 'control', angle: 0 },
     exit: { dir: 0, speed: 0, body: 0 }, shield: 0.7,
   };
-  const HEEL_FLICK: SkillDef = {
+  /** 위아래 (Shift + ↑↓ 짧게): 힐 투 힐 플릭 */
+  const HEEL_FLICK: SkillDef = rigged({
     id: 'heel_flick', name: '힐 플릭', stars: 3,
     trigger: { kind: 'shift', seq: [{ dir: 'F', tap: true }, { dir: 'B', tap: true }] },
-    duration: 0.65, carry: 0.35,
+    duration: 0.6, carry: 0.35,
     body: [{ t: 0, x: 0, z: 0 }, { t: 0.25, x: 0, z: 0.08 }, { t: 0.65, x: 0, z: 0.6 }],
     ball: [{ t: 0, x: 0.1, z: 0.4 }, { t: 0.2, x: 0.08, z: 0.16 }, { t: 0.4, x: 0.05, z: 0.55, y: 0.35 }, { t: 0.65, x: 0, z: 1.1 }],
-    contacts: [{ t: 0.2, foot: 'R' }],
-    motion: { id: 'grf_ballcontrol_idle_000_accel', kind: 'control', angle: 0 },
-    exit: { dir: 0, speed: 3, body: 2.8 }, shield: 0.75,
-  };
+    contacts: [{ t: 0.2, foot: 'R' }, { t: 0.38, foot: 'L' }],
+    motion: { id: 'grf_ballcontrol_idle_000', flat: true, kind: 'control', angle: 0 },
+    exit: { dir: 0.05, speed: 3, body: 2.8 }, shield: 0.75,
+  }, heelFlickRig());
   const BALL_LIFT: SkillDef = {
     id: 'ball_lift', name: '볼 리프트', stars: 3,
     trigger: { kind: 'shift', seq: [{ dir: 'F', tap: true }, { dir: 'F', tap: true }, { dir: 'F', tap: true }] },
@@ -107,17 +118,19 @@ export function makeSkillDefs(): SkillDef[] {
     motion: { id: 'grf_trap_idle_000_IB000', kind: 'trap', angle: 0 },
     exit: { dir: 0, speed: 0.8, body: 0.5 }, shield: 0.7,
   };
-  const ROULETTE: SkillDef = {
+  /** 마르세유 턴 */
+  const ROULETTE: SkillDef = rigged({
     id: 'roulette_r', name: '오른쪽 룰렛', stars: 3,
     trigger: { kind: 'shift', seq: ['B', 'BL', 'L', 'FL', 'F', 'FR', 'R'].map((dir) => ({ dir: dir as Dir })) },
     duration: 1, carry: 0.15,
     body: [{ t: 0, x: 0, z: 0 }, { t: 0.25, x: 0.15, z: 0.08, yaw: Math.PI / 2 }, { t: 0.5, x: 0.35, z: 0.2, yaw: Math.PI }, { t: 0.75, x: 0.4, z: 0.5, yaw: Math.PI * 1.5 }, { t: 1, x: 0.4, z: 0.8, yaw: Math.PI * 2 }],
     ball: [{ t: 0, x: 0.1, z: 0.4 }, { t: 0.3, x: 0.5, z: 0.1 }, { t: 0.55, x: 0.25, z: -0.05 }, { t: 0.8, x: 0.1, z: 0.6 }, { t: 1, x: 0.4, z: 1.25 }],
-    contacts: [{ t: 0.3, foot: 'R' }, { t: 0.55, foot: 'L' }],
-    motion: { id: 'grf_movement_dribble_180_decel', kind: 'turn', angle: Math.PI },
+    contacts: [{ t: 0.12, foot: 'R' }, { t: 0.55, foot: 'L' }],
+    // 팔·상체만 쓴다 (몸 회전은 rig yaw, 다리는 IK)
+    motion: { id: 'grf_ballcontrol_idle_000', flat: true, kind: 'control', angle: 0 },
     exit: { dir: 0, speed: 2.4, body: 2.2 },
     bait: { t: 0.2, dir: Math.PI / 2, strength: 0.9 }, shield: 0.65,
-  };
+  }, rouletteRig());
   const FEINT_EXIT: SkillDef = {
     id: 'feint_exit_r', name: '왼쪽 페인트 후 오른쪽', stars: 3,
     trigger: { kind: 'shift', seq: ['L', 'BL', 'B', 'BR', 'R'].map((dir) => ({ dir: dir as Dir })) },
@@ -204,17 +217,18 @@ export function makeSkillDefs(): SkillDef[] {
     exit: { dir: 0, speed: 0, body: 0 }, shield: 0.6,
   };
   /** 레인보우 (Shift + ↓↑↑ 탭, ★4): 공을 발뒤꿈치로 차올려 머리 위로 넘긴다 */
-  const RAINBOW: SkillDef = {
+  /** 사포 */
+  const RAINBOW: SkillDef = rigged({
     id: 'rainbow', name: '레인보우', stars: 4,
     trigger: { kind: 'shift', seq: [{ dir: 'B', tap: true }, { dir: 'F', tap: true }, { dir: 'F', tap: true }] },
-    duration: 0.92, carry: 0.2,
+    duration: 0.9, carry: 0.2,
     body: [{ t: 0, x: 0, z: 0 }, { t: 0.38, x: 0, z: 0.05 }, { t: 0.92, x: 0, z: 0.75 }],
     ball: [{ t: 0, x: 0.05, z: 0.4 }, { t: 0.24, x: 0.03, z: 0.12 }, { t: 0.38, x: 0, z: -0.1, y: 0.2 }, { t: 0.62, x: 0, z: 0.5, y: 2.0 }, { t: 0.92, x: 0, z: 1.7, y: 0.7 }],
-    contacts: [{ t: 0.24, foot: 'R' }],
-    motion: { id: 'grf_ballcontrol_idle_000_accel', flat: true, kind: 'control', angle: 0 },
+    contacts: [{ t: 0.08, foot: 'R' }, { t: 0.22, foot: 'R' }, { t: 0.42, foot: 'L' }],
+    motion: { id: 'grf_ballcontrol_idle_000', flat: true, kind: 'control', angle: 0 },
     exit: { dir: 0, speed: 3, body: 3 },
     bait: { t: 0.35, dir: 0, strength: 0.6 }, shield: 0.6,
-  };
+  }, rainbowRig());
 
   /** 볼 롤 컷 (Shift + ← 꾹 → 사이드 스텝 중 → 짧게, ★4): 옆으로 끌던 공을 반대발 바닥으로 몸 앞을 가로질러 굴린 뒤 대각선으로 빠져나간다.
    *  ← 꾹이 곧 사이드 스텝이라 인식기가 아니라 사이드 스텝 진행 중 반대 방향 입력으로 이어진다 (SkillRunner.hold) */
@@ -248,7 +262,7 @@ export function makeSkillDefs(): SkillDef[] {
   ];
   // 좌우 반전한 클립도 GLB 골격의 미세한 비대칭을 반영해 접촉 키를 따로 굽는다.
   return defs.map((def) => {
-    const contacts = SKILL_CONTACTS[def.id] ?? [];
+    const contacts = def.rig ? [] : SKILL_CONTACTS[def.id] ?? [];
     return { ...def, ball: [...def.ball.filter((key) => !contacts.some((c) => Math.abs(c.t - key.t) < 1e-6)), ...contacts].sort((a, b) => a.t - b.t) };
   });
 }
