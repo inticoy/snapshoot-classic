@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import type { Match } from '../gameplay/Match';
-import { SKILLS, type Dir, type SkillDef } from '../gameplay/Skills';
+import type { UserCommand, Match } from '../gameplay/Match';
+import { SKILLS, SkillInput, type Dir, type SkillDef } from '../gameplay/Skills';
 
 /** Game이 연습장에 넘겨주는 화면 조작 (느린 화면·가까운 카메라) */
 export interface PlaygroundView {
@@ -24,12 +24,11 @@ const FACING = new THREE.Vector3(1, 0, 0);
 /** 커맨드 표기 (↑ = 선수 앞) */
 export function commandText(def: SkillDef, touch = false): string {
   const t = def.trigger;
-  if (t.kind === 'z' && touch) return '스틱으로 입력할 수 없어요 · ▶ 시범';
   if (t.kind === 'fake' && touch) return `${t.from === 'shoot' ? '슛' : '로빙'} 게이지 중 패스`;
   if (t.kind === 'fake') return `${t.from === 'shoot' ? 'D' : 'A'} 게이지 중 S`;
   const seq = t.seq.map((s) => `${ARROW[s.dir]}${s.hold ? ' 꾹' : ''}`).join(t.seq.some((s) => s.hold) ? ' ' : '');
   const taps = t.seq.length > 1 && t.seq.every((s) => s.tap) ? ' (짧게)' : t.seq.length === 1 && t.seq[0].tap ? ' 짧게' : '';
-  return `${touch ? '개인기 스틱' : t.kind === 'shift' ? 'Shift' : 'Z'} + ${seq}${taps}`;
+  return `${touch ? (t.kind === 'z' ? 'Z 모드 + 개인기 스틱' : '개인기 스틱') : t.kind === 'shift' ? 'Shift' : 'Z'} + ${seq}${taps}`;
 }
 
 interface Group { key: string; name: string; nick?: string; stars: number; variants: { label: string; def: SkillDef }[]; rig: boolean }
@@ -64,6 +63,10 @@ export class SkillPanel {
   private readonly shownEvents = new WeakSet<object>();
   private readonly touch = document.documentElement.classList.contains('touch-device');
   private readonly last: HTMLElement;
+  private readonly sequence: HTMLElement;
+  // 별 제한·공 소유 여부에 막힌 입력도 설명할 수 있도록 UI만의 관찰기를 쓴다.
+  private readonly observer = new SkillInput();
+  private readonly observerHeld = new SkillInput(true);
 
   constructor(private readonly match: Match, root: HTMLElement, private readonly gameView: PlaygroundView, private readonly resetFree: () => void) {
     const list = groups();
@@ -73,11 +76,13 @@ export class SkillPanel {
         <label class="pg-inline"><input type="checkbox" id="pg-repeat"> 반복</label></div>
       <div class="pg-row" role="group" aria-label="카메라">${VIEWS.map((v) => `<button data-view="${v.id}" aria-pressed="${v.id === 'side'}">${v.label}</button>`).join('')}<button data-view="off" aria-pressed="false">경기 카메라</button></div>
       <p class="pg-last">방금 쓴 개인기 <b id="pg-last-skill">—</b></p>
+      <p class="pg-help">입력 중 <output id="pg-skill-sequence" aria-live="polite">—</output></p>
       <ul class="pg-skills">${list.map((g) => `
         <li><div class="pg-skill-name"><span class="pg-stars">${'★'.repeat(g.stars)}</span> ${g.name}${g.nick ? ` <em>${g.nick}</em>` : ''}${g.rig ? ' <i class="pg-new">새 동작</i>' : ''}</div>
           ${g.variants.map((v) => `<div class="pg-skill-row"><code>${commandText(v.def, this.touch)}</code>${v.def.sustained ? '<small>직접 입력</small>' : `<button data-demo="${v.def.id}" aria-label="${v.def.name} 시범">▶ ${g.variants.length > 1 ? v.label : ''}</button>`}</div>${SKILLS.filter((d) => d.stars > v.def.stars && JSON.stringify(d.trigger) === JSON.stringify(v.def.trigger)).map((d) => `<small class="pg-help">★${d.stars} 선수는 ${d.name} 동작을 해요</small>`).join('')}`).join('')}
         </li>`).join('')}</ul>`;
     this.last = root.querySelector('#pg-last-skill')!;
+    this.sequence = root.querySelector('#pg-skill-sequence')!;
     root.querySelectorAll<HTMLButtonElement>('[data-demo]').forEach((b) => {
       b.onclick = () => this.demo(SKILLS.find((s) => s.id === b.dataset.demo)!);
     });
@@ -119,6 +124,12 @@ export class SkillPanel {
     this.again = 0;
   }
 
+  resetInput(): void {
+    this.observer.reset();
+    this.observerHeld.reset();
+    this.sequence.textContent = '—';
+  }
+
   private apply(snap = false): void {
     this.gameView.setSpeed(this.active ? this.speed : 1);
     const v = VIEWS.find((x) => x.id === this.view);
@@ -156,13 +167,44 @@ export class SkillPanel {
     this.toastTimer = performance.now() + 1600;
   }
 
+  private showFailure(reason: 'stars' | 'distance' | 'height' | 'busy'): void {
+    const message = { stars: '개인기 별이 부족해요', distance: '공이 너무 멀어요', height: '공이 너무 높아요', busy: '이미 다른 동작 중이에요' };
+    this.toast.textContent = message[reason];
+    this.toast.classList.add('show');
+    this.toastTimer = performance.now() + 1600;
+  }
+
   /** 고정 스텝마다: 개인기 이벤트 표시, 반복 재생 */
-  step(dt: number): void {
+  step(dt: number, cmd?: UserCommand): void {
+    const p = this.match.controlled;
+    let observed: SkillDef | null = null;
+    if (cmd?.skill && this.active) {
+      const a = this.observer.update(dt, cmd.skill.held, cmd.finesse.held, cmd.skillMove ?? cmd.move, p.facing, SKILLS);
+      const b = this.observerHeld.update(dt, cmd.skill.held, cmd.finesse.held, cmd.move, p.facing, SKILLS);
+      observed = a ?? b;
+      const dirs = this.observer.directions.length ? this.observer.directions : this.observerHeld.directions;
+      this.sequence.textContent = dirs.length ? `${cmd.finesse.held ? 'Z' : 'Shift'} ${dirs.map((d) => ARROW[d]).join(' ')}` : '—';
+    }
+    let handled = false;
     for (const e of this.match.events) {
-      if (e.type !== 'skill' || e.player !== this.match.controlled || this.shownEvents.has(e)) continue;
+      if ((e.type !== 'skill' && e.type !== 'skillFail') || e.player !== p || this.shownEvents.has(e)) continue;
+      handled = true;
+      if (e.type === 'skillFail') {
+        this.shownEvents.add(e);
+        if (this.active) this.showFailure(e.reason);
+        continue;
+      }
       this.shownEvents.add(e);
       const def = SKILLS.find((s) => s.id === e.id);
       if (def) this.show(def);
+    }
+    if (observed && !handled && !this.match.charge) {
+      const bp = this.match.ball.position;
+      const supported = SKILLS.some((s) => s.stars <= p.profile.skill && JSON.stringify(s.trigger) === JSON.stringify(observed!.trigger));
+      if (!supported) this.showFailure('stars');
+      else if (bp.y > 0.6) this.showFailure('height');
+      else if (this.match.ball.owner !== p || Math.hypot(bp.x - p.pos.x, bp.z - p.pos.z) > 1.2) this.showFailure('distance');
+      else if (p.busy || this.match.skills.isActive(p)) this.showFailure('busy');
     }
     if (this.toastTimer > 0 && performance.now() >= this.toastTimer) {
       this.toast.classList.remove('show');

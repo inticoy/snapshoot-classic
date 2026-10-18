@@ -9,6 +9,7 @@ export class TouchControls {
   private readonly root = document.createElement('div');
   private readonly stick = document.createElement('div');
   private readonly pad = document.createElement('div');
+  private readonly skillZ = document.createElement('button');
   private readonly skillPad = document.createElement('div');
   private readonly buttons = new Map<TouchSlot, HTMLButtonElement>();
   private readonly activePointers = new Map<number, HTMLElement>();
@@ -32,6 +33,17 @@ export class TouchControls {
     this.skillPad.setAttribute('aria-label', '개인기 스틱: 누른 채 8방향으로 굴리기');
     this.skillPad.textContent = '개인기';
     this.root.append(this.skillPad);
+    this.skillZ.type = 'button';
+    this.skillZ.className = 'touch-skill-z';
+    this.skillZ.textContent = 'Z 모드';
+    this.skillZ.setAttribute('aria-label', '개인기 스틱 Z 모드');
+    this.skillZ.setAttribute('aria-pressed', 'false');
+    this.skillZ.onclick = () => {
+      const z = this.touch.toggleSkillZ();
+      this.skillZ.setAttribute('aria-pressed', String(z));
+      this.skillPad.textContent = z ? '개인기 Z' : '개인기';
+    };
+    this.root.append(this.skillZ);
     for (const slot of SLOTS) {
       const button = document.createElement('button');
       button.type = 'button';
@@ -109,6 +121,7 @@ export class TouchControls {
     this.root.dataset.mode = mode;
     const shown = visibleSlots(mode);
     this.skillPad.classList.toggle('hidden', mode !== 'attack');
+    this.skillZ.classList.toggle('hidden', mode !== 'attack');
     for (const [slot, button] of this.buttons) {
       const { label } = touchBinding(mode, slot);
       const hint = swipeHint(mode, slot);

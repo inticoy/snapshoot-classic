@@ -38,7 +38,8 @@ export class Ball {
       new THREE.SphereGeometry(BALL.radius, 24, 16),
       new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.4 }),
     );
-    fallback.castShadow = true;
+    // 높이에 따라 옅어지는 블롭만 써서 모델 그림자와 겹치지 않게 한다.
+    fallback.castShadow = false;
     this.object.add(fallback);
 
     // 공 그림자 블롭 (높이 감각을 위해)
@@ -62,7 +63,7 @@ export class Ball {
       pivot.add(model);
       pivot.scale.setScalar((BALL.radius * 2) / Math.max(size.x, size.y, size.z));
       model.traverse((c) => {
-        if ((c as THREE.Mesh).isMesh) c.castShadow = true;
+        if ((c as THREE.Mesh).isMesh) c.castShadow = false;
       });
       this.object.clear();
       this.object.add(pivot);

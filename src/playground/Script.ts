@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { HeadlessModel } from '../net/HeadlessModel';
-import { PHYSICS } from '../config';
+import { PHYSICS, PLAYGROUND } from '../config';
 import { Input, ACTION_KEYS } from '../core/Input';
 import { Random } from '../core/Random';
 import { PLAYGROUND_PARAMETERS, PLAYGROUND_SCENARIOS, type PlaygroundScenario } from '../data/Playground';
@@ -83,11 +83,12 @@ function serializedEvent(event: MatchEvent, t: number): ScriptResult['events'][n
 }
 
 /** 새 Match와 고정 스텝 입력으로 매번 같은 JSON 값만 반환한다. */
-export function runScript(source: PlaygroundScript): ScriptResult {
+function* scriptSteps(source: PlaygroundScript): Generator<number, ScriptResult> {
   const script = validateScript(source);
   const snapshot = parameterSnapshot();
   try {
     for (const [key, value] of Object.entries(script.params ?? {})) setParameter(key.split('.')[1] as typeof PLAYGROUND_PARAMETERS[number]['key'], value);
+    const scriptParameters = parameterSnapshot();
     const match = new Match(new PhysicsWorld(), { practice: true, random: new Random(script.seed), createPlayerModel: () => new HeadlessModel(), goalVisuals: false });
     new PlaygroundScenarios(match).reset(script.scenario, script.seed, script.opponent ?? 'press', script.control ?? 'user');
     const input = new Input({ addEventListener() {} } as unknown as Window);
@@ -108,6 +109,13 @@ export function runScript(source: PlaygroundScript): ScriptResult {
     capture(0, []);
     let nextSample = 1;
     for (let step = 0; step < steps; step++) {
+      // 양보하는 동안 화면 경기가 스크립트의 전역 파라미터를 읽지 않게 복원한다.
+      if (step % PLAYGROUND.scriptChunkSteps === 0) {
+        for (const p of PLAYGROUND_PARAMETERS) setParameter(p.key, p.key === 'windup' ? snapshot.MOTION_SELECT.windup : snapshot.DRIBBLE[p.key]);
+        yield step / steps;
+        Object.assign(snapshot, parameterSnapshot());
+        for (const p of PLAYGROUND_PARAMETERS) setParameter(p.key, p.key === 'windup' ? scriptParameters.MOTION_SELECT.windup : scriptParameters.DRIBBLE[p.key]);
+      }
       const t = step * PHYSICS.step;
       const taps: string[] = [];
       while (rowIndex < script.inputs.length && script.inputs[rowIndex].t <= t + 1e-9) {
@@ -160,5 +168,30 @@ export function runScript(source: PlaygroundScript): ScriptResult {
     return result;
   } finally {
     for (const p of PLAYGROUND_PARAMETERS) setParameter(p.key, p.key === 'windup' ? snapshot.MOTION_SELECT.windup : snapshot.DRIBBLE[p.key]);
+  }
+}
+
+/** CLI·회귀 검증용 동기 API도 같은 스텝을 끝까지 실행한다. */
+export function runScript(source: PlaygroundScript): ScriptResult {
+  const runner = scriptSteps(source);
+  let next = runner.next();
+  while (!next.done) next = runner.next();
+  return next.value;
+}
+
+/** 스텝 수·입력 순서는 유지하고 청크 사이에 브라우저가 화면과 입력을 처리하게 한다. */
+export async function runScriptAsync(source: PlaygroundScript, onProgress: (progress: number) => void = () => {}): Promise<ScriptResult> {
+  const runner = scriptSteps(source);
+  try {
+    let next = runner.next();
+    while (!next.done) {
+      onProgress(next.value);
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      next = runner.next();
+    }
+    onProgress(1);
+    return next.value;
+  } finally {
+    runner.return(undefined as never);
   }
 }

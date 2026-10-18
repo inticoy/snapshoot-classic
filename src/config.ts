@@ -121,6 +121,7 @@ export const PASS = {
 };
 
 export const MATCH = {
+  durations: [120, 240, 360, 480],
   durationSeconds: 240, // 실제 4분 = 90분 표시
   goalCelebration: 3,
   kickoffDelay: 1.2,
@@ -248,6 +249,7 @@ export const VISUAL = {
   animationDistance: 48,
   animationHz: 30,
   shadowDistance: 24,
+  shadowHysteresis: 2,
   // 판정 방향은 즉시 반영하되 화면에서는 한 프레임에 약 7.5도 이하로 돌린다.
   maxYawRate: 8,
   // 속도 경계와 구운 동작 진입·복귀에 약 0.25초의 시각적 혼합 시간을 준다.
@@ -268,6 +270,8 @@ export const PLAYGROUND = {
   passDistance: 15,
   duration: 24 * 60 * 60,
   panelPeriod: 0.1,
+  recordSeconds: 5 * 60,
+  scriptChunkSteps: 120,
 };
 
 // 음원은 단발 -3 dBFS, 관중 -23 LUFS로 맞췄으므로 여기서는 경기 내 상대 크기만 조절한다.

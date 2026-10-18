@@ -49,7 +49,7 @@ if (browser) {
     await page.locator('#playground details > summary', { hasText: '파라미터' }).click();
     await page.waitForFunction(() => window.__game.game.playground.records.at(-1)?.parameters.DRIBBLE.leadWalk === 0.6);
     // JSON 스크립트 재생: 화면에서 돌린 결과도 헤드리스와 같은 형식이어야 한다
-    const scripted = await page.evaluate(() => window.__playground.run({ scenario: 'duel', seed: 3, duration: 3, inputs: [{ t: 0, keys: ['ArrowRight'] }] }).summary);
+    const scripted = await page.evaluate(async () => (await window.__playground.run({ scenario: 'duel', seed: 3, duration: 3, inputs: [{ t: 0, keys: ['ArrowRight'] }] })).summary);
     assert.ok(Number.isFinite(scripted.touches) && scripted.firstWithin2m !== null, JSON.stringify(scripted));
     const exported = {};
     for (const format of ['json', 'csv']) {

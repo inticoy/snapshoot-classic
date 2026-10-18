@@ -25,6 +25,7 @@ export class Sound {
   private master: GainNode | null = null;
   private compressor: DynamicsCompressorNode | null = null;
   private readonly buffers = new Map<SoundKey, AudioBuffer>();
+  private loading: Promise<unknown> | null = null;
   private ambience: AudioBufferSourceNode | null = null;
   private ambienceGain: GainNode | null = null;
   private readonly lastPlayed = new Map<SoundKey, number>();
@@ -32,10 +33,13 @@ export class Sound {
 
   async unlock(): Promise<void> {
     if (this.ctx) {
-      if (this.ctx.state === 'suspended') await this.ctx.resume();
+      const resumed = this.ctx.state === 'suspended' ? this.ctx.resume() : Promise.resolve();
+      await Promise.all([resumed, this.loading]);
       return;
     }
     this.ctx = new AudioContext();
+    // 새 컨텍스트도 suspended일 수 있어 fetch 전에 입력 제스처 안에서 resume을 호출한다.
+    const resumed = this.ctx.resume();
     this.master = this.ctx.createGain();
     this.master.gain.value = AUDIO_MIX.master;
     // 동시 발생한 충격음과 관중음의 합이 순간적으로 튀는 것을 완화한다.
@@ -46,7 +50,7 @@ export class Sound {
     this.compressor.attack.value = 0.005;
     this.compressor.release.value = 0.2;
     this.master.connect(this.compressor).connect(this.ctx.destination);
-    await Promise.all(
+    this.loading = Promise.all(
       (Object.keys(FILES) as SoundKey[]).map(async (k) => {
         try {
           const res = await fetch(FILES[k]);
@@ -57,6 +61,7 @@ export class Sound {
         }
       }),
     );
+    await Promise.all([resumed, this.loading]);
   }
 
   play(key: SoundKey, volume = 1, rate = 1): void {

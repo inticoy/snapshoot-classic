@@ -1,3 +1,4 @@
+import { MATCH } from '../config';
 import { setActivePhysics, type PresetName } from '../physics/presets';
 
 /**
@@ -30,6 +31,7 @@ export const GRAPHICS_LABEL: Record<GraphicsQuality, string> = { auto: '자동',
 const GRAPHICS_ORDER: GraphicsQuality[] = ['auto', 'low', 'high'];
 
 interface SettingsData {
+  duration: number;
   passAssist: AssistLevel;
   shotAssist: AssistLevel;
   moveAssist: MoveAssist;
@@ -42,12 +44,13 @@ interface SettingsData {
 const KEY = 'snapshoot-classic:settings';
 
 function load(): SettingsData {
-  const fallback: SettingsData = { passAssist: 'assisted', shotAssist: 'assisted', moveAssist: 'high', physicsPreset: 'arcade', graphicsQuality: 'auto', shootout: false };
+  const fallback: SettingsData = { duration: MATCH.durationSeconds, passAssist: 'assisted', shotAssist: 'assisted', moveAssist: 'high', physicsPreset: 'arcade', graphicsQuality: 'auto', shootout: false };
   try {
     const raw = localStorage.getItem(KEY);
     if (!raw) return fallback;
     const parsed = JSON.parse(raw) as Partial<SettingsData>;
     return {
+      duration: MATCH.durations.includes(parsed.duration!) ? parsed.duration! : fallback.duration,
       passAssist: ORDER.includes(parsed.passAssist!) ? parsed.passAssist! : fallback.passAssist,
       shotAssist: ORDER.includes(parsed.shotAssist!) ? parsed.shotAssist! : fallback.shotAssist,
       moveAssist: MOVE_ORDER.includes(parsed.moveAssist!) ? parsed.moveAssist! : fallback.moveAssist,
@@ -103,5 +106,11 @@ export function graphicsQuality(touch: boolean, cores: number): 'low' | 'high' {
 
 export function toggleShootout(): void {
   settings.shootout = !settings.shootout;
+  save();
+}
+
+export function setDuration(duration: number): void {
+  if (!MATCH.durations.includes(duration)) return;
+  settings.duration = duration;
   save();
 }

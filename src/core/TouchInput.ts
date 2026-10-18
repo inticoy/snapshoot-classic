@@ -48,6 +48,13 @@ export class TouchInput {
   private skillId: number | null = null;
   private buttonUsed = false;
   mode: TouchMode = 'attack';
+  skillZ = false;
+
+  toggleSkillZ(): boolean {
+    this.skillZ = !this.skillZ;
+    if (this.skillId !== null) this.input.setActions(`touch:${this.skillId}`, [this.skillZ ? 'finesse' : 'skill']);
+    return this.skillZ;
+  }
   joystick: { x: number; y: number; dx: number; dy: number } | null = null;
 
   constructor(private readonly input: Input, private readonly onCancel: () => void) {}
@@ -72,8 +79,10 @@ export class TouchInput {
   startSkill(id: number, x: number, y: number): boolean {
     if (this.skillId !== null || this.contacts.has(id) || this.mode !== 'attack') return false;
     this.skillId = id;
-    this.contacts.set(id, { x, y, action: 'skill' });
-    this.input.setActions(`touch:${id}`, ['skill']);
+    const action = this.skillZ ? 'finesse' : 'skill';
+    this.buttonUsed = true;
+    this.contacts.set(id, { x, y, action });
+    this.input.setActions(`touch:${id}`, [action]);
     this.input.setSkillMove(0, 0);
     return true;
   }

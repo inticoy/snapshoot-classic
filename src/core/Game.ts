@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { GRAPHICS, PHYSICS, PITCH } from '../config';
+import { GRAPHICS, PHYSICS, PITCH, MATCH } from '../config';
 import { Input } from './Input';
 import { TouchControls } from '../ui/TouchControls';
 import type { TouchMode } from './TouchInput';
@@ -13,7 +13,7 @@ import { IDLE_COMMAND, Match, type TeamAssist, type UserCommand } from '../gamep
 import { CAMERA_LABEL, CameraRig } from '../camera/CameraRig';
 import { Hud } from '../ui/Hud';
 import { Menu, assistPanel, controlsPanel, matchupPanel, SquadView, statsPanel, type MenuScreen } from '../ui/Menu';
-import { ASSIST_LABEL, MOVE_ASSIST_LABEL, GRAPHICS_LABEL, cycleAssist, cycleMoveAssist, cycleGraphics, graphicsQuality, settings, togglePhysicsPreset, toggleShootout } from './Settings';
+import { ASSIST_LABEL, MOVE_ASSIST_LABEL, GRAPHICS_LABEL, cycleAssist, cycleMoveAssist, cycleGraphics, graphicsQuality, settings, setDuration, togglePhysicsPreset, toggleShootout } from './Settings';
 import { PRESET_LABEL, activePhysics, setActivePhysics } from '../physics/presets';
 import { Sound } from '../audio/Sound';
 import { categoryVolume, decideTouchSound } from '../audio/Mix';
@@ -24,7 +24,7 @@ import type { Playground } from '../playground/Playground';
 
 type AppState = 'menu' | 'playing' | 'paused' | 'result';
 
-const DURATIONS = [120, 240, 360, 480];
+const DURATIONS = MATCH.durations;
 const MENU_KEYS = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Enter', 'Escape', 'Backspace'];
 
 const handL = new THREE.Vector3(), handR = new THREE.Vector3();
@@ -50,7 +50,7 @@ export class Game {
   private state: AppState = 'menu';
   private accumulator = 0;
   private last = performance.now();
-  private durationIndex = 1;
+  private durationIndex = DURATIONS.indexOf(settings.duration);
   private readonly squad = new SquadView();
   private readonly cmd: UserCommand = {
     move: new THREE.Vector3(),
@@ -70,6 +70,10 @@ export class Game {
   private online: { session: NetSession; start: StartInfo } | null = null;
 
   constructor(canvas: HTMLCanvasElement, options: { playground?: typeof Playground; online?: { session: NetSession; start: StartInfo } } = {}) {
+    // 메뉴를 거치지 않는 연습장·초대 링크도 첫 사용자 입력 안에서 오디오를 깨운다.
+    const unlockAudio = () => { void this.sound.unlock().catch((error) => console.warn('audio unlock failed', error)); };
+    window.addEventListener('pointerdown', unlockAudio, { once: true, capture: true });
+    window.addEventListener('keydown', unlockAudio, { once: true, capture: true });
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, GRAPHICS.high.pixelRatio));
     this.renderer.shadowMap.enabled = true;
@@ -341,8 +345,8 @@ export class Game {
           id: 'length',
           label: '경기 시간',
           value: lengthLabel,
-          onLeft: () => (this.durationIndex = (this.durationIndex + DURATIONS.length - 1) % DURATIONS.length),
-          onRight: () => (this.durationIndex = (this.durationIndex + 1) % DURATIONS.length),
+          onLeft: () => { this.durationIndex = (this.durationIndex + DURATIONS.length - 1) % DURATIONS.length; setDuration(DURATIONS[this.durationIndex]); },
+          onRight: () => { this.durationIndex = (this.durationIndex + 1) % DURATIONS.length; setDuration(DURATIONS[this.durationIndex]); },
         },
         ...this.linkItems(() => this.openMainMenu(), true),
         {

@@ -1,7 +1,8 @@
+import { settings } from '../src/core/Settings';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Window as HappyWindow } from 'happy-dom';
 import { Playground } from '../src/playground/Playground';
-import { DRIBBLE, PHYSICS } from '../src/config';
+import { DRIBBLE, PHYSICS, PLAYGROUND } from '../src/config';
 import { MOTION_SELECT } from '../src/anim/MotionLibrary';
 import { parameterSnapshot } from '../src/playground/Parameters';
 import { Input } from '../src/core/Input';
@@ -226,4 +227,51 @@ it('터치 기기는 패널이 접힌 채 시작하고 개인기 스틱 기준�
   expect(panel.querySelector('.pg-help')!.textContent).toContain('개인기 스틱');
   expect(panel.textContent).not.toContain('Shift');
   expect(panel.querySelector('code')!.textContent).toBe('슛 게이지 중 패스');
+});
+
+it('기록은 고정 용량의 시간순 링이며 설정은 변경 시에만 새 스냅샷을 쓴다', () => {
+  const seconds = PLAYGROUND.recordSeconds;
+  try {
+    PLAYGROUND.recordSeconds = PHYSICS.step * 3;
+    for (let i = 0; i < 5; i++) step();
+    expect(pg.records).toHaveLength(3);
+    expect(pg.records.map((r) => r.time)).toEqual([3, 4, 5].map((n) => n * PHYSICS.step));
+    expect(pg.records[0].settings).toBe(pg.records[2].settings);
+    const before = settings.shootout;
+    const previous = pg.records[2].settings;
+    try {
+      settings.shootout = !before;
+      step();
+      expect(pg.records[2].settings).not.toBe(previous);
+      expect(previous).toMatchObject({ shootout: before });
+      expect(pg.records[2].settings).toMatchObject({ shootout: !before });
+    } finally { settings.shootout = before; }
+    pg.reset();
+    expect(pg.records).toHaveLength(0);
+  } finally { PLAYGROUND.recordSeconds = seconds; }
+});
+
+it.each([
+  ['stars', '별이 부족'], ['distance', '너무 멀'], ['height', '너무 높'], ['busy', '동작 중'],
+] as const)('개인기 실패 %s 이벤트를 토스트로 표시하고 판정 상태는 바꾸지 않는다', (reason, message) => {
+  const before = match.ball.position.clone();
+  match.events.push({ type: 'skillFail', id: 'drag_back', player: match.controlled, reason });
+  pg.step(PHYSICS.step, command());
+  expect(document.querySelector('.pg-toast')!.textContent).toContain(message);
+  expect(match.ball.position).toEqual(before);
+});
+
+it('직접 입력 방향 시퀀스를 표시하며 공이 멀어도 실패 안내를 낸다', () => {
+  const cmd = command();
+  cmd.skill = { held: false, pressed: false, released: false };
+  pg.step(PHYSICS.step, cmd);
+  cmd.skill.held = true;
+  cmd.skillMove = cmd.move.clone().set(0, 0, 1);
+  pg.step(PHYSICS.step, cmd);
+  expect(document.querySelector('#pg-skill-sequence')!.textContent).toContain('→');
+  cmd.skill.held = false;
+  cmd.skillMove.set(0, 0, 0);
+  match.ball.reset(30, 30);
+  pg.step(PHYSICS.step, cmd);
+  expect(document.querySelector('.pg-toast')!.textContent).toContain('너무 멀');
 });

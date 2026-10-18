@@ -175,8 +175,10 @@ kbd {
 .sgroup li b { font: 700 15px/1 var(--num); }
 .squad-team { font: 700 12px/1 var(--ui); letter-spacing: 0.1em; }
 
-/* ---------- 터치 버튼 (색·글꼴만) ---------- */
+/* ---------- 터치 버튼: 위치·크기·색은 이 파일에서 함께 관리한다 ---------- */
 .touch-button {
+  position: absolute; width: 62px; height: 62px; border-radius: 50%;
+  color: #fff; line-height: 1.25; padding: 5px; pointer-events: auto; touch-action: none;
   background: rgba(13, 15, 19, 0.6); border: 1px solid rgba(255, 255, 255, 0.22);
   font-family: var(--ui); font-weight: 700; letter-spacing: -0.01em; box-shadow: none;
 }
@@ -231,6 +233,8 @@ kbd {
   right: calc(36px + env(safe-area-inset-right)); bottom: calc(136px + env(safe-area-inset-bottom));
 }
 .touch-lob { border-color: rgba(255, 212, 0, 0.7); }
+/* 프리킥만 슛과 로빙을 함께 표시하므로 로빙을 위로 분리한다. */
+#touch-controls[data-mode="freekick"] .touch-lob { bottom: calc(136px + env(safe-area-inset-bottom)); }
 .touch-pause {
   width: auto; height: 34px; padding: 0 14px; border-radius: 4px; font-size: 12px;
   right: calc(12px + env(safe-area-inset-right)); top: calc(10px + env(safe-area-inset-top)); bottom: auto;
@@ -479,3 +483,6 @@ body:has(#overlay:not(.hidden)) #rotate-guide { display: none; }
   .squad-portrait { display: none; }
   .squad-player { justify-content: center; gap: 3px; }
 }
+
+.touch-skill-z { position: absolute; right: calc(222px + env(safe-area-inset-right)); bottom: calc(104px + env(safe-area-inset-bottom)); min-width: 48px; min-height: 44px; border: 1px solid var(--accent); border-radius: 6px; background: #10151bdd; color: #fff; pointer-events: auto; touch-action: none; }
+.touch-skill-z[aria-pressed="true"] { background: #725d00; }

@@ -164,6 +164,9 @@ export class SkillInput {
   /** 보조키를 누른 시각 */
   private started = 0;
 
+  /** 표시 전용 복사본은 커맨드 인식 상태를 바꾸지 않는다. */
+  get directions(): readonly Dir[] { return this.steps.filter((s) => !s.seed).map((s) => s.dir); }
+
   get active(): boolean { return this.mode !== null; }
 
   reset(): void {
@@ -308,11 +311,16 @@ export class SkillRunner {
     const def = requested.stars <= p.profile.skill ? requested : SKILLS
       .filter((s) => JSON.stringify(s.trigger) === JSON.stringify(requested.trigger) && s.stars <= p.profile.skill)
       .sort((a, b) => b.stars - a.stars)[0];
-    if (!def) return false;
+    // 실패 경로에 표시용 이벤트만 덧붙이고 반환값·성공 조건은 그대로 둔다.
+    const fail = (reason: 'stars' | 'distance' | 'height' | 'busy') => {
+      this.m.events.push({ type: 'skillFail', id: requested.id, player: p, reason });
+      return false;
+    };
+    if (!def) return fail('stars');
     const m = this.m;
-    if (m.ball.owner !== p || p.busy || this.active.has(p) || p.profile.skill < def.stars) return false;
+    if (m.ball.owner !== p || p.busy || this.active.has(p) || p.profile.skill < def.stars) return fail(p.busy || this.active.has(p) ? 'busy' : p.profile.skill < def.stars ? 'stars' : 'distance');
     const bp = m.ball.position;
-    if (Math.hypot(bp.x - p.pos.x, bp.z - p.pos.z) > 1.2 || bp.y > 0.6) return false;
+    if (Math.hypot(bp.x - p.pos.x, bp.z - p.pos.z) > 1.2 || bp.y > 0.6) return fail(bp.y > 0.6 ? 'height' : 'distance');
     const fwd = p.facing.clone().setY(0).normalize();
     const v0 = Math.max(0, p.vel.x * fwd.x + p.vel.z * fwd.z);
     const a: Active = {

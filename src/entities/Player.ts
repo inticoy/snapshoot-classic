@@ -329,7 +329,8 @@ export class Player {
       this.model.update(this.visualTime);
       this.visualTime = 0;
     }
-    const shadow = distance < VISUAL.shadowDistance;
+    // 경계 부근의 작은 카메라 이동으로 그림자가 매 프레임 켜졌다 꺼지지 않게 한다.
+    const shadow = distance < VISUAL.shadowDistance + (this.shadowEnabled ? VISUAL.shadowHysteresis : -VISUAL.shadowHysteresis);
     if (shadow !== this.shadowEnabled) {
       this.shadowEnabled = shadow;
       this.model.root.traverse((o) => { if ((o as THREE.Mesh).isMesh) o.castShadow = shadow; });

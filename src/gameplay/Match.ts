@@ -52,6 +52,7 @@ export type MatchEvent =
   | { type: 'tackle'; success: boolean }
   | { type: 'run'; player: Player }
   | { type: 'skill'; id: string; player: Player }
+  | { type: 'skillFail'; id: string; player: Player; reason: 'stars' | 'distance' | 'height' | 'busy' }
   | { type: 'out'; kind: RestartKind; team: 0 | 1 }
   | { type: 'restart'; kind: RestartKind; team: 0 | 1 };
 

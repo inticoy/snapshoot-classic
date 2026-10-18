@@ -243,3 +243,31 @@ it('공격 모드는 슛·패스·질주만 보이고 스와이프 안내를 단
   expect(shown.sort()).toEqual(['pass', 'pause', 'shoot', 'sprint']);
   expect((document.querySelector('[data-touch="pass"]') as HTMLElement).dataset.hint).toBe('↑스루 ↓로빙');
 });
+
+it('Z 모드 스틱은 드래그백 커맨드를 내고 해제·취소 뒤 Z 입력을 남기지 않는다', () => {
+  const { input, controls } = ui();
+  const toggle = document.querySelector<HTMLButtonElement>('.touch-skill-z')!;
+  toggle.click();
+  expect(toggle.getAttribute('aria-pressed')).toBe('true');
+  const skill = document.querySelector('.touch-skill')!;
+  const recognizer = new SkillInput();
+  const facing = new THREE.Vector3(1, 0, 0);
+  let found: string | undefined;
+  const tick = () => {
+    const axis = input.skillAxis();
+    found ??= recognizer.update(1 / 120, input.isDown('skill'), input.isDown('finesse'), new THREE.Vector3(axis.y, 0, axis.x), facing, SKILLS)?.id;
+    input.endFrame();
+  };
+  tick();
+  pointer(skill, 'pointerdown', 1, 590, 325);
+  tick();
+  pointer(skill, 'pointermove', 1, 590, 365);
+  for (let i = 0; i < 50; i++) tick();
+  pointer(skill, 'pointerup', 1, 590, 365);
+  tick();
+  expect(found).toBe('drag_back');
+  expect(input.isDown('finesse')).toBe(false);
+  pointer(skill, 'pointerdown', 2, 590, 325);
+  controls.reset();
+  expect(input.isDown('finesse')).toBe(false);
+});

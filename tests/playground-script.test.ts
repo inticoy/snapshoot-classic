@@ -1,6 +1,6 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { expect, it } from 'vitest';
-import { runScript, validateScript, type PlaygroundScript } from '../src/playground/Script';
+import { runScript, runScriptAsync, validateScript, type PlaygroundScript } from '../src/playground/Script';
 
 const still = (scenario: PlaygroundScript['scenario'], opponent: PlaygroundScript['opponent'] = 'press'): PlaygroundScript => ({ scenario, seed: 318, duration: 6, opponent, inputs: [] });
 
@@ -83,4 +83,25 @@ it('잘못된 키와 파라미터를 거절하고 유효한 상대 조작을 허
   expect(() => validateScript({ ...still('duel'), inputs: [{ t: 0, keys: ['KeyM'] }] })).toThrow();
   expect(() => validateScript({ ...still('duel'), params: { 'DRIBBLE.touchPeriod': 99 } })).toThrow();
   expect(runScript({ ...still('duel'), control: 'opponent' }).frames[0].user.pos).toBeDefined();
+});
+
+it('청크 실행은 양보 중 파라미터를 복원하며 동기 실행과 프레임·이벤트·요약이 같다', async () => {
+  const { DRIBBLE } = await import('../src/config');
+  const original = DRIBBLE.leadWalk;
+  const script = { ...still('pressure'), params: { 'DRIBBLE.leadWalk': 0.6 } };
+  const expected = runScript(script);
+  const progress: number[] = [];
+  let yielded = false;
+  const timer = setTimeout(() => { yielded = true; }, 0);
+  try {
+    const actual = await runScriptAsync(script, (value) => {
+      expect(DRIBBLE.leadWalk).toBe(original);
+      progress.push(value);
+    });
+    expect(yielded).toBe(true);
+    expect(progress[0]).toBe(0);
+    expect(progress.at(-1)).toBe(1);
+    expect(progress.length).toBeGreaterThan(2);
+    expect(actual).toEqual(expected);
+  } finally { clearTimeout(timer); }
 });

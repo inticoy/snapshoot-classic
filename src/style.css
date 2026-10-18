@@ -532,21 +532,6 @@ button { font: inherit; color: inherit; cursor: pointer; }
   border: 2px solid #ffffff66; border-radius: 50%; background: #07101c55;
 }
 .touch-stick i { position: absolute; width: 44px; height: 44px; left: 28px; top: 28px; border-radius: 50%; background: #ffffff88; }
-.touch-button {
-  position: absolute; width: 62px; height: 62px; border-radius: 50%; border: 1px solid #ffffff66;
-  background: #0b182cbb; color: #fff; font: 700 12px var(--font-ko); line-height: 1.25;
-  pointer-events: auto; touch-action: none; -webkit-touch-callout: none;
-  padding: 5px; right: calc(18px + env(safe-area-inset-right)); bottom: calc(28px + env(safe-area-inset-bottom));
-}
-.touch-button.held { background: #2ef59aaa; color: #04140c; border-color: var(--accent); }
-.touch-shoot { width: 76px; height: 76px; right: calc(24px + env(safe-area-inset-right)); bottom: calc(98px + env(safe-area-inset-bottom)); border-color: var(--accent); font-size: 16px; }
-.touch-pass { right: calc(96px + env(safe-area-inset-right)); }
-.touch-through { right: calc(100px + env(safe-area-inset-right)); bottom: calc(182px + env(safe-area-inset-bottom)); }
-.touch-lob { bottom: calc(194px + env(safe-area-inset-bottom)); }
-.touch-sprint { right: calc(170px + env(safe-area-inset-right)); bottom: calc(96px + env(safe-area-inset-bottom)); }
-.touch-support { right: calc(176px + env(safe-area-inset-right)); bottom: calc(176px + env(safe-area-inset-bottom)); }
-.touch-contain { right: calc(166px + env(safe-area-inset-right)); bottom: calc(22px + env(safe-area-inset-bottom)); }
-.touch-pause { top: calc(12px + env(safe-area-inset-top)); bottom: auto; width: 86px; height: 44px; border-radius: 6px; }
 #rotate-guide { display: none; }
 .touch-device #hints, .touch-device .menu-foot > span { display: none !important; }
 .touch-device #scene { touch-action: none; }

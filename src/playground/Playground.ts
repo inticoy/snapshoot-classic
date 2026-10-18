@@ -1,12 +1,12 @@
 import * as THREE from 'three';
-import { PLAYGROUND } from '../config';
+import { PLAYGROUND, PHYSICS } from '../config';
 import { settings } from '../core/Settings';
 import { Input, isEditing } from '../core/Input';
 import type { Match, UserCommand } from '../gameplay/Match';
 import { PLAYGROUND_PARAMETERS, PLAYGROUND_SCENARIOS, type PlaygroundScenario } from '../data/Playground';
 import { PlaygroundScenarios } from './Scenarios';
 import { parameterSnapshot, setParameter } from './Parameters';
-import { runScript, scriptCommand, validateScript, type PlaygroundScript, type ScriptResult } from './Script';
+import { runScript, runScriptAsync, scriptCommand, validateScript, type PlaygroundScript, type ScriptResult } from './Script';
 import { SkillPanel, type PlaygroundView } from './SkillPanel';
 import { initialTelemetry, recentHistory, recordsToCsv, updateTelemetry, type TelemetryMetrics, type TelemetrySample, type Vec3 } from './Telemetry';
 import './style.css';
@@ -28,7 +28,16 @@ export class Playground {
   private parameters = parameterSnapshot();
   private state = initialTelemetry();
   private history: TelemetryMetrics[] = [];
-  readonly records: Record<string, unknown>[] = [];
+  private readonly recordBuffer: Record<string, unknown>[] = [];
+  private recordHead = 0;
+  private settingsSnapshot = { ...settings };
+  private scriptProgress: number | null = null;
+  private runVersion = 0;
+
+  /** 내보낼 때만 시간순으로 펼치고, 기록은 최근 5분의 링에 일정 비용으로 쓴다. */
+  get records(): Record<string, unknown>[] {
+    return this.recordHead === 0 ? this.recordBuffer.slice() : [...this.recordBuffer.slice(this.recordHead), ...this.recordBuffer.slice(0, this.recordHead)];
+  }
   latest: TelemetryMetrics | null = null;
   private nextRender = 0;
   private readonly toe = new THREE.Vector3();
@@ -71,7 +80,7 @@ export class Playground {
         ${PLAYGROUND_PARAMETERS.map((p) => `<label class="pg-parameter">${p.key} <output data-value="${p.key}"></output> ${p.unit}<input aria-label="${p.key}" data-param="${p.key}" type="range" min="${p.min}" max="${p.max}" step="${p.step}"></label>`).join('')}
         <button id="pg-defaults">기본값 복원</button><button id="pg-copy">JSON 복사</button><textarea id="pg-values" aria-label="현재 파라미터 JSON" hidden readonly></textarea></details>
         <div class="pg-exports"><button id="pg-json">JSON 내보내기</button><button id="pg-csv">CSV 내보내기</button></div>
-        <p class="pg-help">다시 시작하면 기록이 지워지니 먼저 내보내요. 패스나 슛으로 공을 내보낸 경우는 소유권을 잃은 횟수에서 제외해요. 골·아웃·휘슬 뒤에는 R로 다시 시작해요.</p>
+        <p class="pg-help">기록은 최근 5분만 보관해요. 다시 시작하면 지워지니 먼저 내보내요. 패스나 슛으로 공을 내보낸 경우는 소유권을 잃은 횟수에서 제외해요. 골·아웃·휘슬 뒤에는 R로 다시 시작해요.</p>
         </section>
       </div>`;
     document.body.append(this.root);
@@ -94,8 +103,8 @@ export class Playground {
     this.root.querySelector<HTMLInputElement>('#pg-script-file')!.onchange = (e) => void readFile((e.target as HTMLInputElement).files?.[0]);
     scriptText.ondragover = (e) => e.preventDefault();
     scriptText.ondrop = (e) => { e.preventDefault(); void readFile(e.dataTransfer?.files[0]); };
-    this.root.querySelector<HTMLButtonElement>('#pg-script-run')!.onclick = () => {
-      try { this.run(JSON.parse(scriptText.value)); }
+    this.root.querySelector<HTMLButtonElement>('#pg-script-run')!.onclick = async () => {
+      try { await this.runAsync(JSON.parse(scriptText.value)); }
       catch (error) { this.output.textContent = error instanceof Error ? error.message : String(error); }
     };
     this.root.querySelector<HTMLButtonElement>('#pg-script-download')!.onclick = () => {
@@ -131,7 +140,7 @@ export class Playground {
     });
     this.syncParameters();
     this.reset('free');
-    (window as unknown as { __playground: { run: (script: unknown) => ScriptResult } }).__playground = { run: (script) => this.run(script) };
+    (window as unknown as { __playground: { run: (script: unknown) => Promise<ScriptResult> } }).__playground = { run: (script) => this.runAsync(script) };
   }
 
   get running(): boolean { return this.match.phase === 'playing'; }
@@ -145,13 +154,16 @@ export class Playground {
 
   reset(id?: PlaygroundScenario, opponent = this.scenarios.opponent): void {
     this.skills.cancelRepeat();
+    this.skills.resetInput();
     this.onReset();
     this.script = null;
     this.scenarios.reset(id, PLAYGROUND.seed, opponent);
     this.root.querySelector<HTMLSelectElement>('#pg-opponent')!.value = opponent;
     this.state = initialTelemetry();
     this.history = [];
-    this.records.length = 0;
+    this.recordBuffer.length = 0;
+    this.recordHead = 0;
+    this.runVersion++;
     this.latest = null;
     this.nextRender = 0;
     this.root.querySelector('#pg-hint')!.textContent = PLAYGROUND_SCENARIOS.find((s) => s.id === this.scenarios.current)!.hint;
@@ -163,6 +175,10 @@ export class Playground {
   run(source: unknown): ScriptResult {
     const script = validateScript(source);
     const result = runScript(script);
+    return this.playScript(script, result);
+  }
+
+  private playScript(script: PlaygroundScript, result: ScriptResult): ScriptResult {
     this.reset(script.scenario, script.opponent ?? 'press');
     this.scenarios.reset(script.scenario, script.seed, script.opponent ?? 'press', script.control ?? 'user');
     const user = this.match.controlled;
@@ -176,6 +192,30 @@ export class Playground {
     this.scriptInput = new Input({ addEventListener() {} } as unknown as Window);
     this.root.querySelector<HTMLButtonElement>('#pg-script-download')!.disabled = false;
     return result;
+  }
+
+  async runAsync(source: unknown): Promise<ScriptResult> {
+    if (this.scriptProgress !== null) throw new Error('스크립트 실행이 끝날 때까지 기다려 주세요');
+    const script = validateScript(source);
+    const version = ++this.runVersion;
+    const button = this.root.querySelector<HTMLButtonElement>('#pg-script-run')!;
+    button.disabled = true;
+    this.scriptProgress = 0;
+    try {
+      const result = await runScriptAsync(script, (progress) => {
+        this.scriptProgress = progress;
+        this.render();
+      });
+      // 계산 도중 R·시나리오 변경을 했다면 뒤늦게 화면 재생을 덮어쓰지 않는다.
+      this.scriptResult = result;
+      this.root.querySelector<HTMLButtonElement>('#pg-script-download')!.disabled = false;
+      if (version === this.runVersion) this.playScript(script, result);
+      return result;
+    } finally {
+      this.scriptProgress = null;
+      button.disabled = false;
+      this.render();
+    }
   }
 
   commandForStep(): UserCommand | null {
@@ -209,7 +249,7 @@ export class Playground {
   step(dt: number, cmd: UserCommand): void {
     const m = this.match, p = m.controlled;
     if (!this.script && cmd.move.lengthSq() > 0) this.skills.cancelRepeat();
-    this.skills.step(dt);
+    this.skills.step(dt, cmd);
     this.ball.set(m.ball.position.x, m.ball.position.y, m.ball.position.z);
     let footDistance = Infinity;
     for (const side of ['L', 'R'] as const) {
@@ -230,7 +270,9 @@ export class Playground {
     this.latest = result.metrics;
     this.history = recentHistory([...this.history, result.metrics], m.elapsed);
     const { move: _move, ...buttons } = cmd;
-    this.records.push({
+    // 설정이 바뀔 때만 새 스냅샷을 만들어 과거 행의 설정을 보존한다.
+    if ((Object.keys(settings) as (keyof typeof settings)[]).some((key) => settings[key] !== this.settingsSnapshot[key])) this.settingsSnapshot = { ...settings };
+    const record = {
       time: m.elapsed, dt, scenario: this.scenarios.current, seed: this.scenarios.seed,
       input: { ...buttons, move: [...sample.input], skillMove: cmd.skillMove ? vector(cmd.skillMove) : undefined },
       state: {
@@ -239,8 +281,14 @@ export class Playground {
         players: m.players.map((q) => ({ id: playerId(q), position: vector(q.pos), velocity: vector(q.vel), facing: vector(q.facing), tackleTimer: q.tackleTimer, diveTimer: q.diveTimer, motionId: q.model.currentMotionId ?? null, hipsHeight: q.model.hipsHeight ?? null })),
       },
       events: { touches: sample.touches, heavyTouches: sample.heavyTouches, intentionalKick: sample.intentionalKick },
-      telemetry: result.metrics, parameters: this.parameters, settings: { ...settings },
-    });
+      telemetry: result.metrics, parameters: this.parameters, settings: this.settingsSnapshot,
+    };
+    const capacity = Math.ceil(PLAYGROUND.recordSeconds / PHYSICS.step);
+    if (this.recordBuffer.length < capacity) this.recordBuffer.push(record);
+    else {
+      this.recordBuffer[this.recordHead] = record;
+      this.recordHead = (this.recordHead + 1) % capacity;
+    }
     // 이벤트는 고정 스텝별로 소비해 여러 스텝이 한 화면 프레임에 들어와도 중복 집계하지 않는다.
     if (m.elapsed >= this.nextRender || !this.running) {
       this.render();
@@ -258,7 +306,7 @@ export class Playground {
   }
 
   private render(): void {
-    this.output.textContent = `${this.match.elapsed.toFixed(2)}s · ${this.records.length} 스텝 · ${this.running ? '조작 중' : `${this.match.phase} · R로 다시 시작해요`}${this.latest?.turnPending ? ' · 방향 전환 측정 중' : ''}`;
+    this.output.textContent = this.scriptProgress !== null ? `스크립트 계산 중 · ${Math.floor(this.scriptProgress * 100)}%` : `${this.match.elapsed.toFixed(2)}s · ${this.recordBuffer.length} 스텝 · ${this.running ? '조작 중' : `${this.match.phase} · R로 다시 시작해요`}${this.latest?.turnPending ? ' · 방향 전환 측정 중' : ''}`;
     this.root.querySelector('#pg-motion')!.textContent = this.latest?.motionId ?? '이동 / 대기';
     for (const [key] of metrics) {
       const value = this.latest?.[key];
