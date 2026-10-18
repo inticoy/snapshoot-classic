@@ -560,7 +560,30 @@ export class Match {
     return this.windups.has(p);
   }
 
+  /** 킥 전에 공까지 달려가는 중 (도착하면 go로 킥 동작 시작, 뺏기거나 너무 오래 걸리면 취소) */
+  private readonly approaches = new Map<Player, { ttl: number; go: () => void }>();
+
+  private updateApproaches(dt: number): void {
+    for (const [p, a] of this.approaches) {
+      const bp = this.ball.position;
+      a.ttl -= dt;
+      if (this.ball.owner !== p || a.ttl <= 0) { this.approaches.delete(p); continue; }
+      this.footPoint(p, tmp);
+      if (Math.hypot(bp.x - tmp.x, bp.z - tmp.z) <= 0.55) {
+        this.approaches.delete(p);
+        a.go();
+        continue;
+      }
+      // 공 뒤로 들어가 발이 공에 닿게 달린다 (입력은 잠깐 막는다)
+      tmp2.set(bp.x - p.pos.x, 0, bp.z - p.pos.z).normalize();
+      p.actionLock = Math.max(p.actionLock, 0.05);
+      p.facing.copy(tmp2);
+      p.steer(tmp2, true, true, dt);
+    }
+  }
+
   cancelWindups(): void {
+    this.approaches.clear();
     this.windups.clear();
     this.cancelUserCharge();
   }
@@ -570,7 +593,14 @@ export class Match {
    * instant면 동작만 맞추고 바로 찬다 (PK처럼 키퍼 반응을 차는 순간에 정해야 할 때)
    */
   private withKickMotion(p: Player, kind: MotionKind, vel: CANNON.Vec3, run: () => void, instant = false): void {
-    if (this.windups.has(p)) return;
+    if (this.windups.has(p) || this.approaches.has(p)) return;
+    // 공이 발에서 한 걸음 이상 앞서 굴러가 있으면 공까지 달려가서 찬다 (그 자리에서 차면 공이 순간이동해 보인다)
+    const bp0 = this.ball.position;
+    this.footPoint(p, tmp);
+    if (!instant && this.ball.owner === p && bp0.y < 0.5 && Math.hypot(bp0.x - tmp.x, bp0.z - tmp.z) > 0.7) {
+      this.approaches.set(p, { ttl: 1.2, go: () => this.withKickMotion(p, kind, vel, run) });
+      return;
+    }
     const foot = this.kicks.footFactor(p).side === 1 ? 'R' : 'L';
     // 키퍼가 손에 든 공: 짧은 패스는 던지기, 긴 공은 손에서 떨어뜨려 차기(드롭킥 = 로빙 동작, 땅 높이 기준)
     const inHands = p.isKeeper && this.ball.owner === p && this.ball.position.y > 0.4;
@@ -683,6 +713,7 @@ export class Match {
     this.contestBall(dt);
     this.rules.update(dt);
     if (this.phase !== 'playing') return; // 어드밴티지 무효 → 프리킥
+    this.updateApproaches(dt);
     this.updateWindups(dt);
     this.carryBall(dt, this.options.dribbleTouches !== false);
     this.stepWorld(dt);
