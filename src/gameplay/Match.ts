@@ -1129,6 +1129,8 @@ export class Match {
       if (cmd.finesse.held) c.finesse = true;
       if (cmd.modifier.held) c.chip = true;
       if (cmd.contain.held) c.flair = true;
+      // D를 먼저 누르고 F를 눌러도 파워슛 (누르는 순서와 무관하게)
+      if (c.kind === 'shoot' && cmd.power?.held) c.power = true;
       if (oppHasBall) {
         this.charge = null; // 차는 도중 공을 뺏김
       } else if (btn.released || !btn.held) {
