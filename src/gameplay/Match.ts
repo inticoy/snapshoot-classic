@@ -12,7 +12,7 @@ import { MOVE_ASSIST_TIME, settings, type AssistLevel, type MoveAssist } from '.
 import { n } from '../data/Stats';
 import { activePhysics } from '../physics/presets';
 import type { ButtonState } from '../core/Input';
-import { TEAMS } from '../data/Teams';
+import { TEAMS, type PlayerProfile } from '../data/Teams';
 import { FORMATION_433 } from '../data/Formation';
 import { SetPieces, type RestartKind } from './SetPieces';
 import { Keepers } from './Keepers';
@@ -2068,7 +2068,18 @@ export class Match {
     for (const o of this.officials.all) o.model.root.visible = o.item.visible = false;
   }
 
-  restart(): void {
+  restart(lineups?: readonly (readonly PlayerProfile[])[]): void {
+    // 경기 시작 전에만 명단을 받아 외형·등번호·신체 정보도 새 선수와 함께 맞춘다.
+    if (lineups) {
+      for (const team of [0, 1] as const) {
+        FORMATION_433.forEach((slot, i) => {
+          const index = team * FORMATION_433.length + i;
+          const profile = lineups[team][i];
+          if (this.roster[index].profile === profile) return;
+          this.roster[index] = new Player(team, slot.role, profile.number, profile.short, profile, slot, this.options.createPlayerModel);
+        });
+      }
+    }
     this.score[0] = this.score[1] = 0;
     this.stats = emptyStats();
     this.queued = null;

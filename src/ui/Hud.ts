@@ -34,12 +34,12 @@ const SETPIECE_HINTS: Record<string, [string, string][]> = {
   goalkick: [['←→', '조준'], ['A', '롱킥'], ['S', '짧은 패스']],
   freekick: [['←→', '조준'], ['D', '슛'], ['Z+D', '감아차기'], ['S', '패스'], ['A', '롱킥']],
   indirect: [['←→', '조준'], ['S', '패스'], ['A', '롱킥']],
-  penalty: [['↑↓', '구석 선택'], ['D', '슛 (꾹 = 세기)']],
-  keeper: [['↑↓', '차는 순간 다이빙 방향']],
+  penalty: [['↑↓', '구석 선택'], ['D', '슛 (길게 눌러 세기 조절)']],
+  keeper: [['↑↓', '상대가 차는 순간 방향 선택']],
   hands: [['방향키', '조준'], ['S', '던지기'], ['Z+S', '강하게 던지기'], ['D·A', '드롭킥'], ['W', '내려놓기']],
 };
 const SETPIECE_TITLE: Record<string, string> = {
-  throwin: '스로인', corner: '코너킥', goalkick: '골킥', freekick: '프리킥', indirect: '간접 프리킥', penalty: '페널티킥', keeper: '페널티 방어',
+  throwin: '스로인', corner: '코너킥', goalkick: '골킥', freekick: '프리킥', indirect: '간접 프리킥', penalty: '페널티킥', keeper: '페널티킥 수비',
 };
 
 const KIND_LABEL = { shoot: 'SHOT', pass: 'PASS', through: 'THROUGH', lob: 'LOB' } as const;

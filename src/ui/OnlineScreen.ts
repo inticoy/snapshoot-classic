@@ -21,7 +21,7 @@ export class OnlineScreen {
     const body = (() => {
       switch (view.kind) {
         case 'searching':
-          return `<p class="ol-status"><i class="ol-spin"></i>상대를 찾는 중…</p><p class="ol-hint">비슷한 시간에 빠른 매칭을 누른 사람과 연결돼요</p>`;
+          return `<p class="ol-status"><i class="ol-spin"></i>상대를 찾고 있어요…</p><p class="ol-hint">비슷한 시간에 빠른 매칭을 누른 사람과 연결돼요.</p>`;
         case 'join':
           return `<form class="ol-join"><label for="ol-code">방 코드 6자리</label>
             <input id="ol-code" maxlength="6" autocomplete="off" autocapitalize="characters" spellcheck="false" inputmode="text" placeholder="ABC123">
@@ -46,7 +46,7 @@ export class OnlineScreen {
     this.root.querySelector('.ol-cancel')!.addEventListener('click', () => { location.search = ''; });
     const copy = this.root.querySelector<HTMLButtonElement>('[data-copy]');
     copy?.addEventListener('click', async () => {
-      try { await navigator.clipboard.writeText(copy.dataset.copy!); copy.textContent = '복사했어요'; } catch { copy.textContent = '링크를 길게 눌러 복사하세요'; }
+      try { await navigator.clipboard.writeText(copy.dataset.copy!); copy.textContent = '복사했어요'; } catch { copy.textContent = '링크를 길게 누르면 복사할 수 있어요'; }
     });
     const form = this.root.querySelector<HTMLFormElement>('.ol-join');
     if (form) {
@@ -56,7 +56,7 @@ export class OnlineScreen {
       form.addEventListener('submit', (e) => {
         e.preventDefault();
         if (/^[A-Z0-9]{6}$/.test(input.value)) this.onJoin(input.value);
-        else this.show({ kind: 'join', error: '6자리 코드를 입력해 주세요' });
+        else this.show({ kind: 'join', error: '6자리 코드를 입력해야 해요' });
       });
     }
   }

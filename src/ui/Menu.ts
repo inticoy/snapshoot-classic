@@ -1,5 +1,7 @@
-import { TEAMS } from '../data/Teams';
+import { TEAMS, type PlayerProfile } from '../data/Teams';
 import { STAT_LABELS, faceStats } from '../data/Stats';
+import { FORMATION_433 } from '../data/Formation';
+import { PITCH } from '../config';
 import type { MatchStats } from '../gameplay/Match';
 
 export interface MenuItem {
@@ -20,6 +22,7 @@ export interface MenuScreen {
   items: MenuItem[];
   panel: () => string;
   onBack?: () => void;
+  bindPanel?: (root: HTMLElement) => void;
 }
 
 /**
@@ -43,6 +46,8 @@ export class Menu {
   }
 
   close(): void {
+    // 숨긴 카드에 포커스가 남으면 경기 중 Space 입력까지 메뉴가 받게 된다.
+    if (this.root.contains(document.activeElement)) (document.activeElement as HTMLElement).blur();
     this.root.classList.add('hidden');
     this.screen = null;
   }
@@ -51,6 +56,16 @@ export class Menu {
   handleKey(code: string): void {
     const s = this.screen;
     if (!s) return;
+    const focused = document.activeElement as HTMLElement | null;
+    if (focused?.closest('.squad-view')) {
+      if (code === 'Enter') { focused.click(); return; }
+      if (code.startsWith('Arrow')) {
+        const buttons = [...this.root.querySelectorAll<HTMLButtonElement>('.squad-view button')];
+        const delta = code === 'ArrowLeft' || code === 'ArrowUp' ? -1 : 1;
+        buttons[(buttons.indexOf(focused as HTMLButtonElement) + delta + buttons.length) % buttons.length]?.focus();
+        return;
+      }
+    }
     const item = s.items[this.index];
     switch (code) {
       case 'ArrowUp':
@@ -133,6 +148,7 @@ export class Menu {
       });
     });
     this.root.querySelector('.menu-back')?.addEventListener('click', () => s.onBack?.());
+    s.bindPanel?.(this.root.querySelector<HTMLElement>('.menu-right')!);
   }
 }
 
@@ -160,7 +176,7 @@ export function controlsPanel(): string {
   return `
     <div class="card">
       <h3>조작법</h3>
-      <p class="touch-instructions">왼쪽 빈 곳을 누르고 드래그하면 이동합니다. 오른쪽 개인기 스틱을 누른 채 8방향으로 굴리면 개인기를 사용합니다. 짧게 움직였다 놓으면 탭, 길게 유지하면 꾹 입력입니다. 오른쪽 슛·패스를 꾹 눌러 파워를 모으고 뗍니다. 패스를 누른 채 위로 밀면 스루, 아래로 밀면 로빙. 슛을 위로 밀며 떼면 칩슛, 좌우로 떼면 감아차기. 수비 때는 압박(밀면 슬라이딩)·태클·선수 변경 버튼으로 바뀝니다. PK는 조이스틱 위/아래로 구석을 고르고, 상대 PK는 차는 순간 조이스틱 방향으로 키퍼가 몸을 던집니다.</p>
+      <p class="touch-instructions">왼쪽 빈 곳을 누른 채 끌면 이동해요. 오른쪽 개인기 스틱을 누른 채 8방향으로 움직이면 개인기를 써요. 짧게 움직였다 놓으면 탭으로, 길게 유지하면 길게 누르기로 입력돼요. 오른쪽 슛·패스 버튼을 길게 눌러 세기를 조절한 뒤 놓아요. 패스 버튼을 누른 채 위로 밀면 스루 패스, 아래로 밀면 로빙 패스를 해요. 슛 버튼을 위로 밀며 놓으면 칩슛, 좌우로 밀며 놓으면 감아차기를 해요. 수비할 때는 압박·태클·선수 변경 버튼으로 바뀌어요. 압박 버튼을 밀면 슬라이딩 태클을 해요. 페널티킥을 찰 때는 조이스틱을 위아래로 움직여 구석을 골라요. 막을 때는 상대가 차는 순간 조이스틱 방향으로 골키퍼가 몸을 던져요.</p>
       <h4>FC 온라인 키보드 배치</h4>
       <div class="keymap">
         <div>
@@ -168,7 +184,7 @@ export function controlsPanel(): string {
           <ul>
             ${row(['←', '↑', '↓', '→'], '이동')}
             ${row(['E'], '질주')}
-            ${row(['D'], '슛 (꾹 눌러 파워)')}
+            ${row(['D'], '슛 (길게 눌러 세기 조절)')}
             ${row(['Z', 'D'], '감아차기')}
             ${row(['Q', 'D'], '칩슛')}
             ${row(['S'], '짧은 패스')}
@@ -180,10 +196,10 @@ export function controlsPanel(): string {
         <div>
           <h4>수비</h4>
           <ul>
-            ${row(['D'], '압박 (꾹)')}
-            ${row(['Q'], '동료 압박 (꾹)')}
-            ${row(['C'], '견제 (꾹)')}
-            ${row(['W'], '키퍼 돌진 (꾹)')}
+            ${row(['D'], '압박 (길게 누르기)')}
+            ${row(['Q'], '동료 압박 (길게 누르기)')}
+            ${row(['C'], '견제 (길게 누르기)')}
+            ${row(['W'], '키퍼 돌진 (길게 누르기)')}
             ${row(['Space'], '스탠딩 태클')}
             ${row(['A'], '슬라이딩 태클')}
             ${row(['S'], '선수 변경')}
@@ -191,7 +207,7 @@ export function controlsPanel(): string {
           <h4 style="margin-top:18px">페널티킥</h4>
           <ul>
             ${row(['↑', '↓'], '찰 때: 구석 선택 · 막을 때: 다이빙 방향')}
-            ${row(['D'], '슛 (꾹 눌러 세기)')}
+            ${row(['D'], '슛 (길게 눌러 세기 조절)')}
           </ul>
           <h4 style="margin-top:18px">게임</h4>
           <ul>
@@ -201,7 +217,7 @@ export function controlsPanel(): string {
           </ul>
         </div>
       </div>
-      <p style="margin-top:16px">공이 오는 중에 슛/패스 키를 미리 누르면 원터치로 처리됩니다. 슛 파워 게이지가 흰 선(80%)을 넘으면 공이 뜰 수 있어요.</p>
+      <p style="margin-top:16px">공이 오는 동안 슛·패스 키를 미리 누르면 한 번의 터치로 처리해요. 슛 파워 게이지가 흰 선(80%)을 넘으면 공이 뜰 수 있어요.</p>
     </div>`;
 }
 
@@ -238,11 +254,11 @@ export function statsPanel(stats: MatchStats, score: [number, number], title: st
 
 const STAT_GROUPS: [string, (keyof typeof STAT_LABELS)[]][] = [
   ['속도', ['sprintSpeed', 'acceleration']],
-  ['슈팅', ['finishing', 'shotPower', 'longShots', 'curve']],
+  ['슈팅', ['finishing', 'shotPower', 'longShots', 'curve', 'volleys', 'heading']],
   ['패스', ['shortPassing', 'longPassing', 'vision']],
   ['드리블', ['dribbling', 'ballControl', 'agility', 'balance', 'reactions', 'composure']],
   ['수비', ['defAwareness', 'standingTackle', 'slidingTackle', 'interceptions']],
-  ['피지컬', ['strength', 'stamina']],
+  ['피지컬', ['strength', 'jumping', 'stamina']],
   ['골키퍼', ['diving', 'handling', 'kicking', 'reflexes', 'positioning']],
 ];
 
@@ -250,8 +266,7 @@ function statTier(v: number): string {
   return v >= 85 ? 'elite' : v >= 75 ? 'good' : v >= 60 ? 'mid' : 'low';
 }
 
-export function playerCard(team: 0 | 1, index: number): string {
-  const p = TEAMS[team].players[index];
+export function playerCard(team: 0 | 1, index: number, p = TEAMS[team].players[index]): string {
   const keeper = p.pos === 'GK';
   const face = faceStats(p.stats, keeper);
   return `
@@ -263,8 +278,7 @@ export function playerCard(team: 0 | 1, index: number): string {
     </div>`;
 }
 
-export function playerDetailPanel(team: 0 | 1, index: number): string {
-  const p = TEAMS[team].players[index];
+export function playerDetailPanel(team: 0 | 1, index: number, p = TEAMS[team].players[index]): string {
   const groups = STAT_GROUPS.filter(([g]) => (p.pos === 'GK' ? true : g !== '골키퍼'));
   const rows = groups
     .map(([g, keys]) => {
@@ -280,38 +294,120 @@ export function playerDetailPanel(team: 0 | 1, index: number): string {
     .join('');
   return `
     <div class="card detail">
-      ${playerCard(team, index)}
+      ${playerCard(team, index, p)}
       <div class="sgroups">${rows}</div>
     </div>`;
 }
 
-export function squadPanel(): string {
-  return `
-    <div class="card">
-      <h3>스쿼드 · 4-3-3</h3>
-      ${([0, 1] as const)
-        .map(
-          (t) => `<div class="squad-row"><div class="squad-team">${TEAMS[t].name.toUpperCase()}</div><div class="squad-cards">${TEAMS[t].players
-            .map((_, i) => playerCard(t, i))
-            .join('')}</div></div>`,
-        )
-        .join('')}
-    </div>`;
+/** 기본 팀 데이터는 그대로 두어 온라인 명단이 로컬 편집의 영향을 받지 않게 한다. */
+export class SquadView {
+  readonly lineups = TEAMS.map((team) => [...team.players]);
+  private readonly benches = TEAMS.map((team) => [...team.bench]);
+  private team: 0 | 1 = 0;
+  private selected: { bench: boolean; index: number } | null = null;
+  private notice = '';
+
+  panel = (): string => {
+    const team = this.team;
+    const card = (p: PlayerProfile, index: number, bench: boolean) => {
+      const selected = this.selected?.bench === bench && this.selected.index === index;
+      const slot = !bench ? FORMATION_433[index] : null;
+      // 킥오프 슬롯이 모여 있는 자기 진영을 세로로 펼쳐 모든 카드 사이의 간격을 확보한다.
+      const lineWidth = slot ? Math.max(1, ...FORMATION_433.filter((s) => s.role === slot.role).map((s) => Math.abs(s.z))) : 1;
+      const position = slot ? `left:${50 + slot.z / lineWidth * 38}%;top:${8 + (-slot.fx / PITCH.halfL) * 82}%` : '';
+      return `<button type="button" class="squad-player ${team === 0 ? 'home' : 'away'}" data-player="${index}" data-bench="${bench}" style="${position}" aria-expanded="${selected}" aria-controls="squad-detail">
+        <span class="squad-position">${slot?.label ?? '벤치'} · ${p.pos}</span>
+        <span class="squad-rating"><b>${p.ovr}</b><small>종합</small><span>#${p.number}</span></span>
+        <span class="squad-name">${p.name}</span></button>`;
+    };
+    const p = this.selected ? (this.selected.bench ? this.benches : this.lineups)[team][this.selected.index] : null;
+    return `<section class="squad-view">
+      <div class="squad-tabs" role="group" aria-label="팀 선택">${TEAMS.map((t, i) => `<button type="button" data-team="${i}" aria-pressed="${team === i}">${t.name}</button>`).join('')}</div>
+      <h3>${TEAMS[team].name} · 4-3-3</h3>
+      <p>카드를 누르면 능력치가 펼쳐져요. 선발과 벤치 선수를 차례로 누르면 맞바꿔요. 골키퍼는 골키퍼끼리 바꿀 수 있어요.</p>
+      <p>선발은 다음 경기부터 적용돼요. 온라인에서는 기본 명단을 사용해요. 키보드는 Tab·방향키로 이동하고 Enter·Space로 선택해요.</p>
+      <div class="squad-pitch" aria-label="선발 포메이션"><div class="pitch-lines" aria-hidden="true"><i></i></div>${this.lineups[team].map((p, i) => card(p, i, false)).join('')}</div>
+      <h4>벤치</h4><div class="squad-bench">${this.benches[team].map((p, i) => card(p, i, true)).join('')}</div>
+      <div class="squad-actions"><button type="button" data-clear>선택 해제</button><button type="button" data-reset>기본 명단</button></div>
+      <p role="status" aria-live="polite">${this.notice}</p>
+      <div id="squad-detail">${p ? `<h4>${p.name} · #${p.number} · ${p.pos}</h4>${playerDetailPanel(team, 0, p)}` : '<p>선수를 선택하면 여기에서 능력치를 볼 수 있어요.</p>'}</div>
+    </section>`;
+  };
+
+  bind = (root: HTMLElement): void => {
+    const refresh = (selector: string) => {
+      const scroll = root.scrollTop;
+      root.innerHTML = this.panel();
+      this.bind(root);
+      root.querySelector<HTMLElement>(selector)?.focus({ preventScroll: true });
+      root.scrollTop = scroll;
+    };
+    root.querySelectorAll<HTMLButtonElement>('[data-team]').forEach((button) => {
+      button.onclick = () => {
+        this.team = Number(button.dataset.team) as 0 | 1;
+        this.selected = null;
+        this.notice = '';
+        refresh(`[data-team="${this.team}"]`);
+      };
+    });
+    root.querySelectorAll<HTMLButtonElement>('[data-player]').forEach((button) => {
+      button.onclick = () => {
+        const next = { index: Number(button.dataset.player), bench: button.dataset.bench === 'true' };
+        const prev = this.selected;
+        this.notice = '';
+        if (prev && prev.bench !== next.bench) {
+          const starter = prev.bench ? next.index : prev.index;
+          const sub = prev.bench ? prev.index : next.index;
+          const lineup = this.lineups[this.team], bench = this.benches[this.team];
+          if ((lineup[starter].pos === 'GK') !== (bench[sub].pos === 'GK')) {
+            this.notice = '골키퍼는 골키퍼끼리 바꿀 수 있어요. 다른 선수를 골라요.';
+          } else {
+            [lineup[starter], bench[sub]] = [bench[sub], lineup[starter]];
+            this.notice = `${lineup[starter].name} 선수를 선발로 바꿨어요.`;
+            this.selected = null;
+          }
+        } else {
+          this.selected = prev?.bench === next.bench && prev.index === next.index ? null : next;
+        }
+        refresh(`[data-player="${next.index}"][data-bench="${next.bench}"]`);
+      };
+    });
+    root.querySelector<HTMLButtonElement>('[data-clear]')!.onclick = () => {
+      this.selected = null;
+      this.notice = '';
+      refresh('[data-clear]');
+    };
+    root.querySelector<HTMLButtonElement>('[data-reset]')!.onclick = () => {
+      this.lineups[this.team] = [...TEAMS[this.team].players];
+      this.benches[this.team] = [...TEAMS[this.team].bench];
+      this.selected = null;
+      this.notice = '기본 명단으로 되돌렸어요.';
+      refresh('[data-reset]');
+    };
+    // Space는 경기 입력에 쓰이므로 스쿼드 안에서 먼저 처리한다.
+    root.onkeydown = (event) => {
+      if (event.code === 'Space' && (event.target as HTMLElement).closest('.squad-view button')) {
+        event.preventDefault();
+        event.stopPropagation();
+        (event.target as HTMLElement).click();
+      }
+    };
+  };
 }
 
 export function assistPanel(kind: 'pass' | 'shot'): string {
   const pass = `
     <h3>패스 보조</h3>
-    <p><b>보조</b> · 방향키 쪽 넓은 범위에서 동료를 찾아 방향과 세기를 자동으로 맞춥니다.<br/>
-    <b>세미</b> · 좁은 범위의 동료에게 방향과 세기를 맞추지만, 게이지에 따라 세기가 조금 달라집니다.<br/>
-    <b>수동</b> · 방향키와 게이지 그대로. 동료가 없어도 원하는 곳으로 찰 수 있습니다.</p>
-    <p style="margin-top:10px">어떤 설정이든 <b>짧은 패스 · 긴 패스 · 시야</b> 능력치와 압박, 약발에 따라 오차가 생깁니다.</p>`;
+    <p><b>보조</b> · 방향키로 가리킨 쪽의 넓은 범위에서 동료를 찾아 방향과 세기를 자동으로 맞춰요.<br/>
+    <b>세미</b> · 좁은 범위에서 동료를 찾아 방향과 세기를 맞춰요. 게이지에 따라 세기가 조금 달라져요.<br/>
+    <b>수동</b> · 방향키와 게이지에 맞춰 차요. 동료가 없어도 원하는 곳으로 찰 수 있어요.</p>
+    <p style="margin-top:10px">어떤 설정이든 <b>짧은 패스 · 긴 패스 · 시야</b> 능력치와 압박, 약발에 따라 오차가 생겨요.</p>`;
   const shot = `
     <h3>슛 보조</h3>
-    <p><b>보조</b> · 방향키를 어디로 두든 골문 안을 노립니다 (입력은 좌우 선택).<br/>
-    <b>세미</b> · 골문 근처까지만 보정. 방향을 잘못 주면 옆으로 빗나갑니다.<br/>
-    <b>수동</b> · 방향키 방향 그대로 찹니다.</p>
-    <p style="margin-top:10px">정확도는 <b>골 결정력</b>(박스 안) · <b>중거리 슛</b>(박스 밖) · <b>커브</b>(감아차기), 속도는 <b>슛 파워</b>. 압박·질주는 <b>침착성</b>이 버텨 줍니다.</p>`;
+    <p><b>보조</b> · 방향키로 어느 쪽을 가리켜도 골문 안을 노려요. 입력 방향으로 골문의 왼쪽과 오른쪽을 골라요.<br/>
+    <b>세미</b> · 골문 근처까지만 보정해요. 방향을 잘못 잡으면 옆으로 빗나가요.<br/>
+    <b>수동</b> · 방향키로 가리킨 방향 그대로 차요.</p>
+    <p style="margin-top:10px">정확도에는 박스 안에서 <b>골 결정력</b>, 박스 밖에서 <b>중거리 슛</b>, 감아차기에는 <b>커브</b>가 영향을 줘요. 공의 속도는 <b>슛 파워</b>에 따라 달라져요. <b>침착성</b>이 높으면 압박을 받거나 질주할 때 오차를 줄여 줘요.</p>`;
   return `<div class="card">${kind === 'pass' ? pass : shot}</div>`;
 }
 

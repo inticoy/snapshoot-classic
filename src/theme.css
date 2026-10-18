@@ -384,3 +384,34 @@ kbd {
 .net-ping.bad { color: #ff6b5e; }
 .net-paused { background: #000a; padding: 4px 8px; border-radius: 4px; font-size: 12px; }
 .touch-device .net-status { top: calc(50px + env(safe-area-inset-top)); }
+
+/* 포메이션 카드는 좁은 화면에서도 네 수비수가 겹치지 않도록 폭을 나눈다. */
+.squad-view { min-width: 0; color: var(--text); font-family: var(--ui); }
+.squad-view h3, .squad-view h4 { margin: 12px 0; }
+.squad-view p { font-size: 13px; line-height: 1.65; color: var(--muted); margin: 8px 0; }
+.squad-tabs, .squad-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.squad-tabs button, .squad-actions button { min-height: 44px; padding: 8px 12px; border: 1px solid #ffffff40; border-radius: 6px; background: #17242e; color: #fff; font: inherit; cursor: pointer; }
+.squad-tabs [aria-pressed="true"] { background: var(--accent); color: #111; }
+.squad-pitch { position: relative; height: auto; aspect-ratio: 0.88; min-height: 420px; margin: 16px 0; border: 1px solid #ffffff66; border-radius: 8px; overflow: hidden; background: repeating-linear-gradient(0deg, #184e3b 0% 12.5%, #1d5941 12.5% 25%); }
+.pitch-lines { position: absolute; inset: 3%; border: 1px solid #ffffff60; pointer-events: none; }
+.pitch-lines::before { content: ''; position: absolute; inset: 50% 0 auto; border-top: 1px solid #ffffff60; }
+.pitch-lines::after { content: ''; position: absolute; left: 50%; top: 50%; width: 24%; aspect-ratio: 1; border: 1px solid #ffffff60; border-radius: 50%; transform: translate(-50%, -50%); }
+.pitch-lines i::before, .pitch-lines i::after { content: ''; position: absolute; left: 20%; width: 60%; height: 16%; border: 1px solid #ffffff60; }
+.pitch-lines i::before { top: 0; border-top: 0; }
+.pitch-lines i::after { bottom: 0; border-bottom: 0; }
+.squad-player { display: flex; flex-direction: column; gap: 3px; min-height: 70px; padding: 6px 4px; border: 1px solid #ee7478; border-radius: 6px; background: #311d29f5; color: #fff; font: 600 12px/1.2 var(--ui); cursor: pointer; text-align: center; }
+.squad-player.away { background: #152b4bf5; border-color: #779bff; }
+.squad-pitch .squad-player { position: absolute; width: 22%; transform: translate(-50%, -50%); }
+.squad-position { font-size: 10px; color: #e2e6e9; }
+.squad-rating { display: flex; gap: 4px; align-items: baseline; justify-content: center; }
+.squad-rating b { font-size: 20px; color: #ffdc85; }
+.squad-rating small { font-size: 9px; }
+.squad-rating > span { margin-left: auto; font-size: 11px; }
+.squad-name { overflow-wrap: anywhere; }
+.squad-player[aria-expanded="true"] { outline: 3px solid var(--accent); outline-offset: 1px; }
+.squad-view button:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
+.squad-bench { display: grid; grid-template-columns: repeat(auto-fit, minmax(92px, 1fr)); gap: 8px; margin-bottom: 12px; }
+#squad-detail .detail { flex-wrap: wrap; }
+#squad-detail .sgroups { min-width: 0; }
+/* 세로 회전 안내는 경기 중에만 보여 메뉴를 가리지 않게 한다. */
+body:has(#overlay:not(.hidden)) #rotate-guide { display: none; }

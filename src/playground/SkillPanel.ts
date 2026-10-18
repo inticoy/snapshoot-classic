@@ -24,7 +24,7 @@ const FACING = new THREE.Vector3(1, 0, 0);
 /** 커맨드 표기 (↑ = 선수 앞) */
 export function commandText(def: SkillDef, touch = false): string {
   const t = def.trigger;
-  if (t.kind === 'z' && touch) return '개인기 스틱 미지원 · ▶ 시범';
+  if (t.kind === 'z' && touch) return '스틱으로 입력할 수 없어요 · ▶ 시범';
   if (t.kind === 'fake' && touch) return `${t.from === 'shoot' ? '슛' : '로빙'} 게이지 중 패스`;
   if (t.kind === 'fake') return `${t.from === 'shoot' ? 'D' : 'A'} 게이지 중 S`;
   const seq = t.seq.map((s) => `${ARROW[s.dir]}${s.hold ? ' 꾹' : ''}`).join(t.seq.some((s) => s.hold) ? ' ' : '');
@@ -68,14 +68,14 @@ export class SkillPanel {
   constructor(private readonly match: Match, root: HTMLElement, private readonly gameView: PlaygroundView, private readonly resetFree: () => void) {
     const list = groups();
     root.innerHTML = `
-      <p class="pg-help">▶를 누르면 시범을 보여요. 직접 하려면 공을 가진 채 ${this.touch ? '개인기 스틱을 안내 방향으로 움직이세요' : '커맨드를 입력하세요'} (↑ = 선수가 보는 쪽).</p>
+      <p class="pg-help">▶를 누르면 시범을 볼 수 있어요. 직접 하려면 공을 가진 채 ${this.touch ? '개인기 스틱을 안내 방향으로 움직여요' : '커맨드를 입력해요'} (↑는 선수가 보는 방향이에요).</p>
       <div class="pg-row" role="group" aria-label="재생 속도">${SPEEDS.map((s) => `<button data-speed="${s}" aria-pressed="${s === 1}">${s === 1 ? '보통' : `${s}×`}</button>`).join('')}
         <label class="pg-inline"><input type="checkbox" id="pg-repeat"> 반복</label></div>
       <div class="pg-row" role="group" aria-label="카메라">${VIEWS.map((v) => `<button data-view="${v.id}" aria-pressed="${v.id === 'side'}">${v.label}</button>`).join('')}<button data-view="off" aria-pressed="false">경기 카메라</button></div>
       <p class="pg-last">방금 쓴 개인기 <b id="pg-last-skill">—</b></p>
       <ul class="pg-skills">${list.map((g) => `
         <li><div class="pg-skill-name"><span class="pg-stars">${'★'.repeat(g.stars)}</span> ${g.name}${g.nick ? ` <em>${g.nick}</em>` : ''}${g.rig ? ' <i class="pg-new">새 동작</i>' : ''}</div>
-          ${g.variants.map((v) => `<div class="pg-skill-row"><code>${commandText(v.def, this.touch)}</code>${v.def.sustained ? '<small>직접 입력</small>' : `<button data-demo="${v.def.id}" aria-label="${v.def.name} 시범">▶ ${g.variants.length > 1 ? v.label : ''}</button>`}</div>${SKILLS.filter((d) => d.stars > v.def.stars && JSON.stringify(d.trigger) === JSON.stringify(v.def.trigger)).map((d) => `<small class="pg-help">★${d.stars} 선수는 ${d.name}</small>`).join('')}`).join('')}
+          ${g.variants.map((v) => `<div class="pg-skill-row"><code>${commandText(v.def, this.touch)}</code>${v.def.sustained ? '<small>직접 입력</small>' : `<button data-demo="${v.def.id}" aria-label="${v.def.name} 시범">▶ ${g.variants.length > 1 ? v.label : ''}</button>`}</div>${SKILLS.filter((d) => d.stars > v.def.stars && JSON.stringify(d.trigger) === JSON.stringify(v.def.trigger)).map((d) => `<small class="pg-help">★${d.stars} 선수는 ${d.name} 동작을 해요</small>`).join('')}`).join('')}
         </li>`).join('')}</ul>`;
     this.last = root.querySelector('#pg-last-skill')!;
     root.querySelectorAll<HTMLButtonElement>('[data-demo]').forEach((b) => {

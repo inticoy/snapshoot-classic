@@ -59,19 +59,19 @@ export class Playground {
         <p id="pg-hint"></p>
         <div class="pg-row"><button id="pg-reset">R · 다시 시작</button>
         <label class="pg-inline">상대 <select id="pg-opponent"><option value="stand">정지</option><option value="follow">따라가기</option><option value="press" selected>압박</option><option value="tackle">태클</option></select></label></div>
-        <p class="pg-help">방향키 이동 · E 질주 · S 패스 · W 스루 · A 로빙/슬라이딩 · D 슛 · Space 스탠딩 · V 카메라 · Tab 상대 조작 · R 리셋</p>
+        <p class="pg-help">방향키로 이동해요. E 질주 · S 패스 · W 스루 패스 · A 로빙 패스/슬라이딩 태클 · D 슛 · Space 스탠딩 태클 · V 카메라 전환 · Tab 상대 조작 · R 다시 시작</p>
         </section>
         <section data-panel="dev" hidden>
-        <details><summary>스크립트 실행</summary><textarea id="pg-script" aria-label="스크립트 JSON" placeholder="JSON을 붙여넣거나 파일을 놓으세요"></textarea><input id="pg-script-file" type="file" accept=".json,application/json"><button id="pg-script-run">실행</button><button id="pg-script-download" disabled>결과 JSON 다운로드</button></details>
+        <details><summary>스크립트 실행</summary><textarea id="pg-script" aria-label="스크립트 JSON" placeholder="JSON을 붙여 넣거나 파일을 끌어다 놓아요"></textarea><input id="pg-script-file" type="file" accept=".json,application/json"><button id="pg-script-run">실행</button><button id="pg-script-download" disabled>결과 JSON 다운로드</button></details>
         <p id="pg-status" role="status"></p>
-        <p class="pg-help">그래프: 최근 5초 / 각 항목 자동 축척. 방향 없는 정지는 —. 전환 완료는 공 방향이 입력 ±30° 안에 들어온 시점.</p>
+        <p class="pg-help">그래프는 최근 5초를 보여 주고, 항목마다 눈금을 자동으로 맞춰요. 멈춰 있어 방향이 없으면 —로 표시해요. 공의 방향이 입력 방향의 ±30° 안에 들어오면 방향 전환이 끝난 것으로 봐요.</p>
         <div class="pg-metrics">${metrics.map(([key, label, unit]) => `<div><label>${label}</label><output data-metric="${key}">—</output><small>${unit}</small><canvas width="100" height="24" data-graph="${key}" aria-label="${label} 최근 5초"></canvas></div>`).join('')}</div>
         <p>동작 <output id="pg-motion">—</output></p>
-        <details><summary>파라미터 · 실시간 적용</summary><p class="pg-help">이번 페이지 세션에 적용됩니다. R은 조정값을 유지합니다.</p>
+        <details><summary>파라미터 · 실시간 적용</summary><p class="pg-help">조정한 값은 이 페이지를 열어 둔 동안 적용돼요. R로 다시 시작해도 유지돼요.</p>
         ${PLAYGROUND_PARAMETERS.map((p) => `<label class="pg-parameter">${p.key} <output data-value="${p.key}"></output> ${p.unit}<input aria-label="${p.key}" data-param="${p.key}" type="range" min="${p.min}" max="${p.max}" step="${p.step}"></label>`).join('')}
-        <button id="pg-defaults">파라미터 원래 값</button><button id="pg-copy">현재 값 복사 (JSON)</button><textarea id="pg-values" aria-label="현재 파라미터 JSON" hidden readonly></textarea></details>
+        <button id="pg-defaults">기본값 복원</button><button id="pg-copy">JSON 복사</button><textarea id="pg-values" aria-label="현재 파라미터 JSON" hidden readonly></textarea></details>
         <div class="pg-exports"><button id="pg-json">JSON 내보내기</button><button id="pg-csv">CSV 내보내기</button></div>
-        <p class="pg-help">리셋하면 기록이 비워집니다. 먼저 내보내세요. 패스·슛의 의도적 방출은 소유 상실에서 제외합니다. 골·아웃·휘슬 뒤에는 R로 재시작합니다.</p>
+        <p class="pg-help">다시 시작하면 기록이 지워지니 먼저 내보내요. 패스나 슛으로 공을 내보낸 경우는 소유권을 잃은 횟수에서 제외해요. 골·아웃·휘슬 뒤에는 R로 다시 시작해요.</p>
         </section>
       </div>`;
     document.body.append(this.root);
@@ -258,7 +258,7 @@ export class Playground {
   }
 
   private render(): void {
-    this.output.textContent = `${this.match.elapsed.toFixed(2)}s · ${this.records.length} 스텝 · ${this.running ? '조작 중' : `${this.match.phase} · R 리셋`}${this.latest?.turnPending ? ' · 방향 전환 측정 중' : ''}`;
+    this.output.textContent = `${this.match.elapsed.toFixed(2)}s · ${this.records.length} 스텝 · ${this.running ? '조작 중' : `${this.match.phase} · R로 다시 시작해요`}${this.latest?.turnPending ? ' · 방향 전환 측정 중' : ''}`;
     this.root.querySelector('#pg-motion')!.textContent = this.latest?.motionId ?? '이동 / 대기';
     for (const [key] of metrics) {
       const value = this.latest?.[key];
@@ -289,14 +289,14 @@ export class Playground {
     const text = JSON.stringify(parameterSnapshot(), null, 2);
     try {
       await navigator.clipboard.writeText(text);
-      this.output.textContent = '현재 파라미터 JSON을 복사했습니다.';
+      this.output.textContent = '현재 파라미터를 JSON으로 복사했어요.';
     } catch {
       const textarea = this.root.querySelector<HTMLTextAreaElement>('#pg-values')!;
       textarea.hidden = false;
       textarea.value = text;
       textarea.focus();
       textarea.select();
-      this.output.textContent = '아래 JSON을 선택해 복사하세요.';
+      this.output.textContent = '아래 JSON을 선택하면 복사할 수 있어요.';
     }
   }
 

@@ -5,7 +5,7 @@ import { pitchMarkings } from '../src/data/PitchMarkings';
 import { FORMATION_433 } from '../src/data/Formation';
 import { TEAMS } from '../src/data/Teams';
 import { CameraRig } from '../src/camera/CameraRig';
-import { playerDetailPanel, squadPanel } from '../src/ui/Menu';
+import { playerDetailPanel } from '../src/ui/Menu';
 import { command, simulation } from './helpers';
 
 it('105×68m 경기장, 12cm 라인과 규격 골문·센터 서클을 사용한다', () => {
@@ -68,7 +68,7 @@ it('골대 충돌체의 안쪽 간격 7.32m와 크로스바 아래 높이 2.44m�
   }
 });
 
-it('양 팀 11명은 슬롯·고유 등번호·주발/약발·능력치가 있고 스쿼드와 상세에 모두 노출된다', () => {
+it('양 팀 11명은 슬롯·고유 등번호·주발/약발·능력치가 있고 상세에 노출된다', () => {
   expect(FORMATION_433.map((s) => s.label)).toEqual(['GK', 'LB', 'LCB', 'RCB', 'RB', 'LCM', 'CM', 'RCM', 'LW', 'ST', 'RW']);
   const { match } = simulation();
   for (const team of [0, 1] as const) {
@@ -80,14 +80,12 @@ it('양 팀 11명은 슬롯·고유 등번호·주발/약발·능력치가 있�
       expect(p.weakFoot).toBeLessThanOrEqual(5);
       expect(Object.values(p.stats).every((v) => v >= 1 && v <= 99)).toBe(true);
       expect(playerDetailPanel(team, i)).toContain(p.short);
-      expect(squadPanel()).toContain(p.short);
     }
     const cb = match.teams[team][2].profile.stats;
     const wing = match.teams[team][8].profile.stats;
     expect(cb.defAwareness).toBeGreaterThan(wing.defAwareness + 30);
     expect(wing.acceleration).toBeGreaterThan(cb.acceleration);
   }
-  expect(squadPanel().match(/class="pcard /g)).toHaveLength(22);
 });
 
 it.each([0, 1] as const)('팀 %i 킥오프에서 키커와 옆 선수만 중앙에 있고 나머지는 자기 진영·상대는 서클 밖이다', (team) => {

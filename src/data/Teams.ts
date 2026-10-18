@@ -18,6 +18,7 @@ export interface TeamProfile {
   abbr: string;
   /** 4-3-3 슬롯 순서와 같다 (GK, LB, LCB, RCB, RB, LCM, CM, RCM, LW, ST, RW) */
   players: PlayerProfile[];
+  bench: PlayerProfile[];
 }
 
 type ProfileInput = Omit<PlayerProfile, 'ovr'>;
@@ -104,6 +105,13 @@ export const TEAMS: [TeamProfile, TeamProfile] = [
         stats: base({ sprintSpeed: 88, acceleration: 91, agility: 89, dribbling: 88, ballControl: 85, finishing: 80, shotPower: 82, curve: 85, shortPassing: 79, vision: 80, defAwareness: 39, standingTackle: 37, interceptions: 41, stamina: 84 }),
       }),
     ],
+    bench: [
+      make({ name: 'Bae Ha-on', short: 'H. BAE', number: 12, pos: 'GK', foot: 'R', weakFoot: 3, skill: 1, stats: keeper({ diving: 77, handling: 76, kicking: 73, reflexes: 80, positioning: 78 }) }),
+      make({ name: 'Ryu Se-on', short: 'S. RYU', number: 15, pos: 'CB', foot: 'R', weakFoot: 3, skill: 3, stats: base({ defAwareness: 79, standingTackle: 80, interceptions: 77, heading: 78, strength: 83 }) }),
+      make({ name: 'Do Ra-on', short: 'R. DO', number: 19, pos: 'CM', foot: 'R', weakFoot: 3, skill: 3, stats: base({ shortPassing: 81, longPassing: 78, vision: 79, ballControl: 80, stamina: 85 }) }),
+      make({ name: 'Ma I-sol', short: 'I. MA', number: 24, pos: 'LW', foot: 'R', weakFoot: 3, skill: 3, stats: base({ sprintSpeed: 87, acceleration: 86, dribbling: 82, ballControl: 80, finishing: 73 }) }),
+      make({ name: 'Gu Ye-on', short: 'Y. GU', number: 27, pos: 'ST', foot: 'R', weakFoot: 3, skill: 3, stats: base({ finishing: 80, shotPower: 79, heading: 78, strength: 80, reactions: 79 }) }),
+    ],
   },
   {
     name: 'Atlantic Blue',
@@ -172,6 +180,13 @@ export const TEAMS: [TeamProfile, TeamProfile] = [
         name: 'Milo Auren', short: 'M. AUREN', number: 7, pos: 'RW', foot: 'L', weakFoot: 5, skill: 4,
         stats: base({ sprintSpeed: 87, acceleration: 90, agility: 90, dribbling: 90, ballControl: 87, finishing: 78, shotPower: 78, curve: 86, shortPassing: 84, vision: 83, defAwareness: 36, standingTackle: 34, interceptions: 38, stamina: 82 }),
       }),
+    ],
+    bench: [
+      make({ name: 'Nerio Valden', short: 'N. VALDEN', number: 12, pos: 'GK', foot: 'R', weakFoot: 3, skill: 1, stats: keeper({ diving: 78, handling: 79, kicking: 71, reflexes: 77, positioning: 80 }) }),
+      make({ name: 'Tavio Merel', short: 'T. MEREL', number: 15, pos: 'RB', foot: 'R', weakFoot: 3, skill: 3, stats: base({ sprintSpeed: 81, acceleration: 80, defAwareness: 77, standingTackle: 78, stamina: 85 }) }),
+      make({ name: 'Orin Vesk', short: 'O. VESK', number: 19, pos: 'CM', foot: 'R', weakFoot: 3, skill: 3, stats: base({ shortPassing: 82, longPassing: 79, vision: 80, ballControl: 81, interceptions: 76 }) }),
+      make({ name: 'Lior Navren', short: 'L. NAVREN', number: 24, pos: 'RW', foot: 'R', weakFoot: 3, skill: 3, stats: base({ sprintSpeed: 86, acceleration: 87, dribbling: 83, ballControl: 81, finishing: 74 }) }),
+      make({ name: 'Enzo Talven', short: 'E. TALVEN', number: 27, pos: 'ST', foot: 'R', weakFoot: 3, skill: 3, stats: base({ finishing: 79, shotPower: 81, heading: 77, strength: 82, reactions: 78 }) }),
     ],
   },
 ];

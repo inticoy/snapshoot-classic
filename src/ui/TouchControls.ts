@@ -46,7 +46,7 @@ export class TouchControls {
     const guide = document.createElement('div');
     guide.id = 'rotate-guide';
     guide.setAttribute('role', 'status');
-    guide.innerHTML = '<b>↻</b><span>가로로 돌려주세요</span><small>두 손으로 조이스틱과 버튼을 함께 조작하세요</small>';
+    guide.innerHTML = '<b>↻</b><span>가로로 돌리면 더 편해요</span><small>두 손으로 조이스틱과 버튼을 함께 조작해요</small>';
     document.body.append(this.root, guide);
     // iOS: 길게 누르면 뜨는 텍스트 선택·돋보기·공유 메뉴를 경기 화면 전체에서 막는다
     const blockGesture = (event: Event) => {

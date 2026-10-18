@@ -44,7 +44,7 @@ export class PlaygroundScenarios {
     m.practiceOpponent = opponent;
     if (control === 'opponent') {
       const target = active.find((p) => p.team === 1 && !p.isKeeper);
-      if (!target) throw new Error('조작할 상대 필드 선수가 없습니다');
+      if (!target) throw new Error('조작할 상대 필드 선수가 없어요');
       m.controlled = target;
       m.practiceControlLocked = true;
     }
