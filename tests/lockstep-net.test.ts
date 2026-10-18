@@ -84,3 +84,34 @@ it('팀 0 화면과 팀 1 화면(localTeam만 다름)이 녹온·개인기·원�
     expect(stateHash(m1), `tick ${t + 120}`).toBe(stateHash(m0));
   }
 });
+
+it('온라인 경기 전체(전반·하프타임·진영 교체·후반·승부차기)가 두 화면에서 같게 끝난다 (보정 설정이 서로 달라도)', () => {
+  const assists = [{ pass: 'manual', shot: 'semi', move: 'none' }, { pass: 'assisted', shot: 'assisted', move: 'high' }] as const;
+  const setup = (localTeam: 0 | 1) => ({ seed: 12, options: { userTeams: [true, true] as [boolean, boolean], localTeam, shootout: true, assists: assists as never } });
+  const queue: { at: number; to: 0 | 1; data: Uint8Array }[] = [];
+  let now = 0;
+  const peers = ([0, 1] as const).map((team) => {
+    const m = headlessMatch(setup(team), () => new SimulationModel());
+    m.duration = 30; // 30초 경기 (하프 15초)
+    return new Lockstep(m, team, { send: (data) => queue.push({ at: now + 3, to: (1 - team) as 0 | 1, data: data.slice() }) });
+  }) as [Lockstep, Lockstep];
+  for (let i = 0; i < 120 * 200 && peers.some((p) => p.match.phase !== 'fulltime'); i++) {
+    now++;
+    for (let k = queue.length - 1; k >= 0; k--) if (queue[k].at <= now) { peers[queue[k].to].receive(queue[k].data, (1 - queue[k].to) as 0 | 1); queue.splice(k, 1); }
+    for (const p of peers) {
+      const c = command();
+      const a = (now / 90 + p.team * 2) % (Math.PI * 2);
+      c.move.set(Math.cos(a), 0, Math.sin(a));
+      c.shoot = { held: now % 150 < 25, pressed: now % 150 === 0, released: now % 150 === 25 };
+      if (p.ready) { p.pushLocal(c); p.step(); } else p.step();
+    }
+  }
+  const [a, b] = peers;
+  expect(a.match.phase).toBe('fulltime');
+  expect(a.match.half).toBe(2);
+  expect(a.desyncAt).toBeNull();
+  expect(b.desyncAt).toBeNull();
+  if (a.tick === b.tick) expect(stateHash(a.match)).toBe(stateHash(b.match));
+  expect(b.match.score).toEqual(a.match.score);
+  expect(b.match.shootout.results).toEqual(a.match.shootout.results);
+}, 120_000);
