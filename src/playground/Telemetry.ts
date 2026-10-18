@@ -28,6 +28,8 @@ export interface TelemetryState {
   touchTimes: number[];
   heavyTouches: number;
   losses: number;
+  /** 입력이 비어 있던 시간 (초) */
+  idle?: number;
 }
 export interface TelemetryMetrics {
   time: number;
@@ -46,7 +48,7 @@ export interface TelemetryMetrics {
 }
 
 export function initialTelemetry(): TelemetryState {
-  return { previous: null, target: null, turnStarted: null, lastTurnSeconds: null, touchTimes: [], heavyTouches: 0, losses: 0 };
+  return { previous: null, target: null, turnStarted: null, lastTurnSeconds: null, touchTimes: [], heavyTouches: 0, losses: 0, idle: 0 };
 }
 
 /** 정지 벡터에는 방향이 없으므로 0° 대신 null을 반환한다. 출력 단위는 도다. */
@@ -63,9 +65,13 @@ export function updateTelemetry(state: TelemetryState, sample: TelemetrySample):
   let target = changedPlayer ? null : state.target;
   let turnStarted = changedPlayer ? null : state.turnStarted;
   let lastTurnSeconds = changedPlayer ? null : state.lastTurnSeconds;
+  // 키를 바꿔 누르는 사이 한두 스텝 입력이 비는 것은 같은 조작으로 본다 (↑ 떼고 → 누르기 = 90° 전환)
+  const idle = active ? 0 : (state.idle ?? 0) + sample.dt;
   if (!active) {
-    target = null;
-    turnStarted = null;
+    if (idle > 0.15) {
+      target = null;
+      turnStarted = null;
+    }
   } else if (!target) {
     target = sample.input;
   } else if ((directionAngle(target, sample.input) ?? 0) >= PLAYGROUND.turnThreshold * 180 / Math.PI) {
@@ -87,11 +93,11 @@ export function updateTelemetry(state: TelemetryState, sample: TelemetrySample):
   // 슛·패스에 따른 의도적 방출과 조작 선수 전환은 소유 상실로 세지 않는다.
   const losses = state.losses + (!changedPlayer && state.previous?.owned && !sample.owned && !sample.intentionalKick ? 1 : 0);
   return {
-    state: { previous: sample, target, turnStarted, lastTurnSeconds, touchTimes, heavyTouches, losses },
+    state: { previous: sample, target, turnStarted, lastTurnSeconds, touchTimes, heavyTouches, losses, idle },
     metrics: {
       time: sample.time, playerSpeed: Math.hypot(...sample.playerVelocity), ballSpeed: Math.hypot(...sample.ballVelocity),
       footDistance: sample.footDistance, bodyInputAngle, ballInputAngle,
-      touchesPerSecond: touchTimes.length / PLAYGROUND.touchWindow, lastTurnSeconds, turnPending: turnStarted !== null,
+      touchesPerSecond: touchTimes.length / PLAYGROUND.touchWindow, lastTurnSeconds, turnPending: active && turnStarted !== null,
       heavyTouches, losses, motionId: sample.motionId, hipsHeight: sample.hipsHeight,
     },
   };

@@ -640,10 +640,11 @@ export class Match {
    */
   private withKickMotion(p: Player, kind: MotionKind, vel: CANNON.Vec3, run: () => void, instant = false): void {
     if (this.windups.has(p) || this.approaches.has(p)) return;
-    // 공이 발에서 한 걸음 이상 앞서 굴러가 있으면 공까지 달려가서 찬다 (그 자리에서 차면 공이 순간이동해 보인다)
-    const bp0 = this.ball.position;
-    this.footPoint(p, tmp);
-    if (!instant && this.ball.owner === p && bp0.y < 0.5 && Math.hypot(bp0.x - tmp.x, bp0.z - tmp.z) > 0.7) {
+    // 패스·슛·로빙: 공이 발에서 한 걸음 이상 앞서 굴러가 있으면 공까지 달려가서 찬다 (그 자리에서 차면 공이 순간이동해 보인다).
+    // 드리블 터치·트래핑은 해당 없음 (방향 전환 중 조작을 빼앗지 않게)
+    // 공용 tmp를 덮어쓰면 부른 쪽 계산이 깨지므로 따로 쓴다
+    const bp0 = this.ball.position, toe = this.footPoint(p, new THREE.Vector3());
+    if (!instant && (kind === 'shot' || kind === 'pass' || kind === 'lob') && this.ball.owner === p && bp0.y < 0.5 && Math.hypot(bp0.x - toe.x, bp0.z - toe.z) > 0.7) {
       this.approaches.set(p, { ttl: 1.2, go: () => this.withKickMotion(p, kind, vel, run) });
       return;
     }
