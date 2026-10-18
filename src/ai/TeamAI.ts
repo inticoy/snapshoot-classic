@@ -297,7 +297,8 @@ export class TeamAI {
     if (close.length === 1 && !this.skillCooldown.get(p)) {
       tmp.copy(close[0].pos).sub(p.pos).normalize();
       if (tmp.dot(p.facing) >= SKILL_AI.front && m.random.next() < SKILL_AI.chance) {
-        const choices = SKILLS.filter((s) => s.stars <= p.profile.skill && s.stars >= 2 && !s.sustained && s.trigger.kind === 'shift');
+        // 레인보우는 공이 오래 떠 있어 1:1 정면에서 AI가 다시 잡기 어렵다 (20경기 시험에서 슛이 줄었다) → AI는 쓰지 않는다
+        const choices = SKILLS.filter((s) => s.stars <= p.profile.skill && s.stars >= 2 && !s.sustained && s.trigger.kind === 'shift' && s.id !== 'rainbow');
         const def = choices[Math.floor(m.random.next() * choices.length)];
         if (def && m.skills.start(p, def)) {
           this.skillCooldown.set(p, SKILL_AI.cooldown);

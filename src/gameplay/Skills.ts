@@ -431,10 +431,18 @@ export class SkillRunner {
     if (!normal) return;
     // 끝 방향: 정해진 방향, 또는 그때 누른 방향
     let dir: THREE.Vector3;
+    let speed = def.exit.speed + a.v0 * def.carry, vy = 0;
+    if (def.rig) {
+      // 다리 IK 개인기는 공이 마지막 순간 움직이던 그대로 나간다 (속도가 튀지 않게, 떠 있는 공은 포물선 그대로)
+      const e = def.rig(def.duration).ball, s = def.rig(def.duration - 0.02).ball;
+      const lx = (e.x - s.x) / 0.02, lz = (e.z - s.z) / 0.02 + a.v0 * def.carry;
+      dir = a.fwd.clone().multiplyScalar(lz).addScaledVector(a.right, lx);
+      speed = Math.max(def.exit.speed * 0.5, dir.length());
+      dir.normalize();
+      vy = (e.y - s.y) / 0.02;
+    } else dir = a.fwd.clone().multiplyScalar(Math.cos(def.exit.dir)).addScaledVector(a.right, Math.sin(def.exit.dir));
     if (def.exit.input && move && move.lengthSq() > 0.25) dir = move.clone().setY(0).normalize();
-    else dir = a.fwd.clone().multiplyScalar(Math.cos(def.exit.dir)).addScaledVector(a.right, Math.sin(def.exit.dir));
-    const speed = def.exit.speed + a.v0 * def.carry;
-    this.m.ball.body.velocity.set(dir.x * speed, 0, dir.z * speed);
+    this.m.ball.body.velocity.set(dir.x * speed, vy, dir.z * speed);
     this.m.ball.body.angularVelocity.set(dir.z * speed / BALL.radius, 0, -dir.x * speed / BALL.radius);
     p.vel.copy(dir).multiplyScalar(def.exit.body + a.v0 * def.carry);
     p.facing.copy(dir);

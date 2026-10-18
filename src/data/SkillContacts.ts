@@ -18,14 +18,6 @@ export const SKILL_CONTACTS: Record<string, Key[]> = {
       "y": 0.19964
     }
   ],
-  "drag_back": [
-    {
-      "t": 0.24,
-      "x": 0.32638,
-      "z": 0.12957,
-      "y": 0.15944
-    }
-  ],
   "reverse_step_over_r": [
     {
       "t": 0.42,

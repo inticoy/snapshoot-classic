@@ -1,6 +1,6 @@
 import { SKILL_CONTACTS } from './SkillContacts';
 import { mirror, type Dir, type SkillDef } from '../gameplay/Skills';
-import { heelFlickRig, rainbowRig, rigKeys, rouletteRig, stepOverRig } from './SkillRigs';
+import { dragBackRig, heelFlickRig, rainbowRig, rigKeys, rouletteRig, stepOverRig } from './SkillRigs';
 
 /** 다리 IK 개인기: rig에서 body·ball 키를 만든다 */
 function rigged(def: SkillDef, rig: NonNullable<SkillDef['rig']>): SkillDef {
@@ -38,19 +38,19 @@ export function makeSkillDefs(): SkillDef[] {
   };
 
   /** 드래그백 (Z + ↓): 발바닥으로 공을 뒤로 끌며 몸을 돌린다 */
-  const DRAG_BACK: SkillDef = {
+  const DRAG_BACK: SkillDef = rigged({
     id: 'drag_back', name: '드래그백', stars: 2,
     trigger: { kind: 'z', seq: [{ dir: 'B' }] },
     duration: 0.6, carry: 0,
     body: [{ t: 0, x: 0, z: 0, yaw: 0 }, { t: 0.2, x: 0, z: -0.08, yaw: 0.2 }, { t: 0.6, x: -0.05, z: -0.3, yaw: Math.PI }],
     ball: [{ t: 0, x: 0.1, z: 0.45 }, { t: 0.12, x: 0.1, z: 0.4 }, { t: 0.38, x: 0.04, z: -0.15 }, { t: 0.6, x: 0, z: -0.75 }],
     // 달리기에서 섞여 오는 발이 안정된 뒤 발바닥 접촉을 맞춘다.
-    contacts: [{ t: 0.24, foot: 'R' }],
-    motion: { id: 'grf_ballcontrol_idle_000', kind: 'control', angle: Math.PI },
+    contacts: [{ t: 0.12, foot: 'R' }],
+    motion: { id: 'grf_ballcontrol_idle_000', flat: true, kind: 'control', angle: 0 },
     exit: { dir: Math.PI, speed: 2.4, body: 1.6, input: true },
     bait: { t: 0.1, dir: 0, strength: 0.6 },
     shield: 0.7,
-  };
+  }, dragBackRig());
 
   /** 속임 동작 (Shift + → 짧게): 몸을 오른쪽으로 실었다가 그대로 앞으로 */
   const FEINT_RIGHT: SkillDef = {
@@ -122,10 +122,10 @@ export function makeSkillDefs(): SkillDef[] {
   const ROULETTE: SkillDef = rigged({
     id: 'roulette_r', name: '오른쪽 룰렛', stars: 3,
     trigger: { kind: 'shift', seq: ['B', 'BL', 'L', 'FL', 'F', 'FR', 'R'].map((dir) => ({ dir: dir as Dir })) },
-    duration: 1, carry: 0.15,
+    duration: 0.9, carry: 0.15,
     body: [{ t: 0, x: 0, z: 0 }, { t: 0.25, x: 0.15, z: 0.08, yaw: Math.PI / 2 }, { t: 0.5, x: 0.35, z: 0.2, yaw: Math.PI }, { t: 0.75, x: 0.4, z: 0.5, yaw: Math.PI * 1.5 }, { t: 1, x: 0.4, z: 0.8, yaw: Math.PI * 2 }],
     ball: [{ t: 0, x: 0.1, z: 0.4 }, { t: 0.3, x: 0.5, z: 0.1 }, { t: 0.55, x: 0.25, z: -0.05 }, { t: 0.8, x: 0.1, z: 0.6 }, { t: 1, x: 0.4, z: 1.25 }],
-    contacts: [{ t: 0.12, foot: 'R' }, { t: 0.55, foot: 'L' }],
+    contacts: [{ t: 0.108, foot: 'R' }, { t: 0.495, foot: 'L' }, { t: 0.774, foot: 'R' }],
     // 팔·상체만 쓴다 (몸 회전은 rig yaw, 다리는 IK)
     motion: { id: 'grf_ballcontrol_idle_000', flat: true, kind: 'control', angle: 0 },
     exit: { dir: 0, speed: 2.4, body: 2.2 },
@@ -224,7 +224,7 @@ export function makeSkillDefs(): SkillDef[] {
     duration: 0.9, carry: 0.2,
     body: [{ t: 0, x: 0, z: 0 }, { t: 0.38, x: 0, z: 0.05 }, { t: 0.92, x: 0, z: 0.75 }],
     ball: [{ t: 0, x: 0.05, z: 0.4 }, { t: 0.24, x: 0.03, z: 0.12 }, { t: 0.38, x: 0, z: -0.1, y: 0.2 }, { t: 0.62, x: 0, z: 0.5, y: 2.0 }, { t: 0.92, x: 0, z: 1.7, y: 0.7 }],
-    contacts: [{ t: 0.08, foot: 'R' }, { t: 0.22, foot: 'R' }, { t: 0.42, foot: 'L' }],
+    contacts: [{ t: 0.1, foot: 'R' }, { t: 0.24, foot: 'R' }, { t: 0.42, foot: 'L' }],
     motion: { id: 'grf_ballcontrol_idle_000', flat: true, kind: 'control', angle: 0 },
     exit: { dir: 0, speed: 3, body: 3 },
     bait: { t: 0.35, dir: 0, strength: 0.6 }, shield: 0.6,

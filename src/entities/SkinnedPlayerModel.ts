@@ -97,6 +97,8 @@ const qB = new THREE.Quaternion();
 const qC = new THREE.Quaternion();
 const vA = new THREE.Vector3(), vB = new THREE.Vector3(), vC = new THREE.Vector3(), vT = new THREE.Vector3(), vK = new THREE.Vector3(), vP = new THREE.Vector3();
 const qI = new THREE.Quaternion();
+/** 서 있을 때 발목 높이 (GLB) */
+const ANKLE_Y = 0.07;
 
 export class SkinnedPlayerModel implements CharacterModel {
   readonly root = new THREE.Group();
@@ -126,6 +128,8 @@ export class SkinnedPlayerModel implements CharacterModel {
   private readonly legNow = {
     L: { pos: new THREE.Vector3(), toe: new THREE.Vector3(0, 0, 1), w: 0 }, R: { pos: new THREE.Vector3(), toe: new THREE.Vector3(0, 0, 1), w: 0 },
     roll: 0, pitch: 0, drop: 0,
+    /** 체중 이동(디딘 발 쪽으로 엉덩이 옆 이동)·착지 반동(스프링)·이전 발 높이 */
+    shift: 0, bounce: 0, bounceV: 0, prevL: ANKLE_Y, prevR: ANKLE_Y,
   };
 
   constructor(colors: ModelColors, private readonly keeper: boolean) {
@@ -381,17 +385,40 @@ export class SkinnedPlayerModel implements CharacterModel {
   /** 개인기 다리 IK: 몸을 기울이고 낮춘 뒤 두 다리를 발목 목표로 굽힌다 (구운 동작 위에 덧입힘) */
   private applyLegs(dt: number): void {
     const t = this.legTarget, n = this.legNow;
-    const k = 1 - Math.exp(-dt / 0.06);
+    // 시작은 빠르게 붙고(첫 터치가 0.1초 안팎), 끝나면 조금 더 천천히 원래 동작으로
+    const k = 1 - Math.exp(-dt / (t ? 0.035 : 0.07));
     n.L.w += ((t ? t.L.w : 0) - n.L.w) * k;
     n.R.w += ((t ? t.R.w : 0) - n.R.w) * k;
     n.roll += ((t?.roll ?? 0) - n.roll) * k;
     n.pitch += ((t?.pitch ?? 0) - n.pitch) * k;
     n.drop += ((t?.drop ?? 0) - n.drop) * k;
-    if (n.L.w < 0.002 && n.R.w < 0.002 && Math.abs(n.roll) + Math.abs(n.pitch) + n.drop < 0.002) return;
+    // 사람처럼 보이게 하는 부수 동작 (발 목표에서 자동으로): 든 발의 높이 = 체중이 반대 발에 실린 정도
+    const liftL = THREE.MathUtils.clamp((n.L.pos.y - ANKLE_Y) / 0.22, 0, 1) * n.L.w;
+    const liftR = THREE.MathUtils.clamp((n.R.pos.y - ANKLE_Y) / 0.22, 0, 1) * n.R.w;
+    // 디딘 발 위로 엉덩이를 옮긴다 (모델 +X = 왼쪽): 오른발을 들면 왼쪽으로
+    n.shift += ((liftR - liftL) * 0.07 - n.shift) * (1 - Math.exp(-dt / 0.08));
+    // 발이 땅에 닿는 순간 살짝 내려앉았다가 튀어 오른다 (감쇠 스프링)
+    for (const side of ['L', 'R'] as const) {
+      const prev = side === 'L' ? n.prevL : n.prevR, y = n[side].pos.y;
+      if (t && prev > ANKLE_Y + 0.05 && y <= ANKLE_Y + 0.02) n.bounceV -= 0.55;
+      if (side === 'L') n.prevL = y; else n.prevR = y;
+    }
+    n.bounceV += (-140 * n.bounce - 16 * n.bounceV) * dt;
+    n.bounce += n.bounceV * dt;
+    const w = Math.max(n.L.w, n.R.w);
+    if (w < 0.002 && Math.abs(n.roll) + Math.abs(n.pitch) + n.drop < 0.002) return;
     this.pivot.rotation.z += n.roll;
     this.pivot.rotation.x += n.pitch;
-    this.pivot.position.y -= n.drop;
+    this.pivot.position.y += n.bounce - n.drop;
+    this.pivot.position.x += n.shift;
     this.root.updateMatrixWorld(true);
+    // 상체: 든 다리 반대로 비틀고(오른발을 들면 오른 어깨가 뒤로), 반대 팔을 벌려 균형, 고개는 공을 내려다본다
+    const twist = -(liftR - liftL) * 0.32;
+    this.rotateBone('DEF-spine001', Y_AXIS, twist * 0.4);
+    this.rotateBone('DEF-spine003', Y_AXIS, twist * 0.6);
+    this.rotateBone('DEF-upper_armL', Z_AXIS, (0.25 + 0.75 * liftR) * w);
+    this.rotateBone('DEF-upper_armR', Z_AXIS, -(0.25 + 0.75 * liftL) * w);
+    this.rotateBone('DEF-neck', X_AXIS, 0.3 * w);
     for (const side of ['L', 'R'] as const) if (n[side].w > 0.002) this.solveLeg(side, n[side]);
   }
 
