@@ -52,6 +52,8 @@ export const MOTION_CATALOG: MotionEntry[] = [{"kind":"pass","source":"mocap","s
   {"kind":"trap","source":"mocap","side":null,"speed":"idle","key":2.047,"ballAngle":0,"power":1,"height":0.1,"id":"mx_receive_1~m","duration":5.117,"endYaw":-0.042,"startYaw":-0.042},
   {"kind":"trap","source":"mocap","side":null,"speed":"idle","key":0.56,"ballAngle":0,"power":1,"height":0.1,"id":"mx_receive_2","duration":1.4,"endYaw":0.204,"startYaw":0.204},
   {"kind":"trap","source":"mocap","side":null,"speed":"idle","key":0.56,"ballAngle":0,"power":1,"height":0.1,"id":"mx_receive_2~m","duration":1.4,"endYaw":-0.204,"startYaw":-0.204},
+  {"kind":"turn","source":"mocap","side":null,"speed":"idle","key":0.633,"ballAngle":0,"power":1,"height":0.1,"id":"mx_spin","duration":1.267,"endYaw":-0.239,"startYaw":-0.239},
+  {"kind":"turn","source":"mocap","side":null,"speed":"idle","key":0.633,"ballAngle":0,"power":1,"height":0.1,"id":"mx_spin~m","duration":1.267,"endYaw":0.239,"startYaw":0.239},
   {"kind":"control","source":"grf","side":"R","speed":"idle","key":0.12,"ballAngle":0,"power":1,"height":0.11,"id":"grf_ballcontrol_idle_000","duration":0.37,"endYaw":-0.04,"startYaw":-0.04},
   {"kind":"control","source":"grf","side":"L","speed":"idle","key":0.12,"ballAngle":0,"power":1,"height":0.11,"id":"grf_ballcontrol_idle_000~m","duration":0.37,"endYaw":0.04,"startYaw":0.04},
   {"kind":"control","source":"grf","side":"R","speed":"idle","key":0.08,"ballAngle":0.005,"power":1,"height":0.11,"id":"grf_ballcontrol_idle_000_accel","duration":0.27,"endYaw":0.033,"startYaw":0.029},

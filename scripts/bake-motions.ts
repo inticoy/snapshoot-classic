@@ -216,6 +216,8 @@ const MIXAMO_FULL: [string, string, MotionKind, number][] = [
   ['55', 'mx_block_1', 'save', 0.5], ['56', 'mx_block_2', 'save', 0.5],
   ['02', 'mx_trip', 'fall', 0.3], ['38', 'mx_stand_up', 'getup', 0], ['35', 'mx_throw_in', 'throw', 0.6],
   ['20', 'mx_receive_1', 'trap', 0.4], ['23', 'mx_receive_2', 'trap', 0.4],
+  // 마르세유 턴(Soccer Spin): 개인기 몸 동작으로 쓴다 (공 위치는 개인기 데이터가 발 닿는 순간에 맞춘다)
+  ['00', 'mx_spin', 'turn', 0.5],
 ];
 for (const [prefix, name, kind, keyFrac] of MIXAMO_FULL) {
   const src = mixamo(prefix);

@@ -1,6 +1,6 @@
 import { SKILL_CONTACTS } from './SkillContacts';
 import { mirror, type Dir, type SkillDef } from '../gameplay/Skills';
-import { dragBackRig, heelFlickRig, rainbowRig, rigKeys, rouletteRig, stepOverRig } from './SkillRigs';
+import { dragBackRig, heelFlickRig, rainbowRig, rigKeys, stepOverRig } from './SkillRigs';
 
 /** 다리 IK 개인기: rig에서 body·ball 키를 만든다 */
 function rigged(def: SkillDef, rig: NonNullable<SkillDef['rig']>): SkillDef {
@@ -118,19 +118,20 @@ export function makeSkillDefs(): SkillDef[] {
     motion: { id: 'grf_trap_idle_000_IB000', kind: 'trap', angle: 0 },
     exit: { dir: 0, speed: 0.8, body: 0.5 }, shield: 0.7,
   };
-  /** 마르세유 턴 (Shift + ↓↘→↗↑): 진행 방향 반대에서 오른쪽을 돌아 진행 방향까지 반 바퀴 굴린다. 오른쪽으로 돌아 나간다 */
-  const ROULETTE: SkillDef = rigged({
+  /** 마르세유 턴 (Shift + ↓↘→↗↑): 진행 방향 반대에서 오른쪽을 돌아 진행 방향까지 반 바퀴 굴린다.
+   *  몸 동작은 Mixamo Soccer Spin(달리며 한 바퀴, 원본은 왼쪽으로 돈다 → 오른쪽은 좌우 반전본).
+   *  몸 회전·전진은 원본 골반 궤적을 0.4배 거리로 줄여 body 키로, 공은 몸 앞 30cm쯤을 따라 발바닥이 닿는 순간마다 밀린다 */
+  const ROULETTE: SkillDef = {
     id: 'roulette_r', name: '오른쪽 룰렛', stars: 3,
     trigger: { kind: 'shift', seq: ['B', 'BR', 'R', 'FR', 'F'].map((dir) => ({ dir: dir as Dir })) },
-    duration: 0.9, carry: 0.15,
-    body: [{ t: 0, x: 0, z: 0 }, { t: 0.25, x: 0.15, z: 0.08, yaw: Math.PI / 2 }, { t: 0.5, x: 0.35, z: 0.2, yaw: Math.PI }, { t: 0.75, x: 0.4, z: 0.5, yaw: Math.PI * 1.5 }, { t: 1, x: 0.4, z: 0.8, yaw: Math.PI * 2 }],
-    ball: [{ t: 0, x: 0.1, z: 0.4 }, { t: 0.3, x: 0.5, z: 0.1 }, { t: 0.55, x: 0.25, z: -0.05 }, { t: 0.8, x: 0.1, z: 0.6 }, { t: 1, x: 0.4, z: 1.25 }],
-    contacts: [{ t: 0.108, foot: 'R' }, { t: 0.495, foot: 'L' }, { t: 0.774, foot: 'R' }],
-    // 팔·상체만 쓴다 (몸 회전은 rig yaw, 다리는 IK)
-    motion: { id: 'grf_ballcontrol_idle_000', flat: true, kind: 'control', angle: 0 },
-    exit: { dir: 0, speed: 2.4, body: 2.2 },
+    duration: 1.0, carry: 0.3,
+    body: [{ t: 0.000, x: 0, z: 0.000, yaw: 0.000 }, { t: 0.079, x: 0, z: 0.144, yaw: 0.454 }, { t: 0.157, x: 0, z: 0.256, yaw: 0.489 }, { t: 0.236, x: 0, z: 0.392, yaw: 0.803 }, { t: 0.315, x: 0, z: 0.572, yaw: 1.606 }, { t: 0.394, x: 0, z: 0.704, yaw: 2.251 }, { t: 0.472, x: 0, z: 0.812, yaw: 2.723 }, { t: 0.551, x: 0, z: 0.924, yaw: 3.107 }, { t: 0.630, x: 0, z: 1.040, yaw: 3.665 }, { t: 0.709, x: 0, z: 1.148, yaw: 4.311 }, { t: 0.787, x: 0, z: 1.236, yaw: 4.817 }, { t: 0.866, x: 0, z: 1.340, yaw: 5.341 }, { t: 1.000, x: 0, z: 1.500, yaw: 6.283 }],
+    ball: [{ t: 0.000, x: 0.05, z: 0.320 }, { t: 0.157, x: 0.05, z: 0.576 }, { t: 0.315, x: 0.05, z: 0.892 }, { t: 0.472, x: 0.05, z: 1.132 }, { t: 0.630, x: 0.05, z: 1.360 }, { t: 0.787, x: 0.05, z: 1.556 }, { t: 1.000, x: 0.05, z: 1.820 }, { t: 1.000, x: 0.05, z: 1.820 }],
+    contacts: [{ t: 0.24, foot: 'R' }, { t: 0.51, foot: 'L' }, { t: 0.75, foot: 'R' }],
+    motion: { id: 'mx_spin~m', flat: true, kind: 'turn', angle: 0 },
+    exit: { dir: 0, speed: 3.2, body: 3.0 },
     bait: { t: 0.2, dir: Math.PI / 2, strength: 0.9 }, shield: 0.65,
-  }, rouletteRig());
+  };
   const FEINT_EXIT: SkillDef = {
     id: 'feint_exit_r', name: '왼쪽 페인트 후 오른쪽', stars: 3,
     trigger: { kind: 'shift', seq: ['L', 'BL', 'B', 'BR', 'R'].map((dir) => ({ dir: dir as Dir })) },
