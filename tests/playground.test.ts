@@ -99,6 +99,7 @@ describe('플레이그라운드 순수 텔레메트리', () => {
     expect(recordsToCsv([])).toBe('');
     const csv = recordsToCsv([{ time: 1, input: { move: [1, 0] }, note: 'a,"b"\nc' }, { time: 2, state: { owner: null } }]);
     expect(csv).toContain('"time","input","note","state"\r\n');
+    expect(csv).not.toContain('\\r\\n');
     expect(csv).toContain('"{""move"":[1,0]}"');
     expect(csv).toContain('"a,""b""\nc"');
     expect(csv).toContain('"{""owner"":null}"');

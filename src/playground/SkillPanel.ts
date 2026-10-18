@@ -22,12 +22,14 @@ const SPEEDS = [1, 0.5, 0.25] as const;
 const FACING = new THREE.Vector3(1, 0, 0);
 
 /** 커맨드 표기 (↑ = 선수 앞) */
-export function commandText(def: SkillDef): string {
+export function commandText(def: SkillDef, touch = false): string {
   const t = def.trigger;
+  if (t.kind === 'z' && touch) return '개인기 스틱 미지원 · ▶ 시범';
+  if (t.kind === 'fake' && touch) return `${t.from === 'shoot' ? '슛' : '로빙'} 게이지 중 패스`;
   if (t.kind === 'fake') return `${t.from === 'shoot' ? 'D' : 'A'} 게이지 중 S`;
   const seq = t.seq.map((s) => `${ARROW[s.dir]}${s.hold ? ' 꾹' : ''}`).join(t.seq.some((s) => s.hold) ? ' ' : '');
   const taps = t.seq.length > 1 && t.seq.every((s) => s.tap) ? ' (짧게)' : t.seq.length === 1 && t.seq[0].tap ? ' 짧게' : '';
-  return `${t.kind === 'shift' ? 'Shift' : 'Z'} + ${seq}${taps}`;
+  return `${touch ? '개인기 스틱' : t.kind === 'shift' ? 'Shift' : 'Z'} + ${seq}${taps}`;
 }
 
 interface Group { key: string; name: string; nick?: string; stars: number; variants: { label: string; def: SkillDef }[]; rig: boolean }
@@ -39,8 +41,7 @@ function groups(): Group[] {
     const side = def.name.startsWith('오른쪽 ') ? '오른쪽' : def.name.startsWith('왼쪽 ') ? '왼쪽' : null;
     const name = side ? def.name.slice(side.length + 1) : def.name;
     const key = def.id.replace(/_[rl]$/, '');
-    const nickKey = Object.keys(NICK).find((k) => key === k || key.startsWith(`${k}_`) && !key.startsWith('reverse'));
-    const g = out.get(key) ?? { key, name, nick: nickKey && key === nickKey ? NICK[nickKey] : undefined, stars: def.stars, variants: [], rig: false };
+    const g = out.get(key) ?? { key, name, nick: NICK[key], stars: def.stars, variants: [], rig: false };
     g.variants.push({ label: side ?? '보기', def });
     g.rig ||= !!def.rig;
     out.set(key, g);
@@ -60,19 +61,21 @@ export class SkillPanel {
   private active = true;
   private readonly toast = document.createElement('div');
   private toastTimer = 0;
+  private readonly shownEvents = new WeakSet<object>();
+  private readonly touch = document.documentElement.classList.contains('touch-device');
   private readonly last: HTMLElement;
 
   constructor(private readonly match: Match, root: HTMLElement, private readonly gameView: PlaygroundView, private readonly resetFree: () => void) {
     const list = groups();
     root.innerHTML = `
-      <p class="pg-help">▶를 누르면 시범을 보여요. 직접 하려면 공을 가진 채 커맨드를 입력하세요 (↑ = 선수가 보는 쪽).</p>
+      <p class="pg-help">▶를 누르면 시범을 보여요. 직접 하려면 공을 가진 채 ${this.touch ? '개인기 스틱을 안내 방향으로 움직이세요' : '커맨드를 입력하세요'} (↑ = 선수가 보는 쪽).</p>
       <div class="pg-row" role="group" aria-label="재생 속도">${SPEEDS.map((s) => `<button data-speed="${s}" aria-pressed="${s === 1}">${s === 1 ? '보통' : `${s}×`}</button>`).join('')}
         <label class="pg-inline"><input type="checkbox" id="pg-repeat"> 반복</label></div>
       <div class="pg-row" role="group" aria-label="카메라">${VIEWS.map((v) => `<button data-view="${v.id}" aria-pressed="${v.id === 'side'}">${v.label}</button>`).join('')}<button data-view="off" aria-pressed="false">경기 카메라</button></div>
       <p class="pg-last">방금 쓴 개인기 <b id="pg-last-skill">—</b></p>
       <ul class="pg-skills">${list.map((g) => `
         <li><div class="pg-skill-name"><span class="pg-stars">${'★'.repeat(g.stars)}</span> ${g.name}${g.nick ? ` <em>${g.nick}</em>` : ''}${g.rig ? ' <i class="pg-new">새 동작</i>' : ''}</div>
-          ${g.variants.map((v) => `<div class="pg-skill-row"><code>${commandText(v.def)}</code>${v.def.sustained ? '<small>직접 입력</small>' : `<button data-demo="${v.def.id}" aria-label="${v.def.name} 시범">▶ ${g.variants.length > 1 ? v.label : ''}</button>`}</div>`).join('')}
+          ${g.variants.map((v) => `<div class="pg-skill-row"><code>${commandText(v.def, this.touch)}</code>${v.def.sustained ? '<small>직접 입력</small>' : `<button data-demo="${v.def.id}" aria-label="${v.def.name} 시범">▶ ${g.variants.length > 1 ? v.label : ''}</button>`}</div>${SKILLS.filter((d) => d.stars > v.def.stars && JSON.stringify(d.trigger) === JSON.stringify(v.def.trigger)).map((d) => `<small class="pg-help">★${d.stars} 선수는 ${d.name}</small>`).join('')}`).join('')}
         </li>`).join('')}</ul>`;
     this.last = root.querySelector('#pg-last-skill')!;
     root.querySelectorAll<HTMLButtonElement>('[data-demo]').forEach((b) => {
@@ -93,19 +96,27 @@ export class SkillPanel {
       };
     });
     root.querySelector<HTMLInputElement>('#pg-repeat')!.onchange = (e) => {
-      if (!(e.target as HTMLInputElement).checked) this.repeat = null;
+      if (!(e.target as HTMLInputElement).checked) this.cancelRepeat();
     };
     this.toast.className = 'pg-toast';
     this.toast.setAttribute('role', 'status');
     document.body.append(this.toast);
     this.apply();
-    (window as unknown as { __skillDemo: (id: string) => boolean }).__skillDemo = (id) => this.demo(SKILLS.find((s) => s.id === id)!);
+    (window as unknown as { __skillDemo: (id: string) => boolean }).__skillDemo = (id) => {
+      const def = SKILLS.find((s) => s.id === id);
+      return def ? this.demo(def) : false;
+    };
   }
 
   setActive(on: boolean): void {
     this.active = on;
-    if (!on) this.repeat = null;
+    if (!on) this.cancelRepeat();
     this.apply();
+  }
+
+  cancelRepeat(): void {
+    this.repeat = null;
+    this.again = 0;
   }
 
   private apply(snap = false): void {
@@ -126,7 +137,11 @@ export class SkillPanel {
     m.ball.owner = p;
     const ok = m.skills.start(p, def);
     // 시범은 경기 스텝 밖에서 시작해 이벤트가 다음 스텝 전에 비워질 수 있으므로 바로 표시한다
-    if (ok) this.show(def);
+    if (ok) {
+      this.show(def);
+      // 같은 시작 이벤트가 다음 스텝에도 남아 있으면 토스트 시간을 다시 늘리지 않는다.
+      for (const e of m.events) if (e.type === 'skill' && e.player === p && e.id === def.id) this.shownEvents.add(e);
+    }
     this.apply(true);
     const box = this.toast.ownerDocument.querySelector<HTMLInputElement>('#pg-repeat');
     this.repeat = ok && box?.checked ? def : null;
@@ -136,19 +151,23 @@ export class SkillPanel {
 
   private show(def: SkillDef): void {
     this.last.textContent = def.name;
-    this.toast.innerHTML = `<b>${def.name}</b><span>${commandText(def)}</span>`;
+    this.toast.innerHTML = `<b>${def.name}</b><span>${commandText(def, this.touch)}</span>`;
     this.toast.classList.add('show');
-    this.toastTimer = 1.6;
+    this.toastTimer = performance.now() + 1600;
   }
 
   /** 고정 스텝마다: 개인기 이벤트 표시, 반복 재생 */
   step(dt: number): void {
     for (const e of this.match.events) {
-      if (e.type !== 'skill' || e.player !== this.match.controlled) continue;
+      if (e.type !== 'skill' || e.player !== this.match.controlled || this.shownEvents.has(e)) continue;
+      this.shownEvents.add(e);
       const def = SKILLS.find((s) => s.id === e.id);
       if (def) this.show(def);
     }
-    if (this.toastTimer > 0 && (this.toastTimer -= dt) <= 0) this.toast.classList.remove('show');
+    if (this.toastTimer > 0 && performance.now() >= this.toastTimer) {
+      this.toast.classList.remove('show');
+      this.toastTimer = 0;
+    }
     if (this.repeat && !this.match.skills.isActive(this.match.controlled) && (this.again += dt) > 1.2) this.demo(this.repeat);
   }
 }

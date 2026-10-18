@@ -136,3 +136,94 @@ describe('개인기 탭', () => {
   });
 });
 
+
+it.each(['input', 'textarea', 'select', 'div'])('%s 편집 포커스에서는 게임 키와 R을 처리하지 않는다', (tag) => {
+  const input = new Input();
+  const editor = document.createElement(tag);
+  if (tag === 'div') editor.setAttribute('contenteditable', 'true');
+  document.body.append(editor);
+  editor.focus();
+  for (const code of ['ArrowUp', 'KeyD', 'KeyR', 'Space']) {
+    const event = new win.KeyboardEvent('keydown', { code, bubbles: true, cancelable: true });
+    editor.dispatchEvent(event as unknown as Event);
+    expect(event.defaultPrevented).toBe(false);
+  }
+  expect(input.moveAxis()).toEqual({ x: 0, y: 0 });
+  expect(input.isDown('shoot')).toBe(false);
+  expect(input.drainPresses()).toEqual([]);
+});
+
+const demo = (id: string) => (window as unknown as { __skillDemo(id: string): boolean }).__skillDemo(id);
+
+it('잘못된 시범 id는 상태를 바꾸지 않고 false를 반환한다', () => {
+  step();
+  expect(demo('missing')).toBe(false);
+  expect(pg.records).toHaveLength(1);
+});
+
+it('시범·스크립트 임시 능력치는 시나리오를 바꾸면 원본으로 돌아온다', () => {
+  const p = match.controlled, profile = p.profile;
+  expect(demo('roulette_r')).toBe(true);
+  expect(p.profile.skill).toBe(5);
+  pg.reset('slide');
+  expect(p.profile).toBe(profile);
+  pg.run({ scenario: 'free', seed: 42, skill: 1, duration: 0.1, inputs: [] });
+  expect(p.profile.skill).toBe(1);
+  pg.reset();
+  expect(p.profile).toBe(profile);
+});
+
+it.each(['reset', 'scenario', 'R', 'script', 'move'])('%s는 반복 시범을 취소한다', (action) => {
+  document.querySelector<HTMLInputElement>('#pg-repeat')!.checked = true;
+  demo('roulette_r');
+  if (action === 'reset') pg.reset();
+  if (action === 'scenario') pg.reset('duel');
+  if (action === 'R') window.dispatchEvent(new win.KeyboardEvent('keydown', { code: 'KeyR' }) as unknown as Event);
+  if (action === 'script') pg.run({ scenario: 'free', seed: 42, duration: 0.1, inputs: [] });
+  const start = vi.spyOn(match.skills, 'start');
+  for (let i = 0; i < 400; i++) {
+    const cmd = command();
+    if (action === 'move') cmd.move.set(1, 0, 0);
+    match.update(PHYSICS.step, cmd);
+    pg.step(PHYSICS.step, cmd);
+    match.events.length = 0;
+  }
+  expect(start).not.toHaveBeenCalled();
+});
+
+it('토스트는 같은 시범 이벤트로 연장되지 않고 실시간에 만료된다', () => {
+  const now = vi.spyOn(performance, 'now').mockReturnValue(1000);
+  demo('roulette_r');
+  now.mockReturnValue(2000);
+  pg.step(0.001, command());
+  expect(document.querySelector('.pg-toast')!.classList.contains('show')).toBe(true);
+  now.mockReturnValue(2601);
+  pg.step(0.001, command());
+  expect(document.querySelector('.pg-toast')!.classList.contains('show')).toBe(false);
+});
+
+it('기록은 개인기 방향을 복사하고 실제 스크립트 시드를 보존한다', () => {
+  pg.run({ scenario: 'free', seed: 42, duration: 0.1, inputs: [] });
+  const cmd = command();
+  cmd.skillMove = cmd.move.clone().set(1, 0, 0);
+  pg.step(PHYSICS.step, cmd);
+  cmd.skillMove.set(0, 0, 1);
+  expect(pg.records[0]).toMatchObject({ seed: 42, input: { skillMove: [1, 0, 0] } });
+});
+
+it('같은 커맨드의 상위 별 개인기를 줄 아래 안내한다', () => {
+  for (const id of ['feint_exit_l', 'feint_exit_r', 'stop_turn_r']) {
+    expect(button(`[data-demo="${id}"]`).closest('li')!.textContent).toMatch(/★[45] 선수는/);
+  }
+});
+
+it('터치 기기는 패널이 접힌 채 시작하고 개인기 스틱 기준으로 안내한다', () => {
+  document.body.replaceChildren();
+  document.documentElement.classList.add('touch-device');
+  pg = new Playground(match, vi.fn(), view);
+  expect(document.querySelector<HTMLDetailsElement>('#playground')!.open).toBe(false);
+  const panel = document.querySelector('[data-panel="skills"]')!;
+  expect(panel.querySelector('.pg-help')!.textContent).toContain('개인기 스틱');
+  expect(panel.textContent).not.toContain('Shift');
+  expect(panel.querySelector('code')!.textContent).toBe('슛 게이지 중 패스');
+});

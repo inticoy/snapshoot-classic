@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { PLAYGROUND } from '../config';
 import { settings } from '../core/Settings';
-import { Input } from '../core/Input';
+import { Input, isEditing } from '../core/Input';
 import type { Match, UserCommand } from '../gameplay/Match';
 import { PLAYGROUND_PARAMETERS, PLAYGROUND_SCENARIOS, type PlaygroundScenario } from '../data/Playground';
 import { PlaygroundScenarios } from './Scenarios';
@@ -45,7 +45,7 @@ export class Playground {
     this.scenarios = new PlaygroundScenarios(match);
     document.body.classList.add('playground');
     this.root.id = 'playground';
-    this.root.open = true;
+    this.root.open = !document.documentElement.classList.contains('touch-device') && !window.matchMedia('(pointer: coarse)').matches;
     this.root.innerHTML = `<summary>연습장 <span>접기 / 펼치기</span></summary>
       <div class="pg-tabs" role="tablist">
         <button role="tab" data-tab="skills" aria-selected="true">개인기</button>
@@ -75,9 +75,9 @@ export class Playground {
         </section>
       </div>`;
     document.body.append(this.root);
-    // 슬라이더의 방향키는 값을 조정한다. 경기 입력은 캔버스·일반 버튼에서 계속 쓴다.
+    // 편집 필드의 키는 패널 안에서 처리한다. 일반 버튼에서는 경기 입력을 계속 쓴다.
     this.root.addEventListener('keydown', (e) => {
-      if (e.target instanceof HTMLInputElement && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) e.stopPropagation();
+      if (isEditing(e.target)) e.stopPropagation();
     });
     this.output = this.root.querySelector('#pg-status')!;
     this.skills = new SkillPanel(match, this.root.querySelector('[data-panel="skills"]')!, view, () => this.reset('free'));
@@ -115,6 +115,7 @@ export class Playground {
     this.root.querySelector<HTMLButtonElement>('#pg-json')!.onclick = () => this.download('json');
     this.root.querySelector<HTMLButtonElement>('#pg-csv')!.onclick = () => this.download('csv');
     window.addEventListener('keydown', (e) => {
+      if (isEditing(e.target) || isEditing(document.activeElement)) return;
       if (e.code === 'Tab' && !e.repeat && !(e.target && this.root.contains(e.target as Node))) {
         e.preventDefault();
         const next = this.match.controlled.team === 0 ? this.match.players.find((p) => p.team === 1 && !p.isKeeper) : this.match.players.find((p) => p.team === 0 && !p.isKeeper);
@@ -143,6 +144,7 @@ export class Playground {
   }
 
   reset(id?: PlaygroundScenario, opponent = this.scenarios.opponent): void {
+    this.skills.cancelRepeat();
     this.onReset();
     this.script = null;
     this.scenarios.reset(id, PLAYGROUND.seed, opponent);
@@ -206,6 +208,7 @@ export class Playground {
   /** Match.events가 Game의 사운드 처리에서 비워지기 전에 호출해야 한다. */
   step(dt: number, cmd: UserCommand): void {
     const m = this.match, p = m.controlled;
+    if (!this.script && cmd.move.lengthSq() > 0) this.skills.cancelRepeat();
     this.skills.step(dt);
     this.ball.set(m.ball.position.x, m.ball.position.y, m.ball.position.z);
     let footDistance = Infinity;
@@ -228,8 +231,8 @@ export class Playground {
     this.history = recentHistory([...this.history, result.metrics], m.elapsed);
     const { move: _move, ...buttons } = cmd;
     this.records.push({
-      time: m.elapsed, dt, scenario: this.scenarios.current, seed: PLAYGROUND.seed,
-      input: { move: [...sample.input], ...buttons },
+      time: m.elapsed, dt, scenario: this.scenarios.current, seed: this.scenarios.seed,
+      input: { ...buttons, move: [...sample.input], skillMove: cmd.skillMove ? vector(cmd.skillMove) : undefined },
       state: {
         controlled: playerId(p), owner: playerId(m.ball.owner), lastTouch: playerId(m.ball.lastTouch), phase: m.phase,
         ballPosition: vector(m.ball.position), ballVelocity: vector(m.ball.velocity), charge: m.charge ? { ...m.charge } : null,

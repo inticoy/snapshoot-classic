@@ -216,6 +216,14 @@ export class SkinnedPlayerModel implements CharacterModel {
     this.motion = null;
     this.outgoing = null;
     this.visualBones.clear();
+    // 직전 개인기의 발 목표·착지 반동이 리셋 뒤 첫 프레임에 섞이지 않게 한다.
+    this.legTarget = null;
+    for (const side of ['L', 'R'] as const) {
+      this.legNow[side].pos.set(0, 0, 0);
+      this.legNow[side].toe.set(0, 0, 1);
+      this.legNow[side].w = 0;
+    }
+    Object.assign(this.legNow, { roll: 0, pitch: 0, drop: 0, shift: 0, bounce: 0, bounceV: 0, prevL: ANKLE_Y, prevR: ANKLE_Y });
     this.state = 'idle';
     this.actionT = this.danceW = this.speed = 0;
     Object.assign(this.locoW, { idle: 1, walk: 0, jog: 0, sprint: 0 });

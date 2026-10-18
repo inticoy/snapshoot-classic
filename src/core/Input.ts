@@ -51,6 +51,11 @@ const MOVE_KEYS = {
 
 const GAME_KEYS = new Set([...Object.values(ACTION_KEYS).flat(), ...Object.values(MOVE_KEYS).flat()]);
 
+/** 편집 중인 키는 브라우저에 맡겨 커서 이동·문자 입력을 보존한다. */
+export function isEditing(target: EventTarget | null): boolean {
+  return !!(target as Element | null)?.closest?.('input, textarea, select, [contenteditable]:not([contenteditable="false"])');
+}
+
 export interface ButtonState {
   held: boolean;
   pressed: boolean;
@@ -135,6 +140,7 @@ export class Input {
 
   constructor(target: Window = window) {
     target.addEventListener('keydown', (e) => {
+      if (isEditing(e.target) || isEditing(target.document?.activeElement)) return;
       if (GAME_KEYS.has(e.code)) e.preventDefault();
       if (e.repeat) return;
       this.down.add(e.code);
@@ -143,7 +149,15 @@ export class Input {
     });
     target.addEventListener('keyup', (e) => {
       this.down.delete(e.code);
+      if (isEditing(e.target) || isEditing(target.document?.activeElement)) return;
       this.releasedQueue.add(e.code);
+    });
+    target.addEventListener('focusin', (e) => {
+      if (!isEditing(e.target)) return;
+      this.down.clear();
+      this.pressedQueue.clear();
+      this.releasedQueue.clear();
+      this.pressOrder.length = 0;
     });
     target.addEventListener('blur', () => {
       for (const code of this.down) this.releasedQueue.add(code);

@@ -59,10 +59,18 @@ export class CameraRig {
 
   /** 화면 위쪽이 가리키는 지면 방향 */
   forward(out: THREE.Vector3): THREE.Vector3 {
+    if (this.closeUp) {
+      this.camera.getWorldDirection(out);
+      return out.setY(0).normalize();
+    }
     return this.mode !== 'pro' ? out.set(0, 0, -1) : out.set(1, 0, 0);
   }
 
   right(out: THREE.Vector3): THREE.Vector3 {
+    if (this.closeUp) {
+      this.forward(out);
+      return out.set(-out.z, 0, out.x);
+    }
     return this.mode !== 'pro' ? out.set(1, 0, 0) : out.set(0, 0, 1);
   }
 

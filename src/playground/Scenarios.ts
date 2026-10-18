@@ -7,14 +7,20 @@ import type { PlaygroundScenario } from '../data/Playground';
 /** 새 경기 객체를 만들지 않아 Game의 카메라·물리·터치와 같은 선수를 계속 사용한다. */
 export class PlaygroundScenarios {
   private readonly roster: Player[];
+  private readonly profiles: Map<Player, Player['profile']>;
+  seed: number = PLAYGROUND.seed;
   current: PlaygroundScenario = 'free';
   opponent: PracticeOpponent = 'press';
 
   constructor(private readonly match: Match) {
     this.roster = [...match.players];
+    this.profiles = new Map(this.roster.map((p) => [p, p.profile]));
   }
 
   reset(id: PlaygroundScenario = this.current, seed = PLAYGROUND.seed, opponent: PracticeOpponent = this.opponent, control: 'user' | 'opponent' = 'user'): void {
+    // 시범·스크립트에서 빌린 능력치가 다음 연습에 남지 않게 원본을 복구한다.
+    for (const [p, profile] of this.profiles) Object.defineProperty(p, 'profile', { value: profile, configurable: true });
+    this.seed = seed;
     this.current = id;
     const m = this.match;
     const attacker = this.roster.find((p) => p.team === 0 && p.slot.label === 'ST')!;
