@@ -5,6 +5,7 @@ import { TouchControls } from '../ui/TouchControls';
 import type { TouchMode } from './TouchInput';
 import { PhysicsWorld } from '../physics/PhysicsWorld';
 import { Stadium } from '../environment/Stadium';
+import { Lighting } from '../environment/Lighting';
 import { SKILLS } from '../gameplay/Skills';
 import { Lockstep } from '../net/Lockstep';
 import type { NetSession, StartInfo } from '../net/NetSession';
@@ -43,7 +44,8 @@ export class Game {
   private readonly marker: THREE.Group;
   private readonly touch: TouchControls;
   private readonly playground: Playground | null;
-  private readonly sun = new THREE.DirectionalLight(0xfff3e0, 2.2);
+  private readonly lighting: Lighting;
+  readonly sun: THREE.DirectionalLight;
 
   private state: AppState = 'menu';
   private accumulator = 0;
@@ -73,10 +75,9 @@ export class Game {
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.05;
 
-    this.setupSky();
-    this.setupLights();
+    this.lighting = new Lighting(this.scene, this.renderer);
+    this.sun = this.lighting.sun;
 
     this.stadium = new Stadium(this.physics);
     this.scene.add(this.stadium.group);
@@ -631,6 +632,7 @@ export class Game {
       this.rig.update(dt, this.match.ball.position, this.match.local.controlled.pos, celebrate);
       this.hud.update(dt, this.match, this.rig.camera);
     }
+    this.lighting.update(this.rig.camera);
     this.renderer.render(this.scene, this.rig.camera);
   }
 
@@ -809,52 +811,13 @@ export class Game {
     this.marker.rotation.y += d * (1 - Math.exp(-20 * dt));
   }
 
-  private setupSky(): void {
-    const c = document.createElement('canvas');
-    c.width = 2;
-    c.height = 256;
-    const g = c.getContext('2d')!;
-    const grad = g.createLinearGradient(0, 0, 0, 256);
-    grad.addColorStop(0, '#0d1b33');
-    grad.addColorStop(0.55, '#2b4a78');
-    grad.addColorStop(1, '#8a6d7a');
-    g.fillStyle = grad;
-    g.fillRect(0, 0, 2, 256);
-    const tex = new THREE.CanvasTexture(c);
-    tex.colorSpace = THREE.SRGBColorSpace;
-    this.scene.background = tex;
-    this.scene.fog = new THREE.Fog(0x1a2740, 90, 220);
-  }
-
-  private setupLights(): void {
-    this.scene.add(new THREE.HemisphereLight(0xcfe0ff, 0x2a3b22, 0.9));
-    const sun = this.sun;
-    sun.position.set(-30, 80, 35);
-    sun.castShadow = true;
-    sun.shadow.mapSize.set(GRAPHICS.high.shadowSize, GRAPHICS.high.shadowSize);
-    const s = sun.shadow.camera;
-    // 광원 축이 필드와 비스듬하므로 대각선 반경으로 네 모서리까지 덮는다.
-    const extent = Math.hypot(PITCH.halfL, PITCH.halfW) + 6;
-    s.left = s.bottom = -extent;
-    s.right = s.top = extent;
-    s.near = 1;
-    s.far = 180;
-    sun.shadow.bias = -0.0005;
-    sun.shadow.normalBias = 0.02;
-    this.scene.add(sun);
-    const fill = new THREE.DirectionalLight(0xdfe8ff, 0.6);
-    fill.position.set(30, 30, -25);
-    this.scene.add(fill);
-  }
-
   private applyGraphics(touch: boolean): void {
-    const profile = GRAPHICS[graphicsQuality(touch, navigator.hardwareConcurrency ?? 8)];
+    const quality = graphicsQuality(touch, navigator.hardwareConcurrency ?? 8);
+    const profile = GRAPHICS[quality];
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, profile.pixelRatio));
-    if (this.sun.shadow.mapSize.x !== profile.shadowSize) {
-      this.sun.shadow.mapSize.set(profile.shadowSize, profile.shadowSize);
-      this.sun.shadow.map?.dispose();
-      this.sun.shadow.map = null;
-    }
+    this.lighting.setQuality(quality);
+    this.stadium.setQuality(quality);
+    for (const goal of this.match.goals) goal.setVisualQuality(quality);
     this.stadium.setCrowdDensity(profile.crowdDensity);
   }
 

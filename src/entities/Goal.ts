@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
-import { GOAL, PITCH } from '../config';
+import { GOAL, PITCH, STADIUM } from '../config';
 import type { PhysicsWorld } from '../physics/PhysicsWorld';
 import { visualRandom } from '../core/Random';
 
@@ -8,6 +8,8 @@ interface NetPanel {
   geometry: THREE.BufferGeometry;
   rest: Float32Array;
   normal: THREE.Vector3;
+  object: THREE.Object3D;
+  detailed: boolean;
 }
 
 const NET_TOP_DEPTH = 1.0;
@@ -40,11 +42,12 @@ export class Goal {
 
     // --- 골대 기둥/크로스바 ---
     const postMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.25, metalness: 0.1 });
-    const postGeo = new THREE.CylinderGeometry(r, r, h, 16);
+    const postGeo = new THREE.CylinderGeometry(r, r, h, STADIUM.postSegments);
     for (const z of [-hw, hw]) {
       const m = new THREE.Mesh(postGeo, postMat);
       m.position.set(x0 + out * r, h / 2, z);
       m.castShadow = true;
+      m.receiveShadow = true;
       this.group.add(m);
 
       const body = new CANNON.Body({
@@ -56,7 +59,7 @@ export class Goal {
       physics.world.addBody(body);
       this.postBodies.push(body);
     }
-    const bar = new THREE.Mesh(new THREE.CylinderGeometry(r, r, GOAL.width + r * 4, 16), postMat);
+    const bar = new THREE.Mesh(new THREE.CylinderGeometry(r, r, GOAL.width + r * 4, STADIUM.postSegments), postMat);
     bar.rotation.x = Math.PI / 2;
     bar.position.set(x0 + out * r, h, 0);
     bar.castShadow = true;
@@ -83,6 +86,13 @@ export class Goal {
     }
     this.group.add(tube(new THREE.Vector3(xTop, h, -hw), new THREE.Vector3(xTop, h, hw), 0.025, frameMat));
     this.group.add(tube(new THREE.Vector3(xBottom, 0.02, -hw), new THREE.Vector3(xBottom, 0.02, hw), 0.025, frameMat));
+
+    // 이음부와 바닥 소켓은 시각 전용이며 충돌 규격은 기존 실린더 그대로 둔다.
+    for (const z of [-hw, hw]) {
+      const socket = new THREE.Mesh(new THREE.CylinderGeometry(r * 1.35, r * 1.35, 0.045, STADIUM.postSegments), frameMat);
+      socket.position.set(x0 + out * r, 0.0225, z);
+      this.group.add(socket);
+    }
 
     // --- 그물 (시각) ---
     if (visuals) {
@@ -153,6 +163,13 @@ export class Goal {
   }
 
   private buildLines(grid: THREE.Vector3[][], normal: THREE.Vector3): void {
+    // 프레임 경계는 고정하고 가운데만 처지게 하여 팽팽한 평면 느낌을 줄인다.
+    const n = normal.clone().normalize();
+    for (let i = 0; i < grid.length; i++) for (let j = 0; j < grid[i].length; j++) {
+      const sag = Math.sin(Math.PI * i / (grid.length - 1)) * Math.sin(Math.PI * j / (grid[i].length - 1));
+      grid[i][j].addScaledVector(n, STADIUM.netSag * sag * (n.y === 1 ? -1 : 1));
+      if (n.y !== 1) grid[i][j].y -= STADIUM.netSag * sag * 0.35;
+    }
     const pts: number[] = [];
     const push = (p: THREE.Vector3, q: THREE.Vector3) => pts.push(p.x, p.y, p.z, q.x, q.y, q.z);
     for (let i = 0; i < grid.length; i++) {
@@ -169,7 +186,38 @@ export class Goal {
       new THREE.LineBasicMaterial({ color: 0xf2f4f8, transparent: true, opacity: 0.75 }),
     );
     this.group.add(lines);
-    this.panels.push({ geometry, rest: arr, normal: normal.clone().normalize() });
+    this.panels.push({ geometry, rest: arr, normal: n, object: lines, detailed: false });
+
+    // high는 세계 좌표 폭을 가진 실 리본으로 태양·환경광을 받는다. low는 기존 선분 비용을 유지한다.
+    const ribbon: number[] = [], indices: number[] = [];
+    const a = new THREE.Vector3(), b = new THREE.Vector3(), offset = new THREE.Vector3();
+    for (let i = 0; i < pts.length; i += 6) {
+      a.fromArray(pts, i); b.fromArray(pts, i + 3);
+      offset.subVectors(b, a).cross(n).normalize().multiplyScalar(STADIUM.netThreadRadius);
+      const start = ribbon.length / 3;
+      for (const [point, sign] of [[a, -1], [a, 1], [b, -1], [b, 1]] as const) {
+        ribbon.push(point.x + offset.x * sign, point.y + offset.y * sign, point.z + offset.z * sign);
+      }
+      indices.push(start, start + 2, start + 1, start + 1, start + 2, start + 3);
+    }
+    const detailGeo = new THREE.BufferGeometry();
+    const rest = new Float32Array(ribbon);
+    detailGeo.setAttribute('position', new THREE.BufferAttribute(rest.slice(), 3));
+    detailGeo.setIndex(indices);
+    detailGeo.computeVertexNormals();
+    detailGeo.computeBoundingSphere();
+    detailGeo.boundingSphere!.radius += 0.5;
+    geometry.computeBoundingSphere();
+    geometry.boundingSphere!.radius += 0.5;
+    const mesh = new THREE.Mesh(detailGeo, new THREE.MeshStandardMaterial({ color: 0xe1e6da, roughness: 0.95, side: THREE.DoubleSide }));
+    mesh.receiveShadow = true;
+    this.group.add(mesh);
+    this.panels.push({ geometry: detailGeo, rest, normal: n, object: mesh, detailed: true });
+    lines.visible = false;
+  }
+
+  setVisualQuality(quality: 'high' | 'low'): void {
+    for (const panel of this.panels) panel.object.visible = panel.detailed === (quality === 'high');
   }
 
   /** 공이 그물에 닿았을 때 출렁임 시작 */
@@ -185,6 +233,7 @@ export class Goal {
     this.rippleAmp *= Math.exp(-2.2 * dt);
     const idle = 0.012;
     for (const panel of this.panels) {
+      if (!panel.object.visible) continue;
       const pos = panel.geometry.getAttribute('position') as THREE.BufferAttribute;
       const arr = pos.array as Float32Array;
       const rest = panel.rest;
@@ -192,7 +241,10 @@ export class Goal {
       for (let i = 0; i < rest.length; i += 3) {
         const x = rest[i], y = rest[i + 1], z = rest[i + 2];
         // 지면/골대 프레임에 붙은 점은 덜 움직이게
-        const pin = Math.min(1, y / 0.4) * Math.min(1, Math.abs(Math.abs(x) - PITCH.halfL) / 0.4);
+        const edge = Math.max(0, GOAL.width / 2 + GOAL.postRadius - Math.abs(z));
+        const rearBar = Math.hypot(Math.abs(x) - PITCH.halfL - NET_TOP_DEPTH, y - GOAL.height - GOAL.postRadius);
+        const pin = Math.min(1, y / 0.4) * Math.min(1, Math.abs(Math.abs(x) - PITCH.halfL) / 0.4)
+          * Math.min(1, edge / 0.25) * Math.min(1, rearBar / 0.15);
         let d = Math.sin(this.time * 1.7 + x * 2.1 + z * 1.3) * idle;
         if (this.rippleAmp > 0.002) {
           const dx = x - this.impact.x, dy = y - this.impact.y, dz = z - this.impact.z;

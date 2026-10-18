@@ -236,9 +236,9 @@ export const AI = {
 // 화면 픽셀 기준 입력 임계값: 작은 손떨림은 이동/슛 제스처로 보지 않는다.
 export const TOUCH = { joystickRadius: 52, deadZone: 0.12, swipeDistance: 30, skillRadius: 38, skillDeadZone: 0.3 };
 export const GRAPHICS = {
-  high: { pixelRatio: 2, shadowSize: 2048, crowdDensity: 1 },
+  high: { pixelRatio: 2, shadowSize: 2048, crowdDensity: 1, shadowExtent: 30, closeShadowExtent: 9, grassDetail: true, structureDetail: true },
   // 픽셀 비율은 화질에 가장 크게 보이므로 1.75까지 유지하고, 대신 그림자와 관중을 줄인다
-  low: { pixelRatio: 1.75, shadowSize: 1024, crowdDensity: 0.25 },
+  low: { pixelRatio: 1.75, shadowSize: 1024, crowdDensity: 0.25, shadowExtent: 32, closeShadowExtent: 12, grassDetail: false, structureDetail: false },
 };
 
 // 공 주변 약 50m를 보여 주되 터치라인에서도 시야 크기를 유지한다.
@@ -308,4 +308,15 @@ export const COMMAND = {
   contactRange: 1.5, holdSlow: 0.7, holdFoulAfter: 1.5, holdJudgePeriod: 0.5,
   clearanceRange: 2.2, clearanceSpeed: 23, clearanceLift: 9,
   pushStun: 0.3, contactSpeed: 0.7, contactSprintSpeed: 0.95,
+};
+
+/** 경기장 시각 전용 값: 충돌체·락스텝의 규격에는 영향을 주지 않는다. */
+export const STADIUM = {
+  sunColor: 0xfff2db, sunIntensity: 2.5, sunDirection: [-36, 78, 28] as const,
+  hazeColor: 0xd2e0e4, fogNear: 110, fogFar: 320, exposure: 0.94,
+  skySize: 1024, closeShadowHeight: 9,
+  grassTextureSize: 2048, grassDetailSize: 256, grassDetailRepeat: 180,
+  grassBump: 0.035, mowingWidth: 6, standRows: 14, rowDepth: 0.85, rowRise: 0.5,
+  standGap: 2.5, seatSpacing: 0.62, aisleSpacing: 18, aisleWidth: 1.8,
+  netSag: 0.10, netThreadRadius: 0.004, postSegments: 24,
 };
