@@ -104,7 +104,8 @@ export const SKILLS: SkillDef[] = makeSkillDefs();
 
 // ---------------------------------------------------------------- 커맨드 인식
 
-interface Step { dir: Dir; t0: number; t1: number | null }
+/** seed: 직전 개인기의 마지막 칸을 이어받은 칸 (연속 헛다리처럼 굴리는 입력용, 혼자서는 커맨드가 되지 않는다) */
+interface Step { dir: Dir; t0: number; t1: number | null; seed?: boolean }
 
 /** 바라보는 방향(fwd) 기준 8방향 */
 export function dirOf(move: THREE.Vector3, fwd: THREE.Vector3): Dir | null {
@@ -116,15 +117,32 @@ export function dirOf(move: THREE.Vector3, fwd: THREE.Vector3): Dir | null {
   return DIRS[(i + 8) % 8];
 }
 
+function tokenOk(tok: Token, s: Step, now: number, release: boolean): boolean {
+  // 이어받은 칸은 '꾹'이 될 수 없다 (사이드 스텝처럼 이미 꾹으로 쓴 입력을 다시 쓰지 않게)
+  if (s.seed && tok.hold) return false;
+  const held = (s.t1 ?? now) - s.t0;
+  // 짧게(tap)는 뗀 뒤에야 짧았는지 안다 (보조키를 떼면 그 순간까지로 본다)
+  const tapOk = !tok.tap || ((s.t1 !== null || release) && held < SKILL_INPUT.hold);
+  return s.dir === tok.dir && (!tok.hold || held >= SKILL_INPUT.hold) && tapOk;
+}
+
+const DIAGONAL = new Set<Dir>(['FR', 'BR', 'BL', 'FL']);
+
 function matches(seq: Token[], steps: Step[], now: number, release: boolean): boolean {
-  if (seq.length !== steps.length) return false;
-  return seq.every((tok, i) => {
-    const s = steps[i];
-    const held = (s.t1 ?? now) - s.t0;
-    // 짧게(tap)는 뗀 뒤에야 짧았는지 안다 (보조키를 떼면 그 순간까지로 본다)
-    const tapOk = !tok.tap || ((s.t1 !== null || release) && held < SKILL_INPUT.hold);
-    return s.dir === tok.dir && (!tok.hold || held >= SKILL_INPUT.hold) && tapOk;
-  });
+  if (steps.length === 1 && steps[0].seed) return false;
+  if (seq.length === steps.length && seq.every((tok, i) => tokenOk(tok, steps[i], now, release))) return true;
+  // 마르세유·엘라스티코처럼 크게 도는 커맨드(5칸 이상)는 키보드로 대각선을 정확히 거치기 어려우므로
+  // 중간 대각선은 건너뛰어도 된다 (상하좌우 순서만 맞으면). 짧은 커맨드는 다른 개인기와 겹치므로 정확히
+  if (seq.length < 5 || steps.length >= seq.length) return false;
+  let j = 0;
+  for (let i = 0; i < seq.length; i++) {
+    const tok = seq[i];
+    if (j < steps.length && tokenOk(tok, steps[j], now, release)) { j++; continue; }
+    const middle = i > 0 && i < seq.length - 1;
+    if (middle && DIAGONAL.has(tok.dir) && !tok.tap && !tok.hold) continue;
+    return false;
+  }
+  return j === steps.length;
 }
 
 /**
@@ -189,8 +207,14 @@ export class SkillInput {
       this.changed = this.time;
     }
     const found = this.find(list, false);
-    if (found) this.steps = [];
+    if (found) this.chain();
     return found;
+  }
+
+  /** 커맨드가 나간 뒤: 아직 누르고 있는 방향만 다음 커맨드의 첫 칸으로 남긴다 (← ↖ ↑ ↗ → 처럼 굴리면 헛다리가 이어서 나간다) */
+  chain(): void {
+    this.steps = this.mode && this.last ? [{ dir: this.last, t0: this.time, t1: null, seed: true }] : [];
+    this.changed = this.time;
   }
 
   private find(list: readonly SkillDef[], release: boolean): SkillDef | null {
@@ -202,7 +226,8 @@ export class SkillInput {
     const longer = list.some((s) => s.trigger.kind === this.mode && s.trigger.seq.length > this.steps.length &&
       s.trigger.seq.slice(0, this.steps.length).every((tok, i) => tok.dir === this.steps[i].dir));
     const holding = this.last !== null;
-    if (!settled) return null;
+    // 더 이어질 커맨드가 없으면 잠깐 멈추기를 기다리지 않는다 (굴리듯 이어 누르는 입력이 끊기지 않게)
+    if (!settled && longer) return null;
     if (holding && longer && !release && !exact.some((s) => s.sustained)) return null;
     // 별이 높은 개인기 우선 (같은 커맨드면 상위 개인기)
     return exact.sort((a, b) => b.stars - a.stars)[0];

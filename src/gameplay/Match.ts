@@ -18,7 +18,7 @@ import { SetPieces, type RestartKind } from './SetPieces';
 import { Keepers } from './Keepers';
 import { selectMotion } from '../anim/MotionLibrary';
 import { MOTION_CATALOG } from '../data/MotionCatalog';
-import { SkillInput, SkillRunner, SKILLS } from './Skills';
+import { SkillInput, SkillRunner, SKILLS, type SkillDef } from './Skills';
 import { Rules, type Card } from './Rules';
 import { Shootout } from './Shootout';
 import { Officials } from './Officials';
@@ -166,6 +166,8 @@ export class UserSide {
   switchAimHeld = false;
   /** 녹온 뒤 공을 쫓는 동안 (소유 상실 거리를 늘린다) */
   knockTimer = 0;
+  /** 앞 개인기가 끝나면 이어서 낼 개인기 */
+  skillBuffer: { def: SkillDef; ttl: number } | null = null;
   prevSprint = false;
   sprintTaps = 0;
   lastSprintTap = -9;
@@ -248,6 +250,8 @@ export class Match {
   get switchAimHeld(): UserSide['switchAimHeld'] { return this.side.switchAimHeld; }
   set switchAimHeld(v: UserSide['switchAimHeld']) { this.side.switchAimHeld = v; }
   get knockTimer(): UserSide['knockTimer'] { return this.side.knockTimer; }
+  get skillBuffer(): UserSide['skillBuffer'] { return this.side.skillBuffer; }
+  set skillBuffer(v: UserSide['skillBuffer']) { this.side.skillBuffer = v; }
   set knockTimer(v: UserSide['knockTimer']) { this.side.knockTimer = v; }
   get prevSprint(): UserSide['prevSprint'] { return this.side.prevSprint; }
   set prevSprint(v: UserSide['prevSprint']) { this.side.prevSprint = v; }
@@ -883,6 +887,7 @@ export class Match {
       side.holdTime = side.holdJudge = 0;
       side.keeperRush = false;
       side.knockTimer = 0;
+      side.skillBuffer = null;
       side.trapping = false;
       side.skillInput.reset();
       side.skillInputHeld.reset();
@@ -998,12 +1003,21 @@ export class Match {
       const len = (s: typeof a) => (s && s.trigger.kind !== 'fake' ? s.trigger.seq.length : 0);
       const def = len(b) > len(a) ? b : a ?? b;
       if (def) {
-        this.skillInput.reset();
-        this.skillInputHeld.reset();
+        this.skillInput.chain();
+        this.skillInputHeld.chain();
       }
       if (cmd.skill.held || (cmd.finesse.held && !KICK_KINDS.some((kind) => cmd[kind].held))) move.copy(this.skillHeldMove);
       else this.skillHeldMove.copy(move);
-      if (def) this.skills.start(p, def);
+      // 앞 개인기가 아직 도는 중이면 끝날 때 바로 이어서 낸다 (연속 헛다리 등, 0.5초 안에 끝나는 경우만)
+      if (def && !this.skills.start(p, def) && this.skills.isActive(p)) this.skillBuffer = { def, ttl: 0.5 };
+      if (this.skillBuffer) {
+        this.skillBuffer.ttl -= dt;
+        if (this.skillBuffer.ttl <= 0) this.skillBuffer = null;
+        else if (!this.skills.isActive(p)) {
+          this.skills.start(p, this.skillBuffer.def);
+          this.skillBuffer = null;
+        }
+      }
       this.skills.hold(p, cmd.skill.held, cmd.move);
     } else {
       this.skillInput.reset();

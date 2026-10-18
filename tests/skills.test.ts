@@ -48,6 +48,25 @@ describe('개인기 커맨드 인식', () => {
     expect(run([{ shift: true, move: v(1, 0), secs: 0.06 }, { shift: true, move: v(0.7, 0.7), secs: 0.06 }, { shift: true, move: v(0, 1), secs: 0.06 }, { shift: true, move: null, secs: 0.2 }], [tap, roll])).toEqual(['long']);
   });
 
+  const D = { F: v(1, 0), R: v(0, 1), B: v(-1, 0), L: v(0, -1), FR: v(0.7, 0.7), FL: v(0.7, -0.7), BR: v(-0.7, 0.7), BL: v(-0.7, -0.7) };
+  const roll = (dirs: (keyof typeof D)[], each = 0.06) => [
+    ...dirs.map((d) => ({ shift: true, move: D[d], secs: each })), { shift: true, move: null, secs: 0.3 },
+  ];
+
+  it('마르세유는 대각선을 빼고 상하좌우만 돌려도 나간다 (↓ ← ↑ →)', () => {
+    expect(run(roll(['B', 'L', 'F', 'R'], 0.08))).toEqual(['roulette_r']);
+  });
+
+  it('짧은 커맨드는 대각선을 건너뛰지 않는다 (↑ → 은 헛다리가 아니다)', () => {
+    expect(run(roll(['F', 'R'], 0.08), SKILLS.filter((s) => s.id.startsWith('step_over')))).toEqual([]);
+  });
+
+  it('← ↖ ↑ ↗ → 로 굴리면 헛다리가 두 번 이어서 나간다', () => {
+    const ids = run(roll(['L', 'FL', 'F', 'FR', 'R'], 0.07));
+    expect(ids).toHaveLength(2);
+    expect(ids[1]).toBe('step_over_r');
+  });
+
   it('mirror는 방향·좌우 발·끝 방향을 뒤집는다', () => {
     const r = SKILLS.find((s) => s.id === 'feint_r')!;
     const l = mirror(r, 'x', 'x');
