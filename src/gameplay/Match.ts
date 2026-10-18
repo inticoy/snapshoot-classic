@@ -837,6 +837,11 @@ export class Match {
   // ---------------------------------------------------------------- 사용자 조작
 
   /** 터치 라벨과 경기 판정이 같은 공격/수비 경계를 사용한다. */
+  /** 이 화면 사람 기준 공격 중인지 (HUD·터치 버튼용) */
+  get localAttacking(): boolean {
+    return this.withSide(this.localTeam, () => this.userAttacking);
+  }
+
   get userAttacking(): boolean {
     const p = this.controlled, owner = this.ball.owner, bp = this.ball.position;
     const incoming = !owner && (this.passTarget === p || this.ballComingTo(p));

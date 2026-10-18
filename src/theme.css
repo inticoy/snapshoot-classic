@@ -345,3 +345,29 @@ kbd {
 .online-wait .code { font: 800 44px/1 var(--num); letter-spacing: 6px; color: var(--accent); }
 .online-wait button { min-height: 44px; padding: 0 18px; border: 0; border-radius: 6px; background: var(--accent); color: #111; font: 700 14px var(--ui); cursor: pointer; }
 .online-wait small { color: var(--muted); word-break: break-all; max-width: 90vw; }
+
+/* 온라인 대전 화면 (매칭·코드 입력·대기) — 가운데 카드, 모바일 가로에서도 한 화면 */
+.ol-card { position: fixed; inset: 0; margin: auto; width: min(420px, calc(100vw - 32px)); height: fit-content; max-height: calc(100dvh - 32px); overflow-y: auto;
+  display: flex; flex-direction: column; align-items: stretch; gap: 14px; padding: 24px; box-sizing: border-box;
+  background: rgba(10, 14, 20, 0.92); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 12px; color: var(--text); text-align: center; z-index: 50; }
+.ol-title { margin: 0; font: 800 22px/1.2 var(--ui); letter-spacing: 0.02em; }
+.ol-status { margin: 0; font: 600 15px/1.4 var(--ui); display: flex; align-items: center; justify-content: center; gap: 10px; }
+.ol-hint, .ol-link { margin: 0; font: 500 12px/1.4 var(--ui); color: var(--muted); word-break: break-all; }
+.ol-code { font: 800 44px/1 var(--num); letter-spacing: 8px; color: var(--accent); padding: 6px 0; user-select: all; -webkit-user-select: all; }
+.ol-join { display: flex; flex-direction: column; gap: 10px; }
+.ol-join label { font: 600 13px var(--ui); color: var(--muted); }
+.ol-join input { height: 52px; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.18); background: rgba(255, 255, 255, 0.06); color: var(--text);
+  font: 800 28px var(--num); letter-spacing: 8px; text-align: center; text-transform: uppercase; user-select: text; -webkit-user-select: text; }
+.ol-join input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+.ol-error { margin: 0; color: #ff8a8a; font: 600 13px/1.4 var(--ui); }
+.ol-primary, .ol-cancel { min-height: 44px; border-radius: 8px; font: 700 15px var(--ui); cursor: pointer; }
+.ol-primary { border: 0; background: var(--accent); color: #111; }
+.ol-cancel { border: 1px solid rgba(255, 255, 255, 0.18); background: transparent; color: var(--text); }
+.ol-spin { width: 14px; height: 14px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, 0.25); border-top-color: var(--accent); animation: ol-spin 0.8s linear infinite; flex: none; }
+@keyframes ol-spin { to { transform: rotate(360deg); } }
+@media (max-height: 420px) { .ol-card { padding: 16px; gap: 10px; } .ol-code { font-size: 34px; } .ol-title { font-size: 18px; } }
+.online-panel { display: flex; flex-direction: column; gap: 12px; color: var(--text); font: 500 14px/1.6 var(--ui); }
+.online-panel h3 { margin: 0; font: 800 18px var(--ui); }
+.online-panel ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; }
+.online-panel b { color: var(--accent); margin-right: 6px; }
+.online-panel p { margin: 0; color: var(--muted); font-size: 13px; }

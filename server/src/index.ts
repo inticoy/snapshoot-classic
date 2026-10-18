@@ -3,6 +3,7 @@
  *
  *  POST /rooms            → { code }        방 만들기 (6자리 코드)
  *  GET  /rooms/:code/ws   → WebSocket       방 입장 (먼저 들어온 쪽이 팀 0)
+ *  GET  /match/ws         → WebSocket       빠른 매칭 대기열 (둘이 모이면 같은 방 코드를 보낸다)
  *
  * 방(MatchRoom, 경기마다 Durable Object 하나):
  *  - 두 사람이 모이면 각자 잰 왕복 시간으로 입력 지연을 정하고 같은 시드로 시작 신호를 보낸다
@@ -12,6 +13,7 @@
  */
 export interface Env {
   ROOMS: DurableObjectNamespace;
+  LOBBY: DurableObjectNamespace;
 }
 
 const MSG_INPUT = 1, MSG_HASH = 2;
@@ -22,8 +24,10 @@ export default {
     const url = new URL(req.url);
     if (req.method === 'OPTIONS') return new Response(null, { headers: CORS });
     if (req.method === 'POST' && url.pathname === '/rooms') {
-      const code = Array.from(crypto.getRandomValues(new Uint8Array(6)), (b) => 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'[b % 32]).join('');
-      return Response.json({ code }, { headers: CORS });
+      return Response.json({ code: roomCode() }, { headers: CORS });
+    }
+    if (url.pathname === '/match/ws' && req.headers.get('Upgrade') === 'websocket') {
+      return env.LOBBY.get(env.LOBBY.idFromName('global')).fetch(req);
     }
     const m = url.pathname.match(/^\/rooms\/([A-Z0-9]{6})\/ws$/);
     if (m && req.headers.get('Upgrade') === 'websocket') {
@@ -35,6 +39,38 @@ export default {
 
 /** 각 사람의 설정 (보정 수준·경기 시간 등). 경기 규칙은 방장(팀 0) 것을 양쪽에 쓴다 */
 type Prefs = Record<string, unknown>;
+function roomCode(): string {
+  return Array.from(crypto.getRandomValues(new Uint8Array(6)), (b) => 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'[b % 32]).join('');
+}
+
+/**
+ * 빠른 매칭 대기열 (전역 Durable Object 하나). 먼저 온 사람을 기다리게 두었다가 다음 사람이 오면
+ * 새 방 코드를 둘에게 보낸다. 기다리던 사람이 나가면(취소) 대기열에서 빠진다.
+ */
+export class Lobby {
+  private waiting: WebSocket | null = null;
+
+  async fetch(_req: Request): Promise<Response> {
+    const pair = new WebSocketPair();
+    const [client, server] = [pair[0], pair[1]];
+    server.accept();
+    const other = this.waiting;
+    if (other && other.readyState === WebSocket.READY_STATE_OPEN) {
+      this.waiting = null;
+      const code = roomCode();
+      for (const ws of [other, server]) {
+        ws.send(JSON.stringify({ type: 'matched', code }));
+        ws.close(1000, 'matched');
+      }
+    } else {
+      this.waiting = server;
+      server.send(JSON.stringify({ type: 'searching' }));
+      server.addEventListener('close', () => { if (this.waiting === server) this.waiting = null; });
+    }
+    return new Response(null, { status: 101, webSocket: client });
+  }
+}
+
 interface Seat { ws: WebSocket; rtt: number | null; prefs: Prefs | null }
 
 export class MatchRoom {
@@ -47,7 +83,10 @@ export class MatchRoom {
   constructor(private readonly state: DurableObjectState) {}
 
   async fetch(req: Request): Promise<Response> {
-    const team = this.seats[0] === null ? 0 : this.seats[1] === null ? 1 : -1;
+    // 다시 들어오는 사람은 원래 자리(팀)로: ?team= 이 비어 있으면 그 자리
+    const want = Number(new URL(req.url).searchParams.get('team'));
+    const team = (want === 0 || want === 1) && this.seats[want] === null ? want
+      : this.seats[0] === null ? 0 : this.seats[1] === null ? 1 : -1;
     if (team < 0) return new Response('room full', { status: 409 });
     const pair = new WebSocketPair();
     const [client, server] = [pair[0], pair[1]];

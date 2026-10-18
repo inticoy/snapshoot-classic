@@ -285,10 +285,11 @@ export class Hud {
     const sp = match.setPieces.current;
     const userSetPiece = match.phase === 'setpiece' && sp && sp.taker === match.local.controlled;
     const so = match.shootout;
-    const mode = match.phase === 'shootout' ? (so.turn === 0 ? 'penalty' : 'keeper')
+    const me = match.localTeam;
+    const mode = match.phase === 'shootout' ? (so.turn === me ? 'penalty' : 'keeper')
       : userSetPiece ? sp!.kind
       : match.phase === 'setpiece' && sp?.kind === 'penalty' ? 'keeper'
-      : owner && owner.team === 0 ? 'attack' : owner ? 'defence'
+      : owner && owner.team === me ? 'attack' : owner ? 'defence'
       // 공이 떠 있으면 직전 공격/수비 안내를 유지하되, 세트피스 안내는 차고 나면 내린다
       : this.hintMode === 'defence' ? 'defence' : 'attack';
     if (mode === this.hintMode) return;

@@ -7,24 +7,29 @@ import { chromium } from 'playwright';
 import { chromePath } from './chrome-path.mjs';
 const base = process.env.SNAPSHOOT_URL ?? 'http://127.0.0.1:5180/';
 const relay = process.env.RELAY ?? 'https://snapshoot-relay.woojoo.workers.dev';
-const { code } = await (await fetch(new URL('/rooms', relay), { method: 'POST' })).json();
-const url = new URL(`?room=${code}&relay=${encodeURIComponent(relay)}`, base).href;
+// 빠른 매칭으로 시작: 두 사람이 ?quick 화면에서 같은 방으로 들어간다
+let code = '';
+const url = new URL(`?quick&relay=${encodeURIComponent(relay)}`, base).href;
 const browser = await chromium.launch({ executablePath: await chromePath() });
-async function open(assist) {
+async function open(assist, at = url) {
   const ctx = await browser.newContext({ viewport: { width: 640, height: 360 } });
   // 설정이 다른 두 사람: 한쪽은 수동 보정·이동 보조 없음
   await ctx.addInitScript((a) => localStorage.setItem('snapshoot-classic:settings', JSON.stringify(a)), assist);
   const page = await ctx.newPage();
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
-  await page.goto(url);
+  await page.goto(at);
   return { ctx, page, errors };
 }
 const ready = (p) => p.page.waitForFunction(() => window.__game?.game?.lockstep && window.__game.match.phase !== 'kickoff', null, { timeout: 30000 });
 const state = (p) => p.page.evaluate(() => { const ls = window.__game.game.lockstep; return { team: ls.team, tick: ls.tick, desync: ls.desyncAt }; });
 const a = await open({ passAssist: 'manual', shotAssist: 'semi', moveAssist: 'none' });
+assert.match(await a.page.locator('.ol-status').textContent(), /찾는 중/);
 let b = await open({ passAssist: 'assisted', shotAssist: 'assisted', moveAssist: 'high' });
 await Promise.all([ready(a), ready(b)]);
+code = new URL(a.page.url()).searchParams.get('room');
+assert.equal(new URL(b.page.url()).searchParams.get('room'), code, '같은 방으로 매칭');
+const roomUrl = a.page.url();
 const hold = async (p, keys, ms) => { for (const k of keys) await p.page.keyboard.down(k); await p.page.waitForTimeout(ms); for (const k of keys) await p.page.keyboard.up(k); };
 
 // 1) 서로 다른 설정으로 조작
@@ -38,14 +43,27 @@ assert.ok(afterPause - before > 240, `일시정지 중에도 진행해야 함 ($
 assert.equal(await a.page.evaluate(() => window.__game.game.state), 'paused');
 await a.page.keyboard.press('Escape');
 // 3) b가 나갔다가 같은 링크로 다시 들어온다
+const bTeam = (await state(b)).team;
 await b.ctx.close();
 await a.page.waitForTimeout(2500);
-b = await open({ passAssist: 'assisted', shotAssist: 'assisted', moveAssist: 'high' });
+b = await open({ passAssist: 'assisted', shotAssist: 'assisted', moveAssist: 'high' }, roomUrl);
 await b.page.waitForFunction(() => window.__game?.game?.lockstep?.tick > 300, null, { timeout: 30000 });
 await Promise.all([hold(a, ['ArrowDown', 'KeyD'], 3000), hold(b, ['ArrowRight'], 3000)]);
 await a.page.waitForTimeout(2000);
 const [sa, sb] = await Promise.all([state(a), state(b)]);
-console.log(JSON.stringify({ code, before, afterPause, a: sa, b: sb, errors: [a.errors, b.errors] }));
+assert.equal(sb.team, bTeam, '다시 들어와도 같은 팀');
+// 4) 강제로 한쪽 상태를 틀어 동기화 어긋남을 만들면 둘 다 다시 들어와 같은 경기로 복구된다
+const tickBefore = sa.tick;
+await a.page.evaluate(() => { window.__game.match.ball.body.position.x += 3; });
+await a.page.waitForFunction(() => window.__game?.game?.lockstep && window.__game.game.lockstep.tick > 120 && window.__game.match.phase !== 'kickoff', null, { timeout: 60000 }).catch(() => {});
+await a.page.waitForTimeout(6000);
+await Promise.all([hold(a, ['ArrowUp'], 2000), hold(b, ['ArrowDown'], 2000)]);
+await a.page.waitForTimeout(1500);
+const [ra, rb] = await Promise.all([state(a), state(b)]);
+console.log(JSON.stringify({ code, before, afterPause, a: sa, b: sb, recovered: [ra, rb], tickBefore, errors: [a.errors, b.errors] }));
+assert.equal(ra.desync, null, '복구 뒤 어긋남 없음');
+assert.equal(rb.desync, null);
+assert.ok(ra.tick > tickBefore && Math.abs(ra.tick - rb.tick) < 240, '복구 뒤 이어서 진행');
 assert.equal(sa.desync, null);
 assert.equal(sb.desync, null);
 assert.ok(Math.abs(sa.tick - sb.tick) < 240, '재접속 뒤 두 화면 틱 차이가 큼');

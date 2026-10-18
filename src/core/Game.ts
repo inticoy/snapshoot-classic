@@ -96,7 +96,14 @@ export class Game {
     if (online) {
       this.lockstep = new Lockstep(this.match, online.start.team, online.session, online.start.delay);
       online.session.onData = (team, data) => this.lockstep!.receive(data, team);
-      online.session.onDesync = (tick) => this.hud.tick(`동기화 어긋남 (틱 ${tick})`, 4);
+      // 어긋나면 양쪽 모두 같은 방에 다시 들어가 서버 입력 기록으로 처음부터 다시 계산한다 (기록이 같으니 결과도 같다)
+      online.session.onDesync = (tick) => {
+        if (this.resyncing) return;
+        this.resyncing = true;
+        this.hud.tick(`동기화 복구 중 (틱 ${tick})`, 3);
+        online.session.close();
+        setTimeout(() => location.reload(), 600);
+      };
       online.session.onOpponentLeft = () => this.hud.tick('상대 연결이 끊겼어요 · 같은 링크로 다시 들어오면 이어서 해요', 6);
       online.session.onOpponentBack = () => this.hud.tick('상대가 돌아왔어요', 2.5);
       online.session.onOpponentAway = (away) => this.hud.tick(away ? '상대가 화면을 벗어났어요 · 돌아올 때까지 멈춰요' : '상대가 돌아왔어요', away ? 6 : 2);
@@ -267,6 +274,26 @@ export class Game {
     ];
   }
 
+  /** 온라인 대전 하위 메뉴 */
+  private openOnlineMenu(): void {
+    this.menu.open({
+      eyebrow: '1 vs 1 · 온라인',
+      title: '온라인 대전',
+      panel: () => `<div class="online-panel"><h3>1:1 온라인</h3><ul>
+        <li><b>빠른 매칭</b> 지금 찾고 있는 사람과 바로 연결</li>
+        <li><b>방 만들기</b> 6자리 코드·링크로 친구 초대</li>
+        <li><b>코드로 입장</b> 받은 코드를 입력</li></ul>
+        <p>먼저 들어온 사람이 홈 팀이에요. 경기 시간·승부차기는 방장 설정, 보정은 각자 설정을 써요. 온라인 경기는 일시정지해도 멈추지 않아요.</p></div>`,
+      onBack: () => this.openMainMenu(),
+      items: [
+        { id: 'quick', label: '빠른 매칭', onSelect: () => { location.search = '?quick'; } },
+        { id: 'create', label: '방 만들기 (코드로 초대)', onSelect: () => { location.search = '?online'; } },
+        { id: 'join', label: '코드로 입장', onSelect: () => { location.search = '?join'; } },
+        { id: 'back', label: '뒤로', onSelect: () => this.openMainMenu() },
+      ],
+    });
+  }
+
   private openMainMenu(): void {
     this.state = 'menu';
     this.hud.show(false);
@@ -277,15 +304,7 @@ export class Game {
       panel: () => matchupPanel(null, [`경기 시간 ${lengthLabel()}`, '중계 · 11대11 · 4-3-3', TEAMS[0].name + ' 홈']),
       items: [
         { id: 'start', label: '경기 시작', onSelect: () => void this.startMatch() },
-        { id: 'online-create', label: '온라인 대전 · 방 만들기', onSelect: () => { location.search = '?online'; } },
-        {
-          id: 'online-join',
-          label: '온라인 대전 · 코드로 입장',
-          onSelect: () => {
-            const code = window.prompt('방 코드 6자리')?.trim().toUpperCase();
-            if (code && /^[A-Z0-9]{6}$/.test(code)) location.search = `?room=${code}`;
-          },
-        },
+        { id: 'online', label: '온라인 대전', onSelect: () => this.openOnlineMenu() },
         {
           id: 'length',
           label: '경기 시간',
@@ -332,7 +351,9 @@ export class Game {
     const [h, a] = this.match.score;
     const so = this.match.shootout;
     const [ph, pa] = so.active ? so.score : [h, a];
-    const verdict = ph > pa ? '승리' : ph < pa ? '패배' : '무승부';
+    // 승패는 이 화면 사람의 팀 기준 (온라인 원정이면 반대)
+    const mine = this.match.localTeam === 0 ? ph - pa : pa - ph;
+    const verdict = mine > 0 ? '승리' : mine < 0 ? '패배' : '무승부';
     const pk = so.active ? ` (승부차기 ${ph} : ${pa})` : '';
     this.menu.open({
       eyebrow: `경기 종료 · ${TEAMS[0].abbr} ${h} : ${a} ${TEAMS[1].abbr}${pk}`,
@@ -410,6 +431,7 @@ export class Game {
   }
 
   private waiting = 0;
+  private resyncing = false;
 
   /** UI로 게이지 취소. 온라인에서는 입력 기록 밖에서 경기 상태를 바꾸면 두 화면이 갈라지므로 하지 않는다 */
   private cancelCharge(): void {
@@ -456,10 +478,12 @@ export class Game {
     this.ensureViewSize();
     const restart = this.match.setPieces.current;
     const so = this.match.shootout;
-    const mode: TouchMode = so.active && this.match.phase === 'shootout' ? (so.turn === 0 ? 'penalty' : 'keeper')
-      : restart?.team === 0 ? restart.kind
+    // 이 화면 사람의 팀 기준 (온라인 원정이면 팀 1)
+    const me = this.match.localTeam;
+    const mode: TouchMode = so.active && this.match.phase === 'shootout' ? (so.turn === me ? 'penalty' : 'keeper')
+      : restart?.team === me ? restart.kind
       : restart?.kind === 'penalty' ? 'keeper'
-      : this.match.userAttacking || this.match.ball.owner?.team === 0 ? 'attack' : 'defence';
+      : this.match.localAttacking || this.match.ball.owner?.team === me ? 'attack' : 'defence';
     this.touch.update(this.state === 'playing', mode);
     const menuWasVisible = this.menu.visible;
     if (menuWasVisible) {

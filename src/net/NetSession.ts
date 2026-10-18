@@ -19,6 +19,20 @@ export class NetSession {
 
   constructor(readonly relay: string, readonly code: string) {}
 
+  /** 빠른 매칭: 대기열에 들어가 상대가 생기면 방 코드를 받는다 (창을 닫거나 취소하면 대기열에서 빠진다) */
+  static quickMatch(relay: string): Promise<string> {
+    const url = new URL('/match/ws', relay);
+    url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+    const ws = new WebSocket(url);
+    return new Promise((resolve, reject) => {
+      ws.onerror = () => reject(new Error('matchmaking failed'));
+      ws.onmessage = (ev) => {
+        const msg = JSON.parse(ev.data as string) as { type: string; code?: string };
+        if (msg.type === 'matched') resolve(msg.code!);
+      };
+    });
+  }
+
   /** 방 만들기 → 코드 */
   static async createRoom(relay: string): Promise<string> {
     const res = await fetch(new URL('/rooms', relay), { method: 'POST' });
@@ -29,6 +43,9 @@ export class NetSession {
   connect(prefs: OnlinePrefs, onStatus: (text: string) => void = () => {}): Promise<StartInfo> {
     const url = new URL(`/rooms/${this.code}/ws`, this.relay);
     url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+    // 같은 방에 다시 들어오면 원래 팀 자리로 (새로고침·재접속·동기화 복구)
+    const seat = (() => { try { return sessionStorage.getItem(`snapshoot-room:${this.code}`); } catch { return null; } })();
+    if (seat === '0' || seat === '1') url.searchParams.set('team', seat);
     this.ws = new WebSocket(url);
     this.ws.binaryType = 'arraybuffer';
     return new Promise((resolve, reject) => {
@@ -52,6 +69,7 @@ export class NetSession {
           else this.ws.send(JSON.stringify({ type: 'ready', rtt: rtts.sort((a, b) => a - b)[2], prefs }));
         }
         if (msg.type === 'start') {
+          try { sessionStorage.setItem(`snapshoot-room:${this.code}`, String(msg.team)); } catch { /* 저장 못 해도 진행 */ }
           resolve({ team: msg.team!, seed: msg.seed!, delay: msg.delay!, prefs: msg.prefs!, resume: msg.resume });
         }
         if (msg.type === 'desync') this.onDesync(msg.tick!);
@@ -71,6 +89,10 @@ export class NetSession {
   /** 탭을 벗어남/돌아옴 (상대 화면에 알림) */
   setAway(away: boolean): void {
     if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify({ type: 'away', away }));
+  }
+
+  close(): void {
+    this.ws?.close();
   }
 
   send(data: Uint8Array): void {
