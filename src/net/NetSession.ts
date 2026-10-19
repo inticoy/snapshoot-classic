@@ -55,9 +55,10 @@ export class NetSession {
     const url = new URL(`/rooms/${this.code}/ws`, this.relay);
     url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
     // 같은 방에 다시 들어오면 원래 팀 자리로 (새로고침·재접속·동기화 복구)
-    const seat = (() => { try { return localStorage.getItem(`snapshoot-room:${this.code}`); } catch { return null; } })();
+    // 자리·비밀값은 탭마다 따로 (같은 브라우저의 다른 탭이 남의 자리를 이어받아 서로 밀어내지 않게). 새로고침해도 남는다
+    const seat = (() => { try { return sessionStorage.getItem(`snapshoot-room:${this.code}`); } catch { return null; } })();
     if (seat === '0' || seat === '1') url.searchParams.set('team', seat);
-    const token = (() => { try { return localStorage.getItem(`snapshoot-token:${this.code}`); } catch { return null; } })();
+    const token = (() => { try { return sessionStorage.getItem(`snapshoot-token:${this.code}`); } catch { return null; } })();
     if (token) url.searchParams.set('token', token);
     this.ws = new WebSocket(url);
     this.ws.binaryType = 'arraybuffer';
@@ -83,7 +84,7 @@ export class NetSession {
         let msg: { type: string; t?: number; waiting?: boolean; tick?: number; away?: boolean; token?: string; left?: number[]; ms?: number } & Partial<StartInfo>;
         try { msg = JSON.parse(ev.data); } catch { return; }
         if (msg.type === 'joined' && msg.token) {
-          try { localStorage.setItem(`snapshoot-token:${this.code}`, msg.token); } catch { /* 저장 못 해도 진행 */ }
+          try { sessionStorage.setItem(`snapshoot-token:${this.code}`, msg.token); } catch { /* 저장 못 해도 진행 */ }
         }
         if (msg.type === 'joined') onStatus(msg.waiting ? `상대를 기다리는 중 · 방 코드 ${this.code}` : '상대 접속 · 연결 확인 중');
         if (msg.type === 'pong') {
@@ -94,7 +95,7 @@ export class NetSession {
           else this.ws.send(JSON.stringify({ type: 'ready', rtt: rtts.sort((a, b) => a - b)[2], prefs }));
         }
         if (msg.type === 'start') {
-          try { localStorage.setItem(`snapshoot-room:${this.code}`, String(msg.team)); } catch { /* 저장 못 해도 진행 */ }
+          try { sessionStorage.setItem(`snapshoot-room:${this.code}`, String(msg.team)); } catch { /* 저장 못 해도 진행 */ }
           started = true;
           this.resuming = !!msg.resume;
           // 경기 중 핑 표시용: 2초마다 왕복 시간을 다시 잰다

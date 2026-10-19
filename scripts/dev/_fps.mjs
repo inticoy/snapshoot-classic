@@ -1,0 +1,11 @@
+import { chromium } from 'playwright';
+import { chromePath } from '../chrome-path.mjs';
+const b = await chromium.launch({ executablePath: await chromePath(), args: ['--enable-gpu', '--ignore-gpu-blocklist'] });
+const page = await b.newPage({ viewport: { width: 1280, height: 720 } });
+await page.goto('http://127.0.0.1:5191/');
+await page.waitForFunction(() => document.querySelector('#overlay')?.textContent.includes('경기 시작'), null, { timeout: 60000 });
+await page.keyboard.press('Enter');
+await page.waitForFunction(() => window.__game.match.phase === 'playing', null, { timeout: 30000 });
+await page.waitForTimeout(2000); const cdp = await page.context().newCDPSession(page); await cdp.send('Emulation.setCPUThrottlingRate', { rate: 4 });
+console.log(await page.evaluate(() => new Promise((res) => { let n = 0; const t0 = performance.now(); const f = () => { n++; if (performance.now() - t0 < 3000) requestAnimationFrame(f); else { const r = window.__game.game.renderer.info.render; res({ fps: (n / 3).toFixed(1), calls: r.calls, tris: r.triangles }); } }; requestAnimationFrame(f); })));
+await b.close();

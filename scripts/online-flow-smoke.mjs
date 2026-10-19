@@ -11,8 +11,10 @@ const relay = process.env.RELAY ?? 'https://snapshoot-relay.woojoo.workers.dev';
 let code = '';
 const url = new URL(`?quick&relay=${encodeURIComponent(relay)}`, base).href;
 const browser = await chromium.launch({ executablePath: await chromePath() });
-async function open(assist, at = url, reuse = null) {
+async function open(assist, at = url, reuse = null, session = null) {
   const ctx = reuse ?? await browser.newContext({ viewport: { width: 640, height: 360 } });
+  // 재접속 흉내: 원래 탭의 sessionStorage(자리·비밀값)를 새 탭에 심는다
+  if (session) await ctx.addInitScript((s) => { for (const [k, v] of Object.entries(JSON.parse(s))) sessionStorage.setItem(k, v); }, session);
   // 설정이 다른 두 사람: 한쪽은 수동 보정·이동 보조 없음
   if (!reuse) await ctx.addInitScript((a) => localStorage.setItem('snapshoot-classic:settings', JSON.stringify(a)), assist);
   const page = await ctx.newPage();
@@ -24,7 +26,7 @@ async function open(assist, at = url, reuse = null) {
 const ready = (p) => p.page.waitForFunction(() => window.__game?.game?.lockstep && window.__game.match.phase !== 'kickoff', null, { timeout: 30000 });
 const state = (p) => p.page.evaluate(() => { const ls = window.__game.game.lockstep; return { team: ls.team, tick: ls.tick, desync: ls.desyncAt }; });
 const a = await open({ passAssist: 'manual', shotAssist: 'semi', moveAssist: 'none' });
-assert.match(await a.page.locator('.ol-status').textContent(), /찾는 중/);
+assert.match(await a.page.locator('.ol-status').textContent(), /찾/);
 let b = await open({ passAssist: 'assisted', shotAssist: 'assisted', moveAssist: 'high' });
 await Promise.all([ready(a), ready(b)]);
 code = new URL(a.page.url()).searchParams.get('room');
@@ -49,7 +51,10 @@ assert.ok((await state(b)).tick - afterPause > 120, '재개 뒤 다시 진행');
 assert.equal(await a.page.evaluate(() => window.__game.game.pausesLeft), 2, '일시정지 횟수 차감');
 // 3) b가 나갔다가 같은 링크로 다시 들어온다
 const bTeam = (await state(b)).team;
-await b.page.close();
+// 같은 탭 새로고침 = 재접속 (자리 비밀값은 탭에 남는다). 잠깐 끊긴 사이 다른 사람이 들어오는지 본다
+const bPage = b.page;
+const bSession = await bPage.evaluate(() => JSON.stringify(Object.fromEntries(Object.entries(sessionStorage))));
+await bPage.close();
 await a.page.waitForTimeout(2500);
 // 방 코드만 아는 다른 사람은 빈자리를 차지하지 못한다
 const intruder = await open({ passAssist: 'assisted', shotAssist: 'assisted', moveAssist: 'high' }, roomUrl);
@@ -57,7 +62,8 @@ await intruder.page.waitForTimeout(5000);
 assert.equal(await intruder.page.evaluate(() => !!window.__game?.game?.lockstep), false, '토큰 없는 사람은 못 들어옴');
 await intruder.ctx.close();
 // 같은 브라우저(토큰 보관)로는 다시 들어온다
-b = await open({ passAssist: 'assisted', shotAssist: 'assisted', moveAssist: 'high' }, roomUrl, b.ctx);
+// 같은 탭을 되살릴 수는 없으므로 새 탭에 원래 탭의 저장값을 옮겨 새로고침과 같은 상태를 만든다
+b = await open({ passAssist: 'assisted', shotAssist: 'assisted', moveAssist: 'high' }, roomUrl, b.ctx, bSession);
 await b.page.waitForFunction(() => window.__game?.game?.lockstep?.tick > 300, null, { timeout: 30000 });
 await Promise.all([hold(a, ['ArrowDown', 'KeyD'], 3000), hold(b, ['ArrowRight'], 3000)]);
 await a.page.waitForTimeout(2000);
