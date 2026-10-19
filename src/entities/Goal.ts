@@ -28,6 +28,8 @@ export class Goal {
   private rippleAmp = 0;
   private rippleT = 0;
   private time = visualRandom.next() * 10;
+  /** 그물이 제자리에 멈춰 있어 다시 계산할 필요가 없는가 */
+  private settled = false;
 
   constructor(
     readonly side: 1 | -1,
@@ -231,7 +233,12 @@ export class Goal {
     this.time += dt;
     this.rippleT += dt;
     this.rippleAmp *= Math.exp(-2.2 * dt);
-    const idle = 0.012;
+    // 그물 정점 수천 개를 매 물리 스텝마다 다시 계산하면 느린 기기에서 프레임이 크게 떨어진다.
+    // 공에 맞아 출렁이는 동안만 계산하고, 멎으면 한 번 제자리로 돌려놓은 뒤 멈춘다 (가만히 흔들리는 효과는 뺐다)
+    const moving = this.rippleAmp > 0.002;
+    if (!moving && this.settled) return;
+    this.settled = !moving;
+    const halfL = PITCH.halfL;
     for (const panel of this.panels) {
       if (!panel.object.visible) continue;
       const pos = panel.geometry.getAttribute('position') as THREE.BufferAttribute;
@@ -242,11 +249,12 @@ export class Goal {
         const x = rest[i], y = rest[i + 1], z = rest[i + 2];
         // 지면/골대 프레임에 붙은 점은 덜 움직이게
         const edge = Math.max(0, GOAL.width / 2 + GOAL.postRadius - Math.abs(z));
-        const rearBar = Math.hypot(Math.abs(x) - PITCH.halfL - NET_TOP_DEPTH, y - GOAL.height - GOAL.postRadius);
-        const pin = Math.min(1, y / 0.4) * Math.min(1, Math.abs(Math.abs(x) - PITCH.halfL) / 0.4)
+        if (!moving) { arr[i] = x; arr[i + 1] = y; arr[i + 2] = z; continue; }
+        const rearBar = Math.hypot(Math.abs(x) - halfL - NET_TOP_DEPTH, y - GOAL.height - GOAL.postRadius);
+        const pin = Math.min(1, y / 0.4) * Math.min(1, Math.abs(Math.abs(x) - halfL) / 0.4)
           * Math.min(1, edge / 0.25) * Math.min(1, rearBar / 0.15);
-        let d = Math.sin(this.time * 1.7 + x * 2.1 + z * 1.3) * idle;
-        if (this.rippleAmp > 0.002) {
+        let d = 0;
+        {
           const dx = x - this.impact.x, dy = y - this.impact.y, dz = z - this.impact.z;
           const dist2 = dx * dx + dy * dy + dz * dz;
           d += this.rippleAmp * Math.exp(-dist2 / 0.7) * Math.cos(this.rippleT * 14 - Math.sqrt(dist2) * 5);
