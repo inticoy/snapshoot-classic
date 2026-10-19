@@ -297,6 +297,7 @@ export class SkillRunner {
   shield(p: Player): number { return this.active.get(p)?.def.shield ?? 1; }
 
   clear(): void {
+    this.m.ball.setSkillRolling(false);
     for (const p of this.active.keys()) {
       p.actionLock = p.facingLock = 0;
       p.legPose = null;
@@ -432,6 +433,7 @@ export class SkillRunner {
     if (a.rig) Object.assign(pose, a.rig.ball);
     else sample(def.ball, a.t, pose);
     this.toWorld(a, pose.x, pose.z + a.v0 * def.carry * a.t, w);
+    this.m.ball.setSkillRolling(true);
     const body = this.m.ball.body, bp = body.position;
     body.velocity.set((w.x - bp.x) / dt, (pose.y - bp.y) / dt, (w.z - bp.z) / dt);
     const v = body.velocity;
@@ -457,6 +459,7 @@ export class SkillRunner {
   private finish(a: Active, normal: boolean, move: THREE.Vector3 | null = null): void {
     const { def, p } = a;
     this.active.delete(p);
+    this.m.ball.setSkillRolling(false);
     p.legPose = null;
     p.actionLock = 0;
     p.facingLock = 0;
@@ -468,11 +471,11 @@ export class SkillRunner {
     if (def.rig) {
       // 다리 IK 개인기는 공이 마지막 순간 움직이던 그대로 나간다 (속도가 튀지 않게, 떠 있는 공은 포물선 그대로)
       const e = def.rig(def.duration).ball, s = def.rig(def.duration - 0.02).ball;
-      const lx = (e.x - s.x) / 0.02, lz = (e.z - s.z) / 0.02 + a.v0 * def.carry;
+      const lx = (e.x - s.x) / 0.02 * a.rate, lz = ((e.z - s.z) / 0.02 + a.v0 * def.carry) * a.rate;
       dir = a.fwd.clone().multiplyScalar(lz).addScaledVector(a.right, lx);
       speed = Math.max(def.exit.speed * 0.5, dir.length());
       dir.normalize();
-      vy = (e.y - s.y) / 0.02;
+      vy = (e.y - s.y) / 0.02 * a.rate;
     } else dir = a.fwd.clone().multiplyScalar(Math.cos(def.exit.dir)).addScaledVector(a.right, Math.sin(def.exit.dir));
     if (def.exit.input && move && move.lengthSq() > 0.25) dir = move.clone().setY(0).normalize();
     this.m.ball.body.velocity.set(dir.x * speed, vy, dir.z * speed);

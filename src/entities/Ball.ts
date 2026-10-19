@@ -8,6 +8,8 @@ import type { Player } from './Player';
 
 const tmpV = new CANNON.Vec3();
 const tmpQ = new THREE.Quaternion();
+const rollAxis = new THREE.Vector3();
+const visualDelta = new THREE.Quaternion();
 
 export class Ball {
   readonly body: CANNON.Body;
@@ -19,6 +21,10 @@ export class Ball {
   /** 현재 진행 중인 슛 (키퍼 선방 판정용) */
   shot: { id: number; by: Player; saveRolled: boolean; tipRolled?: boolean } | null = null;
   private shotCounter = 0;
+  private skillRolling = false;
+  private readonly visualPosition = new THREE.Vector3();
+  private readonly visualBodyQuaternion = new THREE.Quaternion();
+  private visualInitialized = false;
 
   constructor(physics: PhysicsWorld) {
     this.body = new CANNON.Body({
@@ -122,6 +128,18 @@ export class Ball {
     this.body.wakeUp();
   }
 
+  /** 개인기 지상 이동은 실제 변위로 굴린다. 물리 회전·충돌에는 손대지 않는다. */
+  setSkillRolling(enabled: boolean): void {
+    if (enabled && !this.skillRolling) this.rememberVisualBody();
+    this.skillRolling = enabled;
+  }
+
+  private rememberVisualBody(): void {
+    const p = this.body.position, q = this.body.quaternion;
+    this.visualPosition.set(p.x, p.y, p.z);
+    this.visualBodyQuaternion.set(q.x, q.y, q.z, q.w);
+  }
+
   reset(x = 0, z = 0): void {
     this.owner = null;
     this.shot = null;
@@ -129,6 +147,8 @@ export class Ball {
     this.body.position.set(x, BALL.radius, z);
     this.body.velocity.setZero();
     this.body.angularVelocity.setZero();
+    this.skillRolling = false;
+    this.rememberVisualBody();
   }
 
   private applyAerodynamics(): void {
@@ -175,7 +195,24 @@ export class Ball {
     this.object.position.set(p.x, p.y, p.z);
     const q = this.body.quaternion;
     tmpQ.set(q.x, q.y, q.z, q.w);
-    this.object.quaternion.copy(tmpQ);
+    if (!this.visualInitialized) {
+      this.object.quaternion.copy(tmpQ);
+      this.visualInitialized = true;
+    } else if (this.skillRolling && this.isGrounded && this.visualPosition.y < BALL.radius + 0.03) {
+      const dx = p.x - this.visualPosition.x, dz = p.z - this.visualPosition.z;
+      const distance = Math.hypot(dx, dz);
+      if (distance > 0) {
+        // 위쪽 법선 × 이동 방향. 뒤로 끌면 같은 거리만큼 역회전한다.
+        rollAxis.set(dz / distance, 0, -dx / distance);
+        visualDelta.setFromAxisAngle(rollAxis, distance / BALL.radius);
+        this.object.quaternion.premultiply(visualDelta).normalize();
+      }
+    } else {
+      // 개인기를 떠날 때도 누적된 시각 자세를 유지한 채 물리 회전의 변화량만 잇는다.
+      visualDelta.copy(this.visualBodyQuaternion).invert().premultiply(tmpQ);
+      this.object.quaternion.premultiply(visualDelta).normalize();
+    }
+    this.rememberVisualBody();
     this.shadow.position.set(p.x, 0.012, p.z);
     const h = Math.max(0, p.y - BALL.radius);
     const s = 1 + h * 0.25;

@@ -105,7 +105,7 @@ export function makeSkillDefs(): SkillDef[] {
     duration: 0.6, carry: 0.35,
     body: [{ t: 0, x: 0, z: 0 }, { t: 0.25, x: 0, z: 0.08 }, { t: 0.65, x: 0, z: 0.6 }],
     ball: [{ t: 0, x: 0.1, z: 0.4 }, { t: 0.2, x: 0.08, z: 0.16 }, { t: 0.4, x: 0.05, z: 0.55, y: 0.35 }, { t: 0.65, x: 0, z: 1.1 }],
-    contacts: [{ t: 0.2, foot: 'R' }, { t: 0.38, foot: 'L' }],
+    contacts: [{ t: 0.2, foot: 'R' }, { t: 0.36, foot: 'L' }],
     motion: { id: 'grf_ballcontrol_idle_000', flat: true, kind: 'control', angle: 0 },
     exit: { dir: 0.05, speed: 3, body: 2.8 }, shield: 0.75,
   }, heelFlickRig());

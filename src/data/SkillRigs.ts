@@ -1,4 +1,5 @@
 import { BALL } from '../config';
+import { REAL, SKILL_ROLL_DECEL } from '../physics/presets';
 import type { Key, RigFoot, RigPose } from '../gameplay/Skills';
 
 /**
@@ -33,31 +34,41 @@ function track(keys: number[][]): (t: number) => number[] {
   };
 }
 
-/**
- * 공은 곡선으로 잇지 않고 직선으로 잇는다: 발이 닿기 전엔 가만히 있다가(또는 일정하게 구르다가) 닿는 순간 속도가 바뀐다.
- * 곡선으로 이으면 발이 닿기도 전에 공이 미리 움직여 '혼자 움직이는 공'처럼 보인다.
- */
-function linear(keys: number[][]): (t: number) => number[] {
+type BallMotion = 'roll' | 'drag' | 'flight' | 'exit';
+type BallMotionAt = (t: number) => BallMotion;
+
+/** 터치 사이에는 진행 방향을 유지하며 감속한다. 발바닥 끌기·출구·공중 이동은 따로 취급한다. */
+function linear(keys: number[][], motion: BallMotionAt = () => 'roll'): (t: number) => number[] {
   const n = keys.length;
   return (t) => {
     if (t <= keys[0][0]) return keys[0].slice(1);
     if (t >= keys[n - 1][0]) return keys[n - 1].slice(1);
     let i = 0;
     while (keys[i + 1][0] < t) i++;
-    const a = keys[i], b = keys[i + 1], u = (t - a[0]) / (b[0] - a[0]);
-    return a.slice(1).map((v, k) => v + (b[k + 1] - v) * u);
+    const a = keys[i], b = keys[i + 1], dt = b[0] - a[0], u = (t - a[0]) / dt;
+    const mode = motion(a[0]);
+    const distance = Math.hypot(b[1] - a[1], b[3] - a[3]);
+    // s = v0·t - a·t²/2, v0 = 거리/시간 + a·시간/2. 짧은 구간도 역주행하지 않게 감속을 제한한다.
+    const decel = Math.min(SKILL_ROLL_DECEL, 2 * distance / (dt * dt));
+    const progress = mode === 'roll' && a[2] === R && b[2] === R && distance > 0
+      ? u + decel * dt * dt / (2 * distance) * u * (1 - u) : u;
+    return a.slice(1).map((v, k) => {
+      if (k === 1) {
+        // 포물선을 선형 키로 샘플링해도 중간 높이와 끝 미분을 중력에 맞게 복원한다.
+        return v + (b[k + 1] - v) * u + (mode === 'flight' ? 0.5 * REAL.gravity * dt * dt * u * (1 - u) : 0);
+      }
+      return v + (b[k + 1] - v) * progress;
+    });
   };
 }
 
-const G = 9.81;
-/** 떠 있는 공: t0에 p0에서 속도 v로 차올린 포물선을 촘촘한 키로 */
+/** 떠 있는 공: 마지막 시각도 반드시 포함해 출구 속도 추정이 키 밖에서 멈추지 않게 한다. */
 function flight(t0: number, p0: B, v: B, t1: number): number[][] {
-  const keys: number[][] = [];
-  for (let t = t0; t <= t1 + 1e-9; t += 0.02) {
-    const s = t - t0;
-    keys.push([t, p0[0] + v[0] * s, p0[1] + v[1] * s - 0.5 * G * s * s, p0[2] + v[2] * s]);
-  }
-  return keys;
+  const steps = Math.ceil((t1 - t0) / 0.02 - 1e-9);
+  return Array.from({ length: steps + 1 }, (_, i) => {
+    const t = i === steps ? t1 : t0 + i * 0.02, s = t - t0;
+    return [t, p0[0] + v[0] * s, p0[1] + v[1] * s - 0.5 * REAL.gravity * s * s, p0[2] + v[2] * s];
+  });
 }
 
 const fwd = (yaw: number): [number, number] => [Math.sin(yaw), Math.cos(yaw)];
@@ -76,18 +87,21 @@ function sole([x, y, z]: B, yaw: number): V {
 }
 /** 발 안쪽으로 공 뒤에서 민다 (발끝을 바깥으로 돌린다). side: 오른발 1, 왼발 -1 */
 function inside([x, , z]: B, yaw: number, side: 1 | -1): V {
-  const [fx, fz] = fwd(yaw), [rx, rz] = right(yaw);
-  return [x - fx * (R + 0.03) + rx * side * 0.06, 0.08, z - fz * (R + 0.03) + rz * side * 0.06, yaw + side * 1.1, 0];
+  const [fx, fz] = fwd(yaw), footYaw = yaw + side * 1.1, [tx, tz] = fwd(footYaw);
+  // 발끝 앞면과 공 중심 사이에 반지름을 남겨 터치 순간에도 신발 속으로 공이 들어가지 않게 한다.
+  return [x - fx * R - tx * 0.13, R, z - fz * R - tz * 0.13, footYaw, 0];
 }
 /** 발등(신발끈)으로 공 뒤에서 민다 */
 function instep([x, , z]: B, yaw: number): V {
   const [fx, fz] = fwd(yaw);
-  return [x - fx * (R + 0.08), 0.11, z - fz * (R + 0.08), yaw, -0.35];
+  const pitch = -0.35, reach = R + 0.13 * Math.cos(pitch);
+  return [x - fx * reach, R - 0.13 * Math.sin(pitch), z - fz * reach, yaw, pitch];
 }
 /** 뒤꿈치로 공을 뒤로 친다 (발목이 공 앞에) */
 function heel([x, y, z]: B, yaw: number): V {
   const [fx, fz] = fwd(yaw);
-  return [x + fx * (R + 0.05), y + 0.04, z + fz * (R + 0.05), yaw, 0.25];
+  const pitch = 0.25, reach = R + 0.05 * Math.cos(pitch);
+  return [x + fx * reach, y + 0.05 * Math.sin(pitch), z + fz * reach, yaw, pitch];
 }
 /** 몸 기준 자리에 디딘다 */
 function plant(bx: number, bz: number, yaw: number, lx: number, lz: number, footYaw = 0): V {
@@ -101,8 +115,8 @@ const lift = (v: V, y: number): V => [v[0], y, v[2], v[3], v[4]];
 const foot = (v: number[], w = 1): RigFoot => ({ x: v[0], y: Math.max(ANKLE, v[1]), z: v[2], yaw: v[3], pitch: Math.max(-0.5, Math.min(0.5, v[4])), w });
 
 /** 몸 [x, z, yaw, roll, pitch, drop] · 공 [x, y, z] · 두 발 트랙으로 자세 함수를 만든다 */
-function rig(body: number[][], ball: number[][], L: number[][], R_: number[][]): (t: number) => RigPose {
-  const b = track(body), o = linear(ball), l = track(L), r = track(R_);
+function rig(body: number[][], ball: number[][], L: number[][], R_: number[][], motion?: BallMotionAt): (t: number) => RigPose {
+  const b = track(body), o = linear(ball, motion), l = track(L), r = track(R_);
   return (t) => {
     const [x, z, yaw, roll, pitch, drop] = b(t);
     const [bx, by, bz] = o(t);
@@ -135,12 +149,14 @@ export function stepOverRig(): (t: number) => RigPose {
       at(0.46, instep(b0, -0.12)), [0.6, -0.08, 0.12, 0.58, -0.12, 0]],
     [at(0, plant(0, 0, 0, 0.11, -0.02)), [0.1, -0.14, 0.22, 0.38, -0.3, 0.1], [0.2, -0.02, 0.42, 0.7, 0.2, 0.2],
       [0.28, 0.2, 0.32, 0.62, 0.7, 0.1], [0.36, 0.3, ANKLE, 0.42, 0.5, 0], [0.48, 0.3, ANKLE, 0.42, 0.5, 0], [0.6, 0.22, 0.1, 0.5, 0, 0]],
+    // 마지막 전진 터치는 출구 속도를 유지한다. 터치 전에는 공이 정지해 있다.
+    () => 'exit',
   );
 }
 
 // ---------------------------------------------------------------- 위아래 (힐 투 힐 플릭)
 /** 오른발을 공 너머로 뻗어 뒤꿈치로 공을 왼발 쪽 뒤로 끌어 치고, 왼발 안쪽으로 받아 바로 앞으로 밀고 나간다. 0.6초.
- *  공은 0.2초까지 그대로 → 뒤꿈치에 맞아 왼발 쪽으로 → 0.38초 왼발 안쪽에 맞아 앞으로 (닿을 때만 방향이 바뀐다) */
+ *  공은 0.2초까지 그대로 → 뒤꿈치에 맞아 왼발 쪽으로 → 0.36초 왼발 안쪽에 맞아 앞으로 (닿을 때만 방향이 바뀐다) */
 export function heelFlickRig(): (t: number) => RigPose {
   // 공: 처음 자리 → 뒤꿈치에 맞아 왼발 뒤쪽 안으로 → 왼발 안쪽에 맞아 오른쪽 앞 대각선으로 길게
   const b0: B = [0.06, R, 0.43], b2: B = [-0.16, R, 0.16], out: B = [0.12, R, 1.05];
@@ -157,6 +173,7 @@ export function heelFlickRig(): (t: number) => RigPose {
     [at(0, plant(0, 0, 0, 0.11, -0.02)), [0.07, 0.14, 0.26, 0.3, 0.15, 0.1], [0.14, 0.08, 0.3, 0.68, 0.1, 0.2],
       at(0.2, heel(b0, 0)), [0.27, 0.0, 0.3, 0.12, -0.3, 0.1], [0.33, 0.06, 0.34, -0.06, -0.4, 0], [0.4, 0.1, 0.16, 0.2, -0.1, 0],
       [0.46, 0.11, ANKLE, 0.4, 0, 0], [0.6, 0.12, ANKLE, 0.62, 0, 0]],
+    (t) => t >= 0.36 ? 'exit' : 'roll',
   );
 }
 
@@ -169,7 +186,8 @@ export function rouletteRig(): (t: number) => RigPose {
   const yawT = track([[0, 0], [s(0.12), 0.15], [s(0.5), Math.PI], [s(0.85), 2 * Math.PI - 0.12], [D, 2 * Math.PI]]);
   // 월드 공: 오른발로 끌기(0.12~0.34) → 멈춤 → 왼발로 끌기(0.55~0.75) → 멈춤 → 앞으로 밀기
   const ballKeys = [[0, 0.08, R, 0.42], [s(0.12), 0.08, R, 0.42], [s(0.34), 0.24, R, 0.33], [s(0.55), 0.24, R, 0.33], [s(0.75), 0.4, R, 0.42], [s(0.86), 0.4, R, 0.42], [D, 0.44, R, 0.62]];
-  const ballT = linear(ballKeys);
+  const motion: BallMotionAt = (t) => t >= s(0.86) ? 'exit' : 'drag';
+  const ballT = linear(ballKeys, motion);
   // 공의 몸 기준 자리: 앞 → 오른발 밑 → (반 바퀴) 왼발 앞 → 왼발 밑 → 다시 앞
   const ballLocal = track([[0, 0.08, 0.42], [s(0.3), 0.16, 0.24], [s(0.5), -0.12, 0.26], [s(0.75), -0.14, 0.22], [D, 0, 0.45]]);
   const bodyAt = (t: number): [number, number, number] => {
@@ -194,6 +212,7 @@ export function rouletteRig(): (t: number) => RigPose {
     [at(0, plantAt(0, 0.11, -0.02)), at(s(0.07), lift(plantAt(s(0.07), 0.1, 0.15), 0.2)), at(s(0.12), sole(B3(s(0.12)), yawAt(s(0.12)))), at(s(0.34), sole(B3(s(0.34)), yawAt(s(0.34)))),
       at(s(0.42), lift(plantAt(s(0.42), 0.14, -0.05), 0.2)), at(s(0.5), plantAt(s(0.6), 0.13, -0.05)), at(s(0.8), plantAt(s(0.6), 0.13, -0.05)),
       at(s(0.86), inside(B3(s(0.86)), yawAt(s(0.86)), 1)), at(D, lift(plantAt(D, 0.12, 0.25), 0.12))],
+    motion,
   );
 }
 
@@ -210,10 +229,11 @@ export function rainbowRig(): (t: number) => RigPose {
     [[0, 0.05, R, 0.42], [0.1, 0.05, R, 0.42], [0.24, 0.0, R, 0.02], [0.3, -0.03, R, -0.16], [0.38, -0.04, 0.24, -0.22], ...flight(T, p0, v, 0.9)],
     // 왼발: 공 뒤쪽으로 반걸음 디딤(뒤꿈치가 공 앞) → 뒤꿈치로 차올림(무릎을 굽혀 발이 뒤로 높이) → 내려와 앞으로
     [at(0, plant(0, 0, 0, -0.11, -0.02)), [0.14, -0.08, 0.14, -0.04, 0, 0.1], at(0.2, plant(0, 0, 0, -0.06, -0.06)), at(0.38, plant(0, 0, 0, -0.06, -0.06)),
-      [0.48, -0.05, 0.42, -0.24, 0, -0.7], [0.6, -0.06, 0.16, -0.02, 0, 0], [0.7, -0.08, ANKLE, 0.12, 0, 0], [0.9, -0.1, ANKLE, 0.4, 0, 0]],
+      at(T, heel(p0, 0)), [0.48, -0.05, 0.42, -0.24, 0, -0.7], [0.6, -0.06, 0.16, -0.02, 0, 0], [0.7, -0.08, ANKLE, 0.12, 0, 0], [0.9, -0.1, ANKLE, 0.4, 0, 0]],
     // 오른발: 공 위에 바닥 → 굴려 당김 → 발끝을 공 밑에 넣어 왼발 뒤꿈치 위로 들어 올림 → 디딤
     [at(0, plant(0, 0, 0, 0.11, -0.02)), [0.06, 0.08, 0.22, 0.28, 0, 0.1], at(0.1, sole([0.05, R, 0.42], 0)), at(0.24, sole([0.0, R, 0.02], 0)),
       [0.32, 0.02, 0.12, 0.0, -0.3, -0.5], [0.38, 0.02, 0.2, -0.06, -0.3, -0.6], [0.46, 0.1, 0.1, 0.08, 0, 0], [0.52, 0.11, ANKLE, 0.1, 0, 0], [0.9, 0.12, ANKLE, 0.45, 0, 0]],
+    (t) => t >= T ? 'flight' : 'drag',
   );
 }
 
@@ -232,5 +252,6 @@ export function dragBackRig(): (t: number) => RigPose {
     // 오른발: 공 위로 → 바닥으로 밟아 끌기 → 공을 놓고 뒤로 디뎌 돌기
     [at(0, plant(0, 0, 0, 0.11, -0.02)), [0.07, 0.1, 0.22, 0.3, 0, 0.1], at(0.12, sole(b0, 0)), at(0.3, sole(b1, 0)),
       [0.38, 0.14, 0.14, -0.12, 0.6, 0], at(0.46, plant(0.06, -0.3, Math.PI, 0.12, -0.05, 0)), at(0.6, plant(0.06, -0.3, Math.PI, 0.12, 0.0, 0))],
+    (t) => t >= 0.3 ? 'exit' : 'drag',
   );
 }

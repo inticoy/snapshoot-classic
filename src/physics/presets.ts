@@ -137,3 +137,6 @@ export function magnusAccel(p: PhysicsPreset, radius: number, mass: number, spin
   const cl = liftCoefficient(p, radius, spin, speed);
   return (0.5 * p.airDensity * crossSection(radius) * cl * speed * speed) / mass;
 }
+
+/** 개인기 터치 사이 잔디 구름 감속. 키의 도착 시각·위치는 유지하면서 초속도를 역산한다 (m/s²). */
+export const SKILL_ROLL_DECEL = 3;
