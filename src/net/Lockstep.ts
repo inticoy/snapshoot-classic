@@ -36,11 +36,48 @@ export class Lockstep {
     return Math.max(4, Math.ceil(rttTicks / 2) + 2);
   }
 
-  constructor(readonly match: Match, readonly team: 0 | 1, private readonly net: LockstepTransport, readonly delay = 6) {
+  /** 내 입력 지연(틱). 경기 중 핑·멈춤에 맞춰 adapt()가 바꾼다 */
+  delay: number;
+  private readonly rtts: number[] = [];
+  private stallMark = 0;
+  private sinceStall = 0;
+  private sinceCheck = 0;
+
+  constructor(readonly match: Match, readonly team: 0 | 1, private readonly net: LockstepTransport, delay = 6) {
+    this.delay = delay;
     // 처음 delay 틱은 양쪽 모두 입력 없음으로 시작한다
     const idle = new Uint8Array(COMMAND_BYTES);
     for (let t = 0; t < delay; t++) this.frames.set(t, [idle, idle]);
     this.scheduled = delay - 1;
+  }
+
+  static readonly MAX_DELAY = 36;
+
+  /**
+   * 경기 중 입력 지연 조정 (렌더 프레임마다). 최근 왕복 시간 중 가장 나쁜 값 + 여유 4틱을 바닥으로 두고,
+   * 상대 입력을 기다리며 멈춘 일이 잦으면 바로 늘리고, 한동안 안 멈추면 한 틱씩 줄인다.
+   * 늘리면 같은 입력을 몇 틱 더 예약하고, 줄이면 지금 틱이 예약을 따라올 때까지 예약을 쉰다 (어느 쪽도 어긋나지 않는다)
+   */
+  adapt(dt: number, rttMs: number | null): void {
+    if (rttMs !== null && rttMs !== this.rtts[this.rtts.length - 1]) {
+      this.rtts.push(Math.min(400, rttMs));
+      if (this.rtts.length > 8) this.rtts.shift();
+    }
+    this.sinceCheck += dt;
+    if (this.sinceCheck < 1) return;
+    this.sinceCheck = 0;
+    const worst = this.rtts.length ? Math.max(...this.rtts) : 0;
+    const floor = Math.min(Lockstep.MAX_DELAY, Math.max(6, Math.ceil((worst / 1000) * 120) + 4));
+    const stalled = this.stalls - this.stallMark;
+    this.stallMark = this.stalls;
+    if (stalled > 6) {
+      this.delay = Math.min(Lockstep.MAX_DELAY, Math.max(this.delay, floor) + 3);
+      this.sinceStall = 0;
+      return;
+    }
+    this.sinceStall++;
+    if (this.delay < floor) this.delay = floor;
+    else if (this.delay > floor && this.sinceStall >= 4) { this.delay--; this.sinceStall = 2; }
   }
 
   /** 이번 스텝의 내 명령을 예약해 보낸다 (스텝마다 한 번) */

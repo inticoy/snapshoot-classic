@@ -572,6 +572,8 @@ export class Game {
       : restart?.kind === 'penalty' ? 'keeper'
       : this.match.localAttacking || this.match.ball.owner?.team === me ? 'attack' : 'defence';
     this.touch.update(this.state === 'playing', mode);
+    // 온라인: 핑이 흔들리거나 상대 입력을 자주 기다리면 입력 지연을 늘리고, 안정되면 줄인다
+    if (this.lockstep && !this.netPause) this.lockstep.adapt(dt, this.online!.session.rtt);
     const menuWasVisible = this.menu.visible;
     if (menuWasVisible) {
       for (const code of this.input.drainPresses()) if (MENU_KEYS.includes(code)) this.menu.handleKey(code);
@@ -640,6 +642,7 @@ export class Game {
     } else if (live) {
       const celebrate =
         this.match.phase === 'goal' && this.match.phaseTimer < 2.6 ? (this.match.lastScorer?.pos ?? null) : null;
+      this.rig.attack = this.match.local.controlled.attackDir > 0 ? 1 : -1;
       this.rig.update(dt, this.match.ball.position, this.match.local.controlled.pos, celebrate);
       this.hud.update(dt, this.match, this.rig.camera);
     }

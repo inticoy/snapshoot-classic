@@ -37,6 +37,8 @@ export class CameraRig {
   private closeUp: { angle: number; facing: THREE.Vector3 } | null = null;
 
   private snapNext = false;
+  /** 내 팀 공격 방향 (+1 = +x). 선수 뒤 카메라가 원정·후반에도 공격 쪽을 보게 */
+  attack: 1 | -1 = 1;
 
   /** snap: 다음 프레임에 미끄러지지 않고 바로 그 자리로 (시범을 처음부터 보이게) */
   setCloseUp(view: { angle: number; facing: THREE.Vector3 } | null, snap = false): void {
@@ -63,7 +65,7 @@ export class CameraRig {
       this.camera.getWorldDirection(out);
       return out.setY(0).normalize();
     }
-    return this.mode !== 'pro' ? out.set(0, 0, -1) : out.set(1, 0, 0);
+    return this.mode !== 'pro' ? out.set(0, 0, -1) : out.set(this.attack, 0, 0);
   }
 
   right(out: THREE.Vector3): THREE.Vector3 {
@@ -71,7 +73,7 @@ export class CameraRig {
       this.forward(out);
       return out.set(-out.z, 0, out.x);
     }
-    return this.mode !== 'pro' ? out.set(1, 0, 0) : out.set(0, 0, 1);
+    return this.mode !== 'pro' ? out.set(1, 0, 0) : out.set(0, 0, this.attack);
   }
 
   addShake(amount: number): void {
@@ -102,7 +104,7 @@ export class CameraRig {
     }
     if (celebrate) {
       // 득점자 클로즈업
-      this.desiredPos.set(celebrate.x + (this.mode === 'pro' ? -6 : 0), 3.2, celebrate.z + (this.mode === 'pro' ? 0 : 7));
+      this.desiredPos.set(celebrate.x + (this.mode === 'pro' ? -6 * this.attack : 0), 3.2, celebrate.z + (this.mode === 'pro' ? 0 : 7));
       this.desiredLook.set(celebrate.x, 1.2, celebrate.z);
     } else if (this.mode === 'tele') {
       // 관중석 고정 위치에서 좌우로 따라가며 공을 바라본다 (망원)
@@ -119,8 +121,8 @@ export class CameraRig {
     } else {
       const fx = focus.x * 0.6 + ball.x * 0.4;
       const fz = focus.z * 0.6 + ball.z * 0.4;
-      this.desiredPos.set(fx - 13, 7.5, fz * 0.85);
-      this.desiredLook.set(fx + 9, 0, fz * 0.92);
+      this.desiredPos.set(fx - 13 * this.attack, 7.5, fz * 0.85);
+      this.desiredLook.set(fx + 9 * this.attack, 0, fz * 0.92);
     }
 
     const k = 1 - Math.exp(-(celebrate ? 2.5 : 4.5) * dt);

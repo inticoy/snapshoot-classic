@@ -115,3 +115,36 @@ it('온라인 경기 전체(전반·하프타임·진영 교체·후반·승부�
   expect(b.match.score).toEqual(a.match.score);
   expect(b.match.shootout.results).toEqual(a.match.shootout.results);
 }, 120_000);
+
+it('경기 중 입력 지연 조정: 지터로 자주 멈추면 늘려 멈춤이 줄고, 어긋나지 않는다', () => {
+  const run = (adaptive: boolean) => {
+    const setup = { seed: 31, options: { userTeams: [true, true] as [boolean, boolean] } };
+    const queue: { at: number; to: 0 | 1; data: Uint8Array }[] = [];
+    let now = 0, s = 9;
+    const rnd = () => ((s = Math.imul(s ^ (s >>> 15), 2246822519) + 7) >>> 0) / 4294967296;
+    const make = (team: 0 | 1) => new Lockstep(headlessMatch(setup, () => new SimulationModel()), team, {
+      send: (data) => queue.push({ at: now + 4 + Math.floor(rnd() * 12), to: (1 - team) as 0 | 1, data: data.slice() }),
+    }, 6);
+    const peers = [make(0), make(1)] as const;
+    let late = 0;
+    for (let i = 0; i < 2400; i++) {
+      now++;
+      for (let j = queue.length - 1; j >= 0; j--) if (queue[j].at <= now) { peers[queue[j].to].receive(queue[j].data, (1 - queue[j].to) as 0 | 1); queue.splice(j, 1); }
+      for (const p of peers) {
+        if (adaptive) p.adapt(1 / 120, 60);
+        // 화면 루프처럼 지금 틱 + delay까지 예약
+        const c = command();
+        c.move.set(Math.sin(i / 50), 0, Math.cos(i / 70));
+        while (p.scheduled < p.tick + p.delay) p.pushLocal(c);
+        if (!p.step() && i > 1200) late++;
+      }
+    }
+    expect(peers[0].desyncAt).toBeNull();
+    expect(peers[1].desyncAt).toBeNull();
+    return { late, delay: peers[0].delay };
+  };
+  const fixed = run(false), adaptive = run(true);
+  expect(adaptive.delay).toBeGreaterThan(6);
+  expect(adaptive.delay).toBeLessThanOrEqual(Lockstep.MAX_DELAY);
+  expect(adaptive.late).toBeLessThan(fixed.late / 3);
+});
