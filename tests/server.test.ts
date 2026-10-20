@@ -100,9 +100,10 @@ describe('MatchRoom durable state', () => {
     a.emit('message', JSON.stringify({ type: 'ready', rtt: 20, prefs: { duration: 5 } }));
     await state.drain();
     const restored = await create(storage);
+    // 시작 전 빈자리는 누구나 들어올 수 있으므로, 원래 주인이 먼저 돌아오면 자리·설정을 그대로 잇는다
+    await join(restored.room, `?team=0&token=${token}`);
     const b = await join(restored.room);
     expect(b.messages()[0].team).toBe(1);
-    await join(restored.room, `?team=0&token=${token}`);
     b.emit('message', JSON.stringify({ type: 'ready', rtt: 30 }));
     await restored.state.drain();
     expect(b.messages().find((m) => m.type === 'start').prefs[0]).toEqual({ duration: 5 });

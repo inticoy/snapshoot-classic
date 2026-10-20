@@ -211,8 +211,9 @@ export class MatchRoom {
     const params = new URL(req.url).searchParams;
     const want = Number(params.get('team')), token = params.get('token');
     const owner = (want === 0 || want === 1) && token !== null && this.tokens[want] === token;
-    // 복원 직후에는 연결이 모두 비어 있으므로 시작 전에도 토큰이 있는 자리를 보호한다
-    const free = (t: 0 | 1) => this.seats[t] === null && this.tokens[t] === null;
+    // 시작한 경기의 빈자리는 비밀값을 가진 원래 주인만 들어올 수 있다 (방 코드만으로 자리를 빼앗지 못하게)
+    // 시작 전 빈자리는 누구나 (먼저 나간 사람의 자리가 영영 막혀 '방이 찼다'가 되지 않게)
+    const free = (t: 0 | 1) => this.seats[t] === null && (!this.started || this.tokens[t] === null);
     const pick = owner ? want : (want === 0 || want === 1) && free(want) ? want : free(0) ? 0 : free(1) ? 1 : -1;
     if (pick < 0) return new Response('room full', { status: 409 });
     const team = pick as 0 | 1;
