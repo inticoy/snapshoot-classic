@@ -21,6 +21,8 @@ const MSG_INPUT = 1, MSG_HASH = 2;
 const INPUT_BYTES = 11, HASH_BYTES = 9;
 /** 일시정지: 한 사람당 횟수와 한 번에 멈출 수 있는 시간 */
 const PAUSES_PER_TEAM = 3, PAUSE_MS = 60_000;
+/** 저장 요청을 입력마다 보내지 않고 모으며, 오래 방치된 방은 비운다 */
+const FLUSH_MS = 1_000, IDLE_MS = 30 * 60_000, LOG_CHUNK_SIZE = 256;
 const CORS = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS' };
 
 export default {
@@ -69,7 +71,9 @@ export class Lobby {
     } else {
       this.waiting = server;
       server.send(JSON.stringify({ type: 'searching' }));
-      server.addEventListener('close', () => { if (this.waiting === server) this.waiting = null; });
+      const remove = () => { if (this.waiting === server) this.waiting = null; };
+      server.addEventListener('close', remove);
+      server.addEventListener('error', remove);
     }
     return new Response(null, { status: 101, webSocket: client });
   }
@@ -78,6 +82,19 @@ export class Lobby {
 interface Seat { ws: WebSocket; rtt: number | null; prefs: Prefs | null }
 function secret(): string {
   return Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+interface RoomSnapshot {
+  seats: ({ rtt: number | null; prefs: Prefs | null } | null)[];
+  started: MatchRoom['started'];
+  tokens: [string | null, string | null];
+  lastInput: number[];
+  logLengths: number[];
+  hashes: [number, [number | null, number | null]][];
+  hashedUpTo: number;
+  pausesLeft: number[];
+  pause: { team: 0 | 1; until: number } | null;
+  lastActivity: number;
 }
 
 export class MatchRoom {
@@ -93,17 +110,109 @@ export class MatchRoom {
   /** 이 틱까지는 해시 비교가 끝났다 (재접속 쪽이 다시 보내는 옛 해시는 무시) */
   private hashedUpTo = -1;
   private readonly pausesLeft = [PAUSES_PER_TEAM, PAUSES_PER_TEAM];
-  private pause: { team: 0 | 1; timer: ReturnType<typeof setTimeout> } | null = null;
+  private pause: { team: 0 | 1; until: number } | null = null;
+  private savedSeats: RoomSnapshot['seats'] = [null, null];
+  private flushedLengths = [0, 0];
+  private flushAt: number | null = null;
+  private lastActivity = Date.now();
 
-  constructor(private readonly state: DurableObjectState) {}
+  constructor(private readonly state: DurableObjectState) {
+    // 복원이 끝나기 전에 입장하면 원래 주인의 자리와 토큰을 덮어쓸 수 있다
+    state.blockConcurrencyWhile(async () => {
+      const saved = await state.storage.get<RoomSnapshot>('room');
+      if (!saved) return;
+      this.savedSeats = saved.seats;
+      this.started = saved.started;
+      this.tokens.splice(0, 2, ...saved.tokens);
+      this.lastInput.splice(0, 2, ...saved.lastInput);
+      this.pausesLeft.splice(0, 2, ...saved.pausesLeft);
+      this.hashedUpTo = saved.hashedUpTo;
+      for (const [tick, pair] of saved.hashes) this.hashes.set(tick, pair);
+      this.pause = saved.pause;
+      this.lastActivity = saved.lastActivity;
+      for (const team of [0, 1] as const) {
+        for (let offset = 0; offset < saved.logLengths[team]; offset += LOG_CHUNK_SIZE) {
+          const chunk = await state.storage.get<Uint8Array[]>(`log:${team}:${offset / LOG_CHUNK_SIZE}`);
+          if (!chunk) throw new Error('Missing persisted input chunk');
+          this.log[team].push(...chunk);
+        }
+      }
+      this.flushedLengths = saved.logLengths;
+      if (Date.now() >= this.lastActivity + IDLE_MS) await this.clearRoom();
+      else {
+        if (this.pause && this.pause.until <= Date.now()) this.endPause();
+        await this.persist();
+      }
+    });
+  }
+
+  /** 입력 기록은 작은 묶음으로 나누고 바뀐 끝부분만 방 정보와 함께 원자적으로 저장한다 */
+  private async persist(): Promise<void> {
+    const logLengths = this.log.map((log) => log.length);
+    const snapshot: RoomSnapshot = {
+      seats: this.seats.map((seat, team) => seat ? { rtt: seat.rtt, prefs: seat.prefs } : this.savedSeats[team]),
+      started: this.started, tokens: [...this.tokens], lastInput: [...this.lastInput], logLengths,
+      hashes: [...this.hashes], hashedUpTo: this.hashedUpTo, pausesLeft: [...this.pausesLeft],
+      pause: this.pause, lastActivity: this.lastActivity,
+    };
+    await this.state.storage.transaction(async (storage) => {
+      for (const team of [0, 1] as const) {
+        if (logLengths[team] === this.flushedLengths[team]) continue;
+        for (let offset = Math.floor(this.flushedLengths[team] / LOG_CHUNK_SIZE) * LOG_CHUNK_SIZE;
+          offset < logLengths[team]; offset += LOG_CHUNK_SIZE) {
+          await storage.put(`log:${team}:${offset / LOG_CHUNK_SIZE}`, this.log[team].slice(offset, offset + LOG_CHUNK_SIZE));
+        }
+      }
+      await storage.put('room', snapshot);
+      await storage.setAlarm(Math.min(this.lastActivity + IDLE_MS, this.pause?.until ?? Infinity));
+    });
+    this.flushedLengths = logLengths;
+    this.flushAt = null;
+  }
+
+  private changed(): void {
+    this.lastActivity = Date.now();
+    if (this.flushAt !== null) return;
+    this.flushAt = Date.now() + FLUSH_MS;
+    this.state.waitUntil(this.state.storage.setAlarm(Math.min(this.flushAt, this.pause?.until ?? Infinity)));
+  }
+
+  async alarm(): Promise<void> {
+    await this.state.blockConcurrencyWhile(async () => {
+      if (Date.now() >= this.lastActivity + IDLE_MS) await this.clearRoom();
+      else {
+        if (this.pause && this.pause.until <= Date.now()) this.endPause();
+        await this.persist();
+      }
+    });
+  }
+
+  private async clearRoom(): Promise<void> {
+    const oldSeats = [...this.seats];
+    this.seats.fill(null);
+    for (const seat of oldSeats) { try { seat?.ws.close(1000, 'idle'); } catch { /* 이미 닫힘 */ } }
+    this.savedSeats = [null, null];
+    this.tokens.fill(null);
+    this.started = null;
+    this.log[0].length = this.log[1].length = 0;
+    this.flushedLengths = [0, 0];
+    this.lastInput.fill(-1);
+    this.hashes.clear();
+    this.hashedUpTo = -1;
+    this.pausesLeft.fill(PAUSES_PER_TEAM);
+    this.pause = null;
+    this.flushAt = null;
+    await this.state.storage.deleteAll();
+    await this.state.storage.deleteAlarm();
+  }
 
   async fetch(req: Request): Promise<Response> {
     // 다시 들어오는 사람은 원래 자리(팀)로. 비밀값이 맞으면 아직 안 닫힌 옛 연결도 밀어낸다
     const params = new URL(req.url).searchParams;
     const want = Number(params.get('team')), token = params.get('token');
     const owner = (want === 0 || want === 1) && token !== null && this.tokens[want] === token;
-    // 시작한 경기의 빈자리는 비밀값을 가진 원래 주인만 들어올 수 있다 (방 코드만으로 자리를 빼앗지 못하게)
-    const free = (t: 0 | 1) => this.seats[t] === null && (!this.started || this.tokens[t] === null);
+    // 복원 직후에는 연결이 모두 비어 있으므로 시작 전에도 토큰이 있는 자리를 보호한다
+    const free = (t: 0 | 1) => this.seats[t] === null && this.tokens[t] === null;
     const pick = owner ? want : (want === 0 || want === 1) && free(want) ? want : free(0) ? 0 : free(1) ? 1 : -1;
     if (pick < 0) return new Response('room full', { status: 409 });
     const team = pick as 0 | 1;
@@ -115,8 +224,11 @@ export class MatchRoom {
     server.accept();
     // 바이너리는 ArrayBuffer로 받는다 (기본 Blob이면 읽기 전에 비동기 변환이 필요하다)
     (server as unknown as { binaryType: string }).binaryType = 'arraybuffer';
-    const seat: Seat = { ws: server, rtt: null, prefs: null };
+    const previous = old ?? this.savedSeats[team];
+    const seat: Seat = { ws: server, rtt: owner ? previous?.rtt ?? null : null, prefs: owner ? previous?.prefs ?? null : null };
     this.seats[team] = seat;
+    this.lastActivity = Date.now();
+    await this.state.blockConcurrencyWhile(() => this.persist());
     server.send(JSON.stringify({ type: 'joined', team, token: this.tokens[team], waiting: this.seats[1 - team] === null }));
     // 재접속: 이미 시작한 경기면 시작 정보와 지금까지의 입력을 다시 보낸다
     if (this.started) {
@@ -131,15 +243,28 @@ export class MatchRoom {
     let chain = Promise.resolve();
     server.addEventListener('message', (ev) => {
       const data = ev.data as unknown;
-      if (typeof data === 'string' || data instanceof ArrayBuffer) this.onMessage(team as 0 | 1, data);
-      else chain = chain.then(async () => this.onMessage(team as 0 | 1, await (data as Blob).arrayBuffer()));
+      chain = chain.then(async () => {
+        const message = typeof data === 'string' || data instanceof ArrayBuffer ? data : await (data as Blob).arrayBuffer();
+        await this.state.blockConcurrencyWhile(async () => {
+          // 교체된 소켓이 늦게 보낸 입력은 새 주인의 입력으로 처리하지 않는다
+          if (this.seats[team] !== seat) return;
+          this.onMessage(team, message);
+          if (typeof message === 'string' && this.flushAt !== null) await this.persist();
+        });
+      });
+      this.state.waitUntil(chain);
     });
-    server.addEventListener('close', () => {
+    const disconnect = () => {
       // 새 연결로 바뀐 옛 소켓이 닫힌 거면 상대에게 알리지 않는다
       if (this.seats[team] !== seat) return;
+      this.savedSeats[team] = { rtt: seat.rtt, prefs: seat.prefs };
       this.seats[team] = null;
-      this.other(team as 0 | 1)?.ws.send(JSON.stringify({ type: 'opponentLeft' }));
-    });
+      this.changed();
+      this.state.waitUntil(this.state.blockConcurrencyWhile(() => this.persist()));
+      this.other(team)?.ws.send(JSON.stringify({ type: 'opponentLeft' }));
+    };
+    server.addEventListener('close', disconnect);
+    server.addEventListener('error', disconnect);
     return new Response(null, { status: 101, webSocket: client });
   }
 
@@ -170,6 +295,7 @@ export class MatchRoom {
         msg.rtt = Math.min(400, Math.max(0, msg.rtt));
         this.seats[team]!.rtt = msg.rtt;
         this.seats[team]!.prefs = msg.prefs ?? {};
+        this.changed();
         this.maybeStart();
       }
       return;
@@ -182,6 +308,7 @@ export class MatchRoom {
       if (bytes.length !== INPUT_BYTES || !this.started || tick <= this.lastInput[team] || tick > this.lastInput[team] + 1200) return;
       this.lastInput[team] = tick;
       this.log[team].push(bytes);
+      this.changed();
       this.other(team)?.ws.send(this.tagged(team, bytes));
     } else if (bytes[0] === MSG_HASH) {
       if (bytes.length !== HASH_BYTES || tick <= this.hashedUpTo) return;
@@ -193,6 +320,7 @@ export class MatchRoom {
         this.hashedUpTo = Math.max(this.hashedUpTo, tick);
         if (pair[0] !== pair[1]) for (const s of this.seats) s?.ws.send(JSON.stringify({ type: 'desync', tick }));
       } else this.hashes.set(tick, pair);
+      this.changed();
       this.other(team)?.ws.send(this.tagged(team, bytes));
     }
   }
@@ -201,14 +329,15 @@ export class MatchRoom {
   private startPause(team: 0 | 1): void {
     if (!this.started || this.pause || this.pausesLeft[team] <= 0) return;
     this.pausesLeft[team]--;
-    this.pause = { team, timer: setTimeout(() => this.endPause(), PAUSE_MS) };
+    this.pause = { team, until: Date.now() + PAUSE_MS };
+    this.changed();
     this.broadcast({ type: 'paused', team, left: this.pausesLeft, ms: PAUSE_MS });
   }
 
   private endPause(): void {
     if (!this.pause) return;
-    clearTimeout(this.pause.timer);
     this.pause = null;
+    this.changed();
     this.broadcast({ type: 'resumed' });
   }
 
