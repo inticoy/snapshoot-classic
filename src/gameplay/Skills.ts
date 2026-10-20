@@ -160,7 +160,7 @@ export class SkillInput {
   private time = 0;
   private changed = 0;
   /** 보조키를 누르기 직전 프레임에 누르고 있던 방향 */
-  private before: Dir | null = null;
+  private readonly before = new THREE.Vector3();
   /** 보조키를 누른 시각 */
   private started = 0;
 
@@ -188,12 +188,14 @@ export class SkillInput {
       if (Math.abs(facing.x) >= Math.abs(facing.z)) this.fwd.set(Math.sign(facing.x) || 1, 0, 0);
       else this.fwd.set(0, 0, Math.sign(facing.z));
       // 보조키를 누르기 전부터 누르고 있던 방향(달리던 방향)은 커맨드에 넣지 않는다. 한 번 떼고 다시 누르면 넣는다
+      // 직전 이동도 같은 스냅 기준으로 읽어야 대각선 달리기가 새 탭으로 섞이지 않는다.
+      const before = dirOf(this.before, this.fwd);
       const now = dirOf(move, this.fwd);
-      this.last = mode && now === this.before && !this.includeHeld ? now : null;
+      this.last = mode && now === before && !this.includeHeld ? now : null;
       if (done) return done;
     }
     if (!this.mode) {
-      this.before = dirOf(move, facing);
+      this.before.copy(move);
       return null;
     }
     const dir = dirOf(move, this.fwd);
@@ -203,7 +205,7 @@ export class SkillInput {
       if (dir) {
         if (prev && this.time - this.changed > SKILL_INPUT.gap && prev.t1 !== null) this.steps = [];
         // 보조키 전부터 누르던 키(달리던 방향)는 '짧게 누른 칸'이 아니다 → 시작을 아주 이전으로 둔다
-        const preHeld = this.includeHeld && this.steps.length === 0 && dir === this.before && this.time - this.started < 1e-6;
+        const preHeld = this.includeHeld && this.steps.length === 0 && dir === dirOf(this.before, this.fwd) && this.time - this.started < 1e-6;
         this.steps.push({ dir, t0: preHeld ? -Infinity : this.time, t1: null });
       }
       this.last = dir;

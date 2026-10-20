@@ -114,16 +114,16 @@ it('FDD의 0.4초 준비와 0.1초 초록 창: 이른/미입력은 보너스 없
   expect(result.frames.filter((f) => f.t > 0.51 && f.t < 0.89).every((f) => f.timing !== null)).toBe(true);
 });
 
-it.each([0.25, 0.25 + PHYSICS.step])('S 연타 창 경계 %fs를 고정 스텝으로 판정한다', (gap) => {
+it.each([INPUT.doubleTap, INPUT.doubleTap + PHYSICS.step])('접촉 뒤 %fs의 S 연타는 이미 나간 패스를 바꾸지 않는다', (gap) => {
   const script = fixture('ss');
   script.inputs = [{ t: 0.1, tap: ['KeyS'] }, { t: 0.1 + gap, tap: ['KeyS'] }];
   const result = runScript(script);
-  expect(measure(result)!.kind).toBe(gap === INPUT.doubleTap ? 'dink' : 'short');
+  expect(measure(result)!.kind).toBe('short');
 });
 
 it('S→W는 SS가 되지 않고, 3연타도 같은 소유자에게 중복 킥을 만들지 않는다', () => {
   const mixed = runScript({ ...fixture('ss'), inputs: [{ t: 0.1, tap: ['KeyS'] }, { t: 0.2, tap: ['KeyW'] }] });
-  expect(measure(mixed)!.kind).toBe('through');
+  expect(measure(mixed)!.kind).toBe('short');
   const triple = runScript({ ...fixture('ss'), inputs: [{ t: 0.1, tap: ['KeyS'] }, { t: 0.2, tap: ['KeyS'] }, { t: 0.3, tap: ['KeyS'] }] });
   expect(triple.events.filter((e) => e.type === 'kick' && e.player === triple.frames[0].owner)).toHaveLength(1);
 });

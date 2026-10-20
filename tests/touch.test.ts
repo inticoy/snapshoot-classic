@@ -114,8 +114,6 @@ it.each([
   [0, -45, 'chip'], [45, 0, 'finesse'], [-45, 0, 'finesse'], [4, -5, 'normal'], [0, 45, 'normal'],
 ] as const)('슛을 %s,%s로 스와이프하면 실제 경기에서 %s 슛이 한 번 발생한다', (dx, dy, kind) => {
   const { match, input, touch, step } = fixture();
-  const normal = vi.spyOn(match, 'shoot');
-  const chip = vi.spyOn(match, 'chipShot');
   touch.startButton(2, 'shoot', 740, 210);
   for (let i = 0; i < 36; i++) step();
   expect(match.charge?.value).toBeGreaterThan(0.3);
@@ -126,9 +124,9 @@ it.each([
   step();
   expect(match.stats.shots[0]).toBe(1);
   expect(match.events.some((e) => e.type === 'kick')).toBe(true);
-  expect(chip).toHaveBeenCalledTimes(kind === 'chip' ? 1 : 0);
-  expect(normal).toHaveBeenCalledTimes(kind === 'chip' ? 0 : 1);
-  if (kind !== 'chip') expect(normal.mock.calls[0][2]).toBe(kind === 'finesse');
+  expect(match.events.filter((e) => e.type === 'kick')).toMatchObject([
+    { kind: kind === 'chip' ? 'chipShot' : kind === 'finesse' ? 'finesseShot' : 'shot' },
+  ]);
   expect(input.isDown('modifier')).toBe(false);
   expect(input.isDown('finesse')).toBe(false);
   for (let i = 0; i < 10; i++) step();

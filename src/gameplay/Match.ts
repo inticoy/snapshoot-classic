@@ -153,6 +153,7 @@ export class UserSide {
   active = false;
   controlled!: Player;
   charge: UserKick | null = null;
+  /** 준비 동작 중 접촉 전까지 연타로 종류를 바꿀 수 있는 킥 (발사를 기다리는 큐가 아니다). */
   pendingUserKick: { player: Player; kick: UserKick; move: THREE.Vector3 } | null = null;
   powerTiming: { player: Player; kick: UserKick; move: THREE.Vector3; elapsed: number; timed: boolean; tapped: boolean } | null = null;
   holding: Player | null = null;
@@ -952,6 +953,10 @@ export class Match {
     const side = this.local;
     side.charge = null;
     side.queued = null;
+    if (side.pendingUserKick) {
+      this.windups.delete(side.pendingUserKick.player);
+      this.approaches.delete(side.pendingUserKick.player);
+    }
     side.pendingUserKick = null;
     side.powerTiming = null;
   }
@@ -1021,15 +1026,15 @@ export class Match {
     }
     const pending = this.pendingUserKick;
     if (pending) {
-      if (pending.player !== p || owner !== p) this.pendingUserKick = null;
-      else {
-        const second = cmd[pending.kick.kind].pressed && this.elapsed - (pending.kick.started ?? 0) <= INPUT.doubleTap + 1e-9;
-        if (second || this.elapsed - (pending.kick.started ?? 0) > INPUT.doubleTap) {
-          this.pendingUserKick = null;
-          pending.kick.double = second;
-          this.executeUserKick(p, pending.kick, pending.move);
-          consumed = second;
-        } else if (KICK_KINDS.some((k) => cmd[k].pressed && k !== pending.kick.kind)) this.pendingUserKick = null;
+      if (pending.player !== p || owner !== p) {
+        this.windups.delete(pending.player);
+        this.approaches.delete(pending.player);
+        this.pendingUserKick = null;
+      } else if (this.elapsed - (pending.kick.started ?? 0) > INPUT.doubleTap + 1e-9) this.pendingUserKick = null;
+      else if (cmd[pending.kick.kind].pressed) {
+        // 단타는 이미 동작 중이다. 접촉 전 두 번째 탭만 같은 킥의 종류를 바꾼다.
+        pending.kick.double = true;
+        consumed = true;
       }
     }
     const timing = this.powerTiming;
@@ -1239,9 +1244,7 @@ export class Match {
         this.charge = null; // 차는 도중 공을 뺏김
       } else if (btn.released || !btn.held) {
         if (this.ball.owner === p) {
-          if (c.power) this.executeUserKick(p, c, cmd.move);
-          else if (c.keyboard && this.elapsed - (c.started ?? 0) < INPUT.doubleTap) this.pendingUserKick = { player: p, kick: c, move: cmd.move.clone() };
-          else this.executeUserKick(p, c, cmd.move);
+          this.executeUserKick(p, c, cmd.move);
         }
         else this.queued = { ...c, ttl: bp.y > 1 ? 1.4 : 0.7 };
         this.charge = null;
@@ -1356,15 +1359,36 @@ export class Match {
       p.playAction('kick', COMMAND.powerWindup);
       return;
     }
+    const side = this.side;
+    const aim = move.clone();
+    const initial = this.userKickResult(p, c, aim);
+    const initialDouble = !!c.double;
+    if (c.keyboard && !c.double && this.elapsed - (c.started ?? 0) <= INPUT.doubleTap + 1e-9) {
+      side.pendingUserKick = { player: p, kick: c, move: aim };
+    }
+    // 일반 킥은 release에 준비 동작을 시작한다. 연타가 와도 접촉 시각은 늦추지 않는다.
+    this.withKickMotion(p, initial.motion, initial.r.vel, () => {
+      if (side.pendingUserKick?.kick === c) side.pendingUserKick = null;
+      // 딩크는 조준·수신자·오차를 그대로 두고 원래 패스의 높이와 속도만 바꾼다.
+      const upgraded = c.double && !initialDouble;
+      const dink = upgraded && (initial.kind === 'short' || initial.kind === 'through');
+      const result = dink ? { ...initial, r: { ...initial.r, vel: this.kicks.dink(initial.r.vel) }, kind: initial.kind === 'short' ? 'dink' : 'dinkThrough' }
+        : upgraded && (c.kind === 'shoot' || initial.kind === 'lob' || initial.kind === 'cross') ? this.userKickResult(p, c, aim) : initial;
+      if (c.kind === 'shoot') this.finishShot(p, result.r, result.kind);
+      else this.finishPass(p, result.r, result.kind as PassKind);
+    });
+  }
+
+  private userKickResult(p: Player, c: UserKick, move: THREE.Vector3): { r: KickResult; kind: string; motion: MotionKind } {
     if (c.kind === 'shoot') {
-      if (c.chip && !c.finesse && !c.double && !c.flair) { this.chipShot(p, c.value, move); return; }
+      if (c.chip && !c.finesse && !c.double && !c.flair) return { r: this.kicks.chip(p, c.value, move, this.assistFor(p, 'shot')), kind: 'chipShot', motion: 'shot' };
       const style = c.double ? 'driven' : c.flair ? 'flair' : 'normal';
-      if (style === 'normal') { this.shoot(p, c.value, c.finesse, move); return; }
-      // D+D는 첫 D를 짧게 떼야 인식돼 게이지가 거의 안 찬다 → 드리븐은 원래 강하게 깔아 차는 슛이므로 최소 세기를 보장
+      if (c.finesse && style === 'normal') this.preferStrongFoot(p);
+      // 짧은 DD도 낮고 강한 슛이 되도록 최소 세기를 보장한다.
       const value = style === 'driven' ? Math.max(c.value, COMMAND.drivenMinCharge) : c.value;
       const r = this.kicks.shot(p, value, c.finesse, move, this.assistFor(p, 'shot'), style);
-      this.applyShot(p, r, false, c.finesse && c.double ? 'finesseDrivenShot' : `${style}Shot`);
-      return;
+      const kind = c.double && c.finesse ? 'finesseDrivenShot' : style === 'normal' ? c.finesse ? 'finesseShot' : 'shot' : `${style}Shot`;
+      return { r, kind, motion: 'shot' };
     }
     const dir = move.lengthSq() > 0.01 ? move : p.facing;
     const cross = c.kind === 'lob' && Math.abs(p.pos.z) > PITCH.boxWidth / 2 && Math.abs(this.oppGoalX(p.team) - p.pos.x) < COMMAND.crossRange;
@@ -1373,7 +1397,7 @@ export class Match {
     else if (c.kind === 'through') kind = c.chip ? c.finesse ? 'lowLobThrough' : 'highLobThrough' : c.finesse ? 'drivenThrough' : c.double ? 'dinkThrough' : 'through';
     else if (c.kind === 'pass') kind = c.finesse ? 'driven' : c.chip ? 'oneTwo' : c.flair && p.profile.skill >= 3 ? 'flair' : c.double ? 'dink' : 'short';
     else kind = c.finesse || c.double ? 'lowLob' : 'lob';
-    this.pass(p, dir, kind, c.value);
+    return { r: this.kicks.pass(p, dir, kind, c.value, this.assistFor(p, 'pass')), kind, motion: this.passMotion(kind) };
   }
 
   /** 발사 순간의 종류와 목표를 이벤트에 붙여 JSON 재생에서도 명령을 식별한다. */
@@ -1456,36 +1480,46 @@ export class Match {
 
   private applyShot(p: Player, r: KickResult, instant = false, kind = 'shot', timed?: boolean): void {
     this.withKickMotion(p, 'shot', r.vel, () => {
-      this.kickBall(p, r.vel, r.spin);
-      if (r.flair) p.playAction('kick', 0.4, { flair: true, side: this.kicks.footFactor(p).side });
-      this.describeKick(kind, r, timed);
-      this.ball.newShot(p);
-      this.stats.shots[p.team]++;
-      this.passTarget = null;
+      this.finishShot(p, r, kind, timed);
     }, instant);
+  }
+
+  private finishShot(p: Player, r: KickResult, kind: string, timed?: boolean): void {
+    this.kickBall(p, r.vel, r.spin);
+    if (r.flair) p.playAction('kick', 0.4, { flair: true, side: this.kicks.footFactor(p).side });
+    this.describeKick(kind, r, timed);
+    this.ball.newShot(p);
+    this.stats.shots[p.team]++;
+    this.passTarget = null;
   }
 
   /** 패스. short = 땅볼, through = 침투 공간으로, lob = 띄워서, lobThrough = 띄운 스루 */
   pass(p: Player, dir: THREE.Vector3, kind: PassKind = 'short', charge = 0.5): void {
     if (this.windups.has(p)) return;
     const r = this.kicks.pass(p, dir, kind, charge, this.assistFor(p, 'pass'));
-    this.withKickMotion(p, ['lob', 'lobThrough', 'lowLob', 'highLobThrough', 'lowLobThrough', 'cross', 'lowCross', 'highCross', 'flairCross', 'fastCross'].includes(kind) ? 'lob' : 'pass', r.vel, () => {
-      this.kickBall(p, r.vel, r.spin);
-      this.rules.recordPass(p);
-      this.dinkFlight = kind === 'dink' || kind === 'dinkThrough';
-      if (r.flair) p.playAction('kick', 0.4, { flair: true, side: this.kicks.footFactor(p).side });
-      this.describeKick(kind, r);
-      // 원투(Q+S): 준 사람이 바로 앞으로 뛰어 리턴 패스를 받으러 간다
-      if (kind === 'oneTwo') this.orderRun(p);
-      this.ball.shot = null;
-      this.passTarget = r.receiver;
-      this.stats.passes[p.team]++;
-      this.pendingPass = p.team;
-      if (r.receiver && this.sides[p.team].active && !r.receiver.isKeeper) {
-        if (!this.practiceControlLocked) this.sides[p.team].controlled = r.receiver;
-        this.sides[p.team].receiveTimer = 0;
-      }
-    });
+    this.withKickMotion(p, this.passMotion(kind), r.vel, () => this.finishPass(p, r, kind));
+  }
+
+  private passMotion(kind: PassKind): MotionKind {
+    return ['lob', 'lobThrough', 'lowLob', 'highLobThrough', 'lowLobThrough', 'cross', 'lowCross', 'highCross', 'flairCross', 'fastCross'].includes(kind) ? 'lob' : 'pass';
+  }
+
+  private finishPass(p: Player, r: KickResult, kind: PassKind): void {
+    this.kickBall(p, r.vel, r.spin);
+    this.rules.recordPass(p);
+    this.dinkFlight = kind === 'dink' || kind === 'dinkThrough';
+    if (r.flair) p.playAction('kick', 0.4, { flair: true, side: this.kicks.footFactor(p).side });
+    this.describeKick(kind, r);
+    // 원투(Q+S): 준 사람이 바로 앞으로 뛰어 리턴 패스를 받으러 간다
+    if (kind === 'oneTwo') this.orderRun(p);
+    this.ball.shot = null;
+    this.passTarget = r.receiver;
+    this.stats.passes[p.team]++;
+    this.pendingPass = p.team;
+    if (r.receiver && this.sides[p.team].active && !r.receiver.isKeeper) {
+      if (!this.practiceControlLocked) this.sides[p.team].controlled = r.receiver;
+      this.sides[p.team].receiveTimer = 0;
+    }
   }
 
   private kickBall(p: Player, vel: CANNON.Vec3, spin: CANNON.Vec3): void {

@@ -244,8 +244,7 @@ export class Kicks {
     }
 
     if (dink) {
-      vel.x *= COMMAND.dinkSpeed; vel.z *= COMMAND.dinkSpeed;
-      vel.y = Math.sqrt(2 * g() * Math.max(0, COMMAND.dinkHeight - bp.y));
+      this.dink(vel);
     }
     if (kind === 'lowLobThrough') {
       const vy = Math.sqrt(2 * g() * Math.max(0, COMMAND.lowThroughHeight - bp.y));
@@ -261,6 +260,13 @@ export class Kicks {
     // 수동 패스는 공이 떨어질 곳에 가장 가까운 동료를 받는 선수로 본다
     const recv = receiver ?? this.nearestMateTo(p, tx, tz, 8);
     return { vel, spin: new CANNON.Vec3(), receiver: recv, weakFoot: foot.weak, target: new THREE.Vector3(tx, 0, tz), origin: new THREE.Vector3(bp.x, bp.y, bp.z), flair };
+  }
+
+  /** 접촉 전 연타도 처음 조준한 패스를 그대로 띄워야 수신자·리드가 바뀌지 않는다. */
+  dink(vel: CANNON.Vec3): CANNON.Vec3 {
+    vel.x *= COMMAND.dinkSpeed; vel.z *= COMMAND.dinkSpeed;
+    vel.y = Math.sqrt(2 * g() * Math.max(0, COMMAND.dinkHeight - this.m.ball.position.y));
+    return vel;
   }
 
   // ---------------------------------------------------------------- 공중볼
