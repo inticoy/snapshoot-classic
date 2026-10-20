@@ -320,7 +320,7 @@ export const COMMAND = {
 export const STADIUM = {
   sunColor: 0xfff2db, sunIntensity: 2.5, sunDirection: [-36, 78, 28] as const,
   hazeColor: 0xd2e0e4, fogNear: 110, fogFar: 320, exposure: 0.94,
-  skySize: 1024, closeShadowHeight: 9,
+  skySize: 1024, closeShadowHeight: 5,
   grassTextureSize: 2048, grassDetailSize: 256, grassDetailRepeat: 180,
   grassBump: 0.035, mowingWidth: 6, standRows: 14, rowDepth: 0.85, rowRise: 0.5,
   standGap: 2.5, seatSpacing: 0.62, aisleSpacing: 18, aisleWidth: 1.8,
