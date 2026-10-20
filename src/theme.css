@@ -476,8 +476,8 @@ kbd {
   .squad-heading h3 span { display: none; }
   #squad-detail .sgroups { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
-/* 세로 회전 안내는 경기 중에만 보여 메뉴를 가리지 않게 한다. */
-body:has(#overlay:not(.hidden)) #rotate-guide { display: none; }
+/* 세로 회전 안내는 경기 중(일시정지 포함)에만 보여 메인 메뉴·스쿼드를 가리지 않게 한다. */
+html:not(.in-match) body:has(#overlay:not(.hidden)) #rotate-guide { display: none; }
 /* 낮은 화면(가로 폰): 카드 얼굴 원을 빼서 이름이 겹치지 않게 */
 @media (max-height: 520px) {
   .squad-portrait { display: none; }

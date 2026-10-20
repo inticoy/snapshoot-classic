@@ -608,6 +608,7 @@ export class Game {
     this.touch.update(this.state === 'playing', mode);
     // 온라인: 핑이 흔들리거나 상대 입력을 자주 기다리면 입력 지연을 늘리고, 안정되면 줄인다
     if (this.lockstep && !this.netPause) this.lockstep.adapt(dt, this.online!.session.rtt);
+    document.documentElement.classList.toggle('in-match', this.state === 'playing' || this.state === 'paused');
     const menuWasVisible = this.menu.visible;
     if (menuWasVisible) {
       for (const code of this.input.drainPresses()) if (MENU_KEYS.includes(code)) this.menu.handleKey(code);
