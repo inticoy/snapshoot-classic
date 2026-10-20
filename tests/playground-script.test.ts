@@ -80,8 +80,8 @@ it('예제 전부 실행되고 요약 수치가 유한하다', () => {
 });
 
 it('잘못된 키와 파라미터를 거절하고 유효한 상대 조작을 허용한다', () => {
-  expect(() => validateScript({ ...still('duel'), inputs: [{ t: 0, keys: ['KeyM'] }] })).toThrow();
-  expect(() => validateScript({ ...still('duel'), params: { 'DRIBBLE.touchPeriod': 99 } })).toThrow();
+  expect(() => validateScript({ ...still('duel'), inputs: [{ t: 0, keys: ['KeyM'] }] })).toThrow('keys 키가 올바르지 않아요');
+  expect(() => validateScript({ ...still('duel'), params: { 'DRIBBLE.touchPeriod': 99 } })).toThrow('파라미터 값을 확인해요: DRIBBLE.touchPeriod');
   expect(runScript({ ...still('duel'), control: 'opponent' }).frames[0].user.pos).toBeDefined();
 });
 

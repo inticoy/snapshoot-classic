@@ -30,7 +30,7 @@ export class TouchControls {
     this.root.append(this.pad, this.stick);
     this.skillPad.className = 'touch-skill';
     this.skillPad.setAttribute('role', 'button');
-    this.skillPad.setAttribute('aria-label', '개인기 스틱: 누른 채 8방향으로 굴리기');
+    this.skillPad.setAttribute('aria-label', '개인기 스틱: 누른 채 8방향으로 움직이기');
     this.skillPad.textContent = '개인기';
     this.root.append(this.skillPad);
     this.skillZ.type = 'button';
@@ -58,7 +58,7 @@ export class TouchControls {
     const guide = document.createElement('div');
     guide.id = 'rotate-guide';
     guide.setAttribute('role', 'status');
-    guide.innerHTML = '<b>↻</b><span>가로로 돌리면 더 편해요</span><small>두 손으로 조이스틱과 버튼을 함께 조작해요</small>';
+    guide.innerHTML = '<b>↻</b><span>가로로 돌리면 더 편해요</span><small>두 손으로 조이스틱과 버튼을 함께 써요</small>';
     document.body.append(this.root, guide);
     // iOS: 길게 누르면 뜨는 텍스트 선택·돋보기·공유 메뉴를 경기 화면 전체에서 막는다
     const blockGesture = (event: Event) => {

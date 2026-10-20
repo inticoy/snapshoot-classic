@@ -31,10 +31,10 @@ if (online) {
   const fail = (text: string) => screen.show({ kind: 'error', text });
   if (params.has('quick')) {
     screen.show({ kind: 'searching' });
-    NetSession.quickMatch(relay).then(goRoom, () => fail('매칭 서버에 접속하지 못했어요. 잠시 뒤 다시 시도해 주세요'));
+    NetSession.quickMatch(relay).then(goRoom, () => fail('매칭 서버에 접속하지 못했어요. 잠시 뒤 다시 해 봐요'));
   } else if (params.has('online')) {
-    screen.show({ kind: 'connecting', text: '방을 만드는 중' });
-    NetSession.createRoom(relay).then(goRoom, () => fail('방을 만들지 못했어요. 잠시 뒤 다시 시도해 주세요'));
+    screen.show({ kind: 'connecting', text: '방을 만들고 있어요' });
+    NetSession.createRoom(relay).then(goRoom, () => fail('방을 만들지 못했어요. 잠시 뒤 다시 해 봐요'));
   } else if (params.has('join')) {
     screen.onJoin = goRoom;
     screen.show({ kind: 'join' });
@@ -43,14 +43,14 @@ if (online) {
     const session = new NetSession(relay, code);
     // 내 설정: 보정은 내 팀에만, 경기 시간·승부차기·물리는 방장(팀 0) 것이 양쪽에 쓰인다
     const prefs = { pass: settings.passAssist, shot: settings.shotAssist, move: settings.moveAssist, duration: settings.duration, shootout: settings.shootout, physics: settings.physicsPreset };
-    screen.show({ kind: 'connecting', text: '중계 서버 접속 중' });
-    session.connect(prefs, (text) => screen.show(text.includes('기다리는') ? { kind: 'room', code, text: '상대를 기다리는 중' } : { kind: 'connecting', text }))
+    screen.show({ kind: 'connecting', text: '중계 서버에 연결하고 있어요' });
+    session.connect(prefs, (text) => screen.show(text.includes('기다리고') ? { kind: 'room', code, text: '상대를 기다리고 있어요' } : { kind: 'connecting', text }))
       .then((start) => {
         screen.clear();
         const game = new Game(canvas, { online: { session, start } });
         game.run();
         game.startOnline();
-      }, () => fail('방에 들어가지 못했어요. 코드를 확인하거나 방이 이미 찼는지 확인해 주세요'));
+      }, () => fail('방에 들어가지 못했어요. 방 코드가 맞는지, 빈자리가 있는지 확인해 봐요'));
   }
 } else {
   new Game(canvas, { playground: Playground }).run();

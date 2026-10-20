@@ -176,7 +176,7 @@ export function controlsPanel(): string {
   return `
     <div class="card">
       <h3>조작법</h3>
-      <p class="touch-instructions">왼쪽 빈 곳을 누른 채 끌면 이동해요. 오른쪽 개인기 스틱을 누른 채 8방향으로 움직이면 개인기를 써요. 짧게 움직였다 놓으면 탭으로, 길게 유지하면 길게 누르기로 입력돼요. 오른쪽 슛·패스 버튼을 길게 눌러 세기를 조절한 뒤 놓아요. 패스 버튼을 누른 채 위로 밀면 스루 패스, 아래로 밀면 로빙 패스를 해요. 슛 버튼을 위로 밀며 놓으면 칩슛, 좌우로 밀며 놓으면 감아차기를 해요. 수비할 때는 압박·태클·선수 변경 버튼으로 바뀌어요. 압박 버튼을 밀면 슬라이딩 태클을 해요. 페널티킥을 찰 때는 조이스틱을 위아래로 움직여 구석을 골라요. 막을 때는 상대가 차는 순간 조이스틱 방향으로 골키퍼가 몸을 던져요.</p>
+      <p class="touch-instructions">왼쪽 빈 공간을 누른 채 끌면 이동해요. 오른쪽 개인기 스틱을 누른 채 8방향으로 움직이면 개인기를 써요. 짧게 움직였다 놓으면 탭, 누른 채 유지하면 길게 누르기로 입력돼요. 오른쪽 슛·패스 버튼을 길게 눌러 세기를 조절한 뒤 놓아요. 패스 버튼을 누른 채 위로 밀면 스루 패스, 아래로 밀면 로빙 패스를 해요. 슛 버튼을 위로 밀며 놓으면 칩슛, 좌우로 밀며 놓으면 감아차기를 해요. 수비할 때는 압박·태클·선수 변경 버튼으로 바뀌어요. 압박 버튼을 밀면 슬라이딩 태클을 해요. 페널티킥을 찰 때는 조이스틱을 위아래로 움직여 구석을 골라요. 막을 때는 상대가 차는 순간 조이스틱 방향으로 골키퍼가 몸을 던져요.</p>
       <h4>FC 온라인 키보드 배치</h4>
       <div class="keymap">
         <div>
@@ -217,7 +217,7 @@ export function controlsPanel(): string {
           </ul>
         </div>
       </div>
-      <p style="margin-top:16px">공이 오는 동안 슛·패스 키를 미리 누르면 한 번의 터치로 처리해요. 슛 파워 게이지가 흰 선(80%)을 넘으면 공이 뜰 수 있어요.</p>
+      <p style="margin-top:16px">공이 오는 동안 슛·패스 키를 미리 누르면 원터치로 처리해요. 슛 파워 게이지가 흰 선(80%)을 넘으면 공이 뜰 수 있어요.</p>
     </div>`;
 }
 
@@ -329,7 +329,7 @@ export class SquadView {
       <div class="squad-board"><div class="squad-stage">
         <div class="squad-pitch" aria-label="선발 포메이션"><div class="pitch-lines" aria-hidden="true"><i></i></div>${this.lineups[team].map((p, i) => card(p, i, false)).join('')}</div>
       </div><aside class="squad-reserves" aria-label="교체 선수"><h4>BENCH <span>05</span></h4><div class="squad-bench">${this.benches[team].map((p, i) => card(p, i, true)).join('')}</div></aside></div>
-      <p class="squad-help">끌어서 교체 · 두 카드 선택으로도 교체 · GK끼리만 교체<br>Tab·방향키 이동 / Enter·Space 선택 · 다음 경기 적용 (온라인: 기본 명단)</p>
+      <p class="squad-help">카드를 끌거나 두 장을 골라 교체해요. GK는 GK끼리 바꿔요.<br>Tab·방향키 이동 / Enter·Space 선택 · 다음 경기부터 적용해요 (온라인: 기본 명단)</p>
       <p class="squad-notice" role="status" aria-live="polite">${this.notice}</p>
       <div id="squad-detail" ${p ? '' : 'hidden'} role="region" aria-label="선수 능력치">${p ? `<header><h4>${p.name} · #${p.number} · ${p.pos}</h4><button type="button" data-detail-close aria-label="능력치 닫기">닫기 ×</button></header>${playerDetailPanel(team, 0, p)}` : ''}</div>
     </section>`;
@@ -360,12 +360,12 @@ export class SquadView {
       && (roster(a)[a.index].pos === 'GK') === (roster(b)[b.index].pos === 'GK');
     const swap = (a: Pick, b: Pick) => {
       if (!compatible(a, b)) {
-        this.notice = '골키퍼는 골키퍼끼리 바꿀 수 있어요. 다른 선수를 골라요.';
+        this.notice = '골키퍼는 골키퍼끼리만 바꿔요. 다른 선수를 골라 봐요.';
         return;
       }
       const first = roster(a), second = roster(b);
       [first[a.index], second[b.index]] = [second[b.index], first[a.index]];
-      this.notice = a.bench === b.bench ? '선수의 포지션 슬롯을 맞바꿨어요.' : '선발과 교체 선수를 맞바꿨어요.';
+      this.notice = a.bench === b.bench ? '두 선수의 자리를 바꿨어요.' : '선발과 교체 선수를 바꿨어요.';
       this.selected = null;
     };
     root.querySelectorAll<HTMLButtonElement>('[data-player]').forEach((button) => {
@@ -472,7 +472,7 @@ export class SquadView {
 export function assistPanel(kind: 'pass' | 'shot'): string {
   const pass = `
     <h3>패스 보조</h3>
-    <p><b>보조</b> · 방향키로 가리킨 쪽의 넓은 범위에서 동료를 찾아 방향과 세기를 자동으로 맞춰요.<br/>
+    <p><b>보조</b> · 방향키로 가리킨 쪽에서 동료를 넓게 찾아 방향과 세기를 자동으로 맞춰요.<br/>
     <b>세미</b> · 좁은 범위에서 동료를 찾아 방향과 세기를 맞춰요. 게이지에 따라 세기가 조금 달라져요.<br/>
     <b>수동</b> · 방향키와 게이지에 맞춰 차요. 동료가 없어도 원하는 곳으로 찰 수 있어요.</p>
     <p style="margin-top:10px">어떤 설정이든 <b>짧은 패스 · 긴 패스 · 시야</b> 능력치와 압박, 약발에 따라 오차가 생겨요.</p>`;
@@ -481,7 +481,7 @@ export function assistPanel(kind: 'pass' | 'shot'): string {
     <p><b>보조</b> · 방향키로 어느 쪽을 가리켜도 골문 안을 노려요. 입력 방향으로 골문의 왼쪽과 오른쪽을 골라요.<br/>
     <b>세미</b> · 골문 근처까지만 보정해요. 방향을 잘못 잡으면 옆으로 빗나가요.<br/>
     <b>수동</b> · 방향키로 가리킨 방향 그대로 차요.</p>
-    <p style="margin-top:10px">정확도에는 박스 안에서 <b>골 결정력</b>, 박스 밖에서 <b>중거리 슛</b>, 감아차기에는 <b>커브</b>가 영향을 줘요. 공의 속도는 <b>슛 파워</b>에 따라 달라져요. <b>침착성</b>이 높으면 압박을 받거나 질주할 때 오차를 줄여 줘요.</p>`;
+    <p style="margin-top:10px">슛 정확도는 박스 안에서는 <b>골 결정력</b>, 박스 밖에서는 <b>중거리 슛</b>, 감아차기는 <b>커브</b>에 따라 달라져요. 공의 속도는 <b>슛 파워</b>에 따라 달라져요. <b>침착성</b>이 높으면 압박을 받거나 질주할 때 오차를 줄여 줘요.</p>`;
   return `<div class="card">${kind === 'pass' ? pass : shot}</div>`;
 }
 

@@ -38,7 +38,7 @@ const hold = async (p, keys, ms) => { for (const k of keys) await p.page.keyboar
 await Promise.all([hold(a, ['ArrowRight', 'KeyS'], 4000), hold(b, ['ArrowLeft', 'KeyE'], 4000)]);
 // 2) a가 일시정지 → 둘 다 멈추고, 핑과 남은 시간이 보인다. 재개하면 둘 다 다시 진행
 await a.page.keyboard.press('Escape');
-await b.page.waitForFunction(() => /상대 일시정지/.test(document.querySelector('.net-status')?.textContent ?? ''), null, { timeout: 5000 });
+await b.page.waitForFunction(() => /상대가 일시정지했어요/.test(document.querySelector('.net-status')?.textContent ?? ''), null, { timeout: 5000 });
 const before = (await state(b)).tick;
 await hold(b, ['ArrowUp'], 2000);
 const afterPause = (await state(b)).tick;

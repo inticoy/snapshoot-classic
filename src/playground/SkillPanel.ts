@@ -72,9 +72,9 @@ export class SkillPanel {
   constructor(private readonly match: Match, root: HTMLElement, private readonly gameView: PlaygroundView, private readonly resetPractice: () => void, setDefender: (enabled: boolean) => void) {
     const list = groups();
     root.innerHTML = `
-      <p class="pg-help">▶를 누르면 시범을 볼 수 있어요. 직접 하려면 공을 가진 채 ${this.touch ? '개인기 스틱을 안내 방향으로 움직여요' : '커맨드를 입력해요'} (↑는 선수가 보는 방향이에요).</p>
+      <p class="pg-help">▶를 누르면 시범을 볼 수 있어요. 직접 하려면 공을 가진 상태에서 ${this.touch ? '개인기 스틱을 안내 방향으로 움직여요' : '커맨드를 입력해요'} (↑는 선수가 보는 방향이에요).</p>
       <label class="pg-inline"><input type="checkbox" id="pg-skill-defender"> 수비수와 연습해요</label>
-      <p class="pg-help" id="pg-demo-rating" role="status">선수의 실제 별에 맞는 속도로 시범을 보여 줘요.</p>
+      <p class="pg-help" id="pg-demo-rating" role="status">선수의 개인기 별에 맞는 속도로 보여 줘요.</p>
       <div class="pg-row" role="group" aria-label="재생 속도">${SPEEDS.map((s) => `<button data-speed="${s}" aria-pressed="${s === 1}">${s === 1 ? '보통' : `${s}×`}</button>`).join('')}
         <label class="pg-inline"><input type="checkbox" id="pg-repeat"> 반복</label></div>
       <div class="pg-row" role="group" aria-label="카메라">${VIEWS.map((v) => `<button data-view="${v.id}" aria-pressed="${v.id === 'side'}">${v.label}</button>`).join('')}<button data-view="off" aria-pressed="false">경기 카메라</button></div>
@@ -133,7 +133,7 @@ export class SkillPanel {
     this.observer.reset();
     this.observerHeld.reset();
     this.sequence.textContent = '—';
-    this.rating.textContent = '선수의 실제 별에 맞는 속도로 시범을 보여 줘요.';
+    this.rating.textContent = '선수의 개인기 별에 맞는 속도로 보여 줘요.';
   }
 
   private apply(snap = false): void {
@@ -148,7 +148,7 @@ export class SkillPanel {
     const m = this.match, p = m.controlled;
     // 선수 별로 낼 수 있으면 실제 속도 그대로, 별이 모자라면 그 개인기에 필요한 최소 별로 보여 준다 (5성으로 빨라지지 않게)
     if (p.profile.skill < def.stars) {
-      this.rating.textContent = `★${p.profile.skill} 선수는 아직 못 해요. ★${def.stars} 선수 속도로 보여 줘요.`;
+      this.rating.textContent = `★${p.profile.skill} 선수는 별이 부족해요. ★${def.stars} 선수 속도로 보여 줘요.`;
       Object.defineProperty(p, 'profile', { value: { ...p.profile, skill: def.stars }, configurable: true });
     } else this.rating.textContent = `★${p.profile.skill} 선수의 실제 속도로 보여 줘요.`;
     p.vel.set(0, 0, 0);
@@ -178,7 +178,7 @@ export class SkillPanel {
   }
 
   private showFailure(reason: 'stars' | 'distance' | 'height' | 'busy'): void {
-    const message = { stars: '개인기 별이 부족해요', distance: '공이 너무 멀어요', height: '공이 너무 높아요', busy: '이미 다른 동작 중이에요' };
+    const message = { stars: '개인기 별이 부족해요', distance: '공이 너무 멀어요', height: '공이 너무 높아요', busy: '다른 동작 중이에요' };
     this.toast.textContent = message[reason];
     this.toast.classList.add('show');
     this.toastTimer = performance.now() + 1600;

@@ -86,7 +86,7 @@ export class NetSession {
         if (msg.type === 'joined' && msg.token) {
           try { sessionStorage.setItem(`snapshoot-token:${this.code}`, msg.token); } catch { /* 저장 못 해도 진행 */ }
         }
-        if (msg.type === 'joined') onStatus(msg.waiting ? `상대를 기다리는 중 · 방 코드 ${this.code}` : '상대 접속 · 연결 확인 중');
+        if (msg.type === 'joined') onStatus(msg.waiting ? `상대를 기다리고 있어요 · 방 코드 ${this.code}` : '상대가 들어왔어요 · 연결을 확인해요');
         if (msg.type === 'pong') {
           this.rtt = performance.now() - msg.t!;
           if (started) return;

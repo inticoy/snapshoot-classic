@@ -15,8 +15,8 @@ const vector = (v: { x: number; y: number; z: number }): Vec3 => [v.x, v.y, v.z]
 const playerId = (p: Match['controlled'] | null) => p ? `${p.team}:${p.number}` : null;
 const metrics = [
   ['playerSpeed', '선수 속도', 'm/s'], ['ballSpeed', '공 속도', 'm/s'], ['footDistance', '공–발끝 거리', 'm'],
-  ['bodyInputAngle', '몸 ↔ 입력', '°'], ['ballInputAngle', '공 ↔ 입력', '°'], ['touchesPerSecond', '최근 1초 터치', '/s'],
-  ['lastTurnSeconds', '마지막 전환', 's'], ['heavyTouches', '헤비 터치', '회'], ['losses', '소유 상실', '회'], ['hipsHeight', '엉덩이 높이', 'm'],
+  ['bodyInputAngle', '몸과 입력 각도', '°'], ['ballInputAngle', '공과 입력 각도', '°'], ['touchesPerSecond', '최근 1초 터치 수', '/s'],
+  ['lastTurnSeconds', '최근 전환 시간', 's'], ['heavyTouches', '헤비 터치', '회'], ['losses', '공을 뺏긴 횟수', '회'], ['hipsHeight', '엉덩이 높이', 'm'],
 ] as const;
 
 /** 화면은 고정 스텝에 끼어들지 않는다. 기록은 매 스텝, 패널·그래프만 10Hz로 갱신한다. */
@@ -79,9 +79,9 @@ export class Playground {
         <p>동작 <output id="pg-motion">—</output></p>
         <details><summary>파라미터 · 실시간 적용</summary><p class="pg-help">조정한 값은 이 페이지를 열어 둔 동안 적용돼요. R로 다시 시작해도 유지돼요.</p>
         ${PLAYGROUND_PARAMETERS.map((p) => `<label class="pg-parameter">${p.key} <output data-value="${p.key}"></output> ${p.unit}<input aria-label="${p.key}" data-param="${p.key}" type="range" min="${p.min}" max="${p.max}" step="${p.step}"></label>`).join('')}
-        <button id="pg-defaults">기본값 복원</button><button id="pg-copy">JSON 복사</button><textarea id="pg-values" aria-label="현재 파라미터 JSON" hidden readonly></textarea></details>
+        <button id="pg-defaults">기본값으로</button><button id="pg-copy">JSON 복사</button><textarea id="pg-values" aria-label="현재 파라미터 JSON" hidden readonly></textarea></details>
         <div class="pg-exports"><button id="pg-json">JSON 내보내기</button><button id="pg-csv">CSV 내보내기</button></div>
-        <p class="pg-help">기록은 최근 5분만 보관해요. 다시 시작하면 지워지니 먼저 내보내요. 패스나 슛으로 공을 내보낸 경우는 소유권을 잃은 횟수에서 제외해요. 골·아웃·휘슬 뒤에는 R로 다시 시작해요.</p>
+        <p class="pg-help">기록은 최근 5분만 보관해요. 다시 시작하면 지워져요. 먼저 내보내 둬요. 패스나 슛으로 공을 내보낸 경우는 소유권을 잃은 횟수에서 제외해요. 골·아웃·휘슬 뒤에는 R로 다시 시작해요.</p>
         </section>
       </div>`;
     document.body.append(this.root);
@@ -201,7 +201,7 @@ export class Playground {
   }
 
   async runAsync(source: unknown): Promise<ScriptResult> {
-    if (this.scriptProgress !== null) throw new Error('스크립트 실행이 끝날 때까지 기다려 주세요');
+    if (this.scriptProgress !== null) throw new Error('스크립트를 실행 중이에요. 끝날 때까지 기다려요');
     const script = validateScript(source);
     const version = ++this.runVersion;
     const button = this.root.querySelector<HTMLButtonElement>('#pg-script-run')!;
@@ -312,7 +312,7 @@ export class Playground {
   }
 
   private render(): void {
-    this.output.textContent = this.scriptProgress !== null ? `스크립트 계산 중 · ${Math.floor(this.scriptProgress * 100)}%` : `${this.match.elapsed.toFixed(2)}s · ${this.recordBuffer.length} 스텝 · ${this.running ? '조작 중' : `${this.match.phase} · R로 다시 시작해요`}${this.latest?.turnPending ? ' · 방향 전환 측정 중' : ''}`;
+    this.output.textContent = this.scriptProgress !== null ? `스크립트를 계산하고 있어요 · ${Math.floor(this.scriptProgress * 100)}%` : `${this.match.elapsed.toFixed(2)}s · ${this.recordBuffer.length} 스텝 · ${this.running ? '조작 중' : `${this.match.phase} · R로 다시 시작해요`}${this.latest?.turnPending ? ' · 방향 전환 측정 중' : ''}`;
     this.root.querySelector('#pg-motion')!.textContent = this.latest?.motionId ?? '이동 / 대기';
     for (const [key] of metrics) {
       const value = this.latest?.[key];
@@ -343,7 +343,7 @@ export class Playground {
     const text = JSON.stringify(parameterSnapshot(), null, 2);
     try {
       await navigator.clipboard.writeText(text);
-      this.output.textContent = '현재 파라미터를 JSON으로 복사했어요.';
+      this.output.textContent = '현재 값을 JSON으로 복사했어요.';
     } catch {
       const textarea = this.root.querySelector<HTMLTextAreaElement>('#pg-values')!;
       textarea.hidden = false;

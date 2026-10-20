@@ -34,10 +34,10 @@ export function visibleSlots(mode: TouchMode): TouchSlot[] {
 /** 버튼 아래 작게 표시하는 스와이프 안내 */
 export function swipeHint(mode: TouchMode, slot: TouchSlot): string {
   if (mode === 'attack' && slot === 'pass') return '↑스루 ↓로빙';
-  if (mode === 'attack' && slot === 'shoot') return '↑칩 ↔감아';
+  if (mode === 'attack' && slot === 'shoot') return '↑칩슛 ↔감아';
   if (mode === 'defence' && slot === 'shoot') return '밀면 슬라이딩';
-  if (mode === 'freekick' && slot === 'shoot') return '↔감아';
-  if (mode === 'penalty' && slot === 'shoot') return '꾹 = 세기';
+  if (mode === 'freekick' && slot === 'shoot') return '↔감아차기';
+  if (mode === 'penalty' && slot === 'shoot') return '꾹 눌러 조절';
   return '';
 }
 

@@ -154,7 +154,7 @@ export class Game {
         const key = `snapshoot-resync:${online.session.code}`;
         const tries = (() => { try { return Number(sessionStorage.getItem(key)) || 0; } catch { return 0; } })();
         if (tries >= 2) {
-          this.netNotice('동기화를 복구하지 못했어요 · 경기를 끝낼게요');
+          this.netNotice('동기화를 복구하지 못해 경기를 끝내요');
           setTimeout(() => this.leaveOnline(), 4000);
           return;
         }
@@ -164,7 +164,7 @@ export class Game {
       };
       online.session.onClosed = () => {
         if (this.resyncing) return;
-        this.netNotice('서버 연결이 끊겼어요 · 다시 연결할게요');
+        this.netNotice('서버 연결이 끊겼어요 · 다시 연결해요');
         setTimeout(() => location.reload(), 2500);
       };
       online.session.onPause = (p) => {
@@ -173,7 +173,7 @@ export class Game {
         if (!p && this.menu.visible && this.state === 'paused') this.resume();
         if (p && p.team !== online.start.team) this.hud.tick('상대가 경기를 멈췄어요', 2);
       };
-      online.session.onOpponentLeft = () => this.hud.tick('상대 연결이 끊겼어요 · 같은 링크로 다시 들어오면 이어서 해요', 6);
+      online.session.onOpponentLeft = () => this.hud.tick('상대 연결이 끊겼어요 · 같은 링크로 돌아오면 경기를 이어가요', 6);
       online.session.onOpponentBack = () => this.hud.tick('상대가 돌아왔어요', 2.5);
       online.session.onOpponentAway = (away) => this.hud.tick(away ? '상대가 화면을 벗어났어요 · 돌아올 때까지 멈춰요' : '상대가 돌아왔어요', away ? 6 : 2);
       document.addEventListener('visibilitychange', () => online.session.setAway(document.hidden));
@@ -199,7 +199,7 @@ export class Game {
     window.addEventListener('orientationchange', later);
     window.visualViewport?.addEventListener('resize', later);
     window.addEventListener('keydown', (e) => {
-      if (e.code === 'KeyM' && this.state === 'playing') this.hud.tick(this.toggleSound() ? '사운드 끔' : '사운드 켬');
+      if (e.code === 'KeyM' && this.state === 'playing') this.hud.tick(this.toggleSound() ? '소리를 껐어요' : '소리를 켰어요');
     });
 
     this.touch = new TouchControls(this.input, () => this.cancelCharge(), () => this.applyGraphics(true), () => {
@@ -266,7 +266,7 @@ export class Game {
         value: () => MOVE_ASSIST_LABEL[settings.moveAssist],
         onLeft: () => cycleMoveAssist(-1),
         onRight: () => cycleMoveAssist(1),
-        panel: () => `<div class="card"><h3>자동 전환 이동 보조</h3><p>패스를 받을 선수로 자동 전환된 직후, AI가 공을 받으러 가는 움직임을 얼마나 오래 유지할지 정해요.<br/><br/><b>높음</b> · 0.55초 · <b>낮음</b> · 0.25초 · <b>없음</b> · 바로 내 입력<br/><br/>어떤 설정이든 방향키가 공 쪽을 향하면 공을 가로챌 지점으로 가서 그 앞에서 멈추므로 공을 지나치지 않고, 입력 없이 두면 자동으로 받으러 가요. 공을 받는 순간 누르고 있던 방향으로 첫 터치를 해요.</p></div>`,
+        panel: () => `<div class="card"><h3>자동 전환 이동 보조</h3><p>패스를 받을 선수로 자동 전환된 직후, AI가 공을 받으러 가는 움직임을 얼마나 오래 유지할지 정해요.<br/><br/><b>높음</b> · 0.55초 · <b>낮음</b> · 0.25초 · <b>없음</b> · 바로 직접 조작<br/><br/>어떤 설정이든 방향키가 공 쪽을 향하면 공을 가로챌 지점으로 가서 그 앞에서 멈추므로 공을 지나치지 않고, 입력 없이 두면 자동으로 공을 받으러 가요. 공을 받는 순간 누르고 있던 방향으로 첫 터치를 해요.</p></div>`,
       },
       {
         id: 'shootout',
@@ -279,7 +279,7 @@ export class Game {
       },
       {
         id: 'squad', label: '스쿼드',
-        panel: () => `<div class="card"><h3>스쿼드</h3><p>경기장 위에서 포메이션과 선수 능력치를 확인하고 선발을 바꿔요.</p><p>스쿼드를 선택하면 선수 카드를 누를 수 있어요.</p></div>`,
+        panel: () => `<div class="card"><h3>스쿼드</h3><p>포메이션과 선수 능력치를 보고 선발을 바꿔요.</p><p>스쿼드 화면에서 선수 카드를 눌러 봐요.</p></div>`,
         onSelect: () => this.openSquad(),
       },
       {
@@ -288,7 +288,7 @@ export class Game {
         value: () => CAMERA_LABEL[this.rig.mode],
         onLeft: () => this.rig.toggle(),
         onRight: () => this.rig.toggle(),
-        panel: () => `<div class="card"><h3>카메라</h3><p><b>TV 중계</b>는 관중석 높은 곳에서 망원으로 당겨 찍어 선수가 크게 보이고, <b>넓은 중계</b>는 가까운 곳에서 넓게 보여 줘요. <b>선수 뒤</b>는 공격 방향을 정면으로 보여 줘요. 경기 중 <kbd>V</kbd> 로도 바꿀 수 있어요.</p></div>`,
+        panel: () => `<div class="card"><h3>카메라</h3><p><b>TV 중계</b>는 높은 관중석에서 당겨 찍어 선수를 크게 보여 줘요. <b>넓은 중계</b>는 가까운 곳에서 넓게 보여 줘요. <b>선수 뒤</b>는 공격 방향을 정면으로 보여 줘요. 경기 중 <kbd>V</kbd> 키로도 바꿀 수 있어요.</p></div>`,
       },
       {
         id: 'sound',
@@ -304,7 +304,7 @@ export class Game {
         value: () => GRAPHICS_LABEL[settings.graphicsQuality],
         onLeft: () => { cycleGraphics(-1); this.applyGraphics(this.touch.detected); },
         onRight: () => { cycleGraphics(1); this.applyGraphics(this.touch.detected); },
-        panel: () => `<div class="card"><h3>그래픽 품질</h3><p>자동으로 설정하면 터치 기기나 CPU가 4코어 이하인 기기에서는 낮음으로 동작해요. 낮음에서는 픽셀 비율을 최대 1.75, 그림자 해상도를 1024, 관중을 25%로 줄여요. 높음에서는 픽셀 비율을 최대 2, 그림자 해상도를 2048로 설정하고 모든 관중을 보여 줘요.</p></div>`,
+        panel: () => `<div class="card"><h3>그래픽 품질</h3><p>자동으로 설정하면 터치 기기나 CPU가 4코어 이하인 기기에서는 낮음으로 설정돼요. 낮음에서는 픽셀 비율을 최대 1.75, 그림자 해상도를 1024, 관중을 25%로 줄여요. 높음에서는 픽셀 비율을 최대 2, 그림자 해상도를 2048로 설정하고 모든 관중을 보여 줘요.</p></div>`,
       },
       { id: 'controls', label: '조작법', panel: controlsPanel, onSelect: () => {} },
     ];
@@ -359,7 +359,7 @@ export class Game {
         <li><b>빠른 매칭</b> 지금 상대를 찾는 사람과 바로 연결돼요.</li>
         <li><b>방 만들기</b> 6자리 코드나 링크로 친구를 초대해요.</li>
         <li><b>코드로 입장</b> 받은 코드를 입력해요.</li></ul>
-        <p>먼저 들어온 사람이 홈 팀이에요. 경기 시간과 승부차기는 방장 설정을, 보정은 각자 설정을 사용해요. 일시정지를 모두 쓰면 메뉴를 열어도 경기는 계속돼요.</p></div>`,
+        <p>먼저 들어온 사람이 홈 팀이에요. 경기 시간과 승부차기는 방장 설정을, 보정은 각자 설정을 사용해요. 일시정지 횟수를 다 쓰면 메뉴를 열어도 경기는 계속돼요.</p></div>`,
       onBack: () => this.openMainMenu(),
       items: [
         { id: 'quick', label: '빠른 매칭', onSelect: () => { location.search = '?quick'; } },
@@ -413,7 +413,7 @@ export class Game {
       panel: () => statsPanel(this.match.stats, [h, a], `경기 진행 ${this.clockText()}`),
       onBack: () => this.resume(),
       items: this.lockstep ? [
-        { id: 'resume', label: canPause ? `계속하기 (일시정지 남은 횟수 ${this.pausesLeft - 1}회 · 최대 60초)` : this.netPause ? '계속하기' : '계속하기 (일시정지를 다 써서 경기는 계속돼요)', onSelect: () => this.resume() },
+        { id: 'resume', label: canPause ? `계속하기 (남은 일시정지 ${this.pausesLeft - 1}회 · 최대 60초)` : this.netPause ? '계속하기' : '계속하기 (일시정지를 다 썼어요 · 경기 진행 중)', onSelect: () => this.resume() },
         { id: 'quit', label: '경기 나가기', onSelect: () => this.leaveOnline() },
       ] : [
         { id: 'resume', label: '계속하기', onSelect: () => this.resume() },
@@ -482,14 +482,14 @@ export class Game {
     if (this.netPause || this.online!.session.resuming) return false;
     const progress = this.catchUp.run(this.last, ls, () => { this.match.events.length = 0; });
     if (progress !== null) {
-      this.hud.tick(`지난 경기 진행을 따라잡고 있어요… ${progress}%`, 0.5);
+      this.hud.tick(`지난 경기 상황을 복원하고 있어요… ${progress}%`, 0.5);
       return false;
     }
     // 내 입력은 늘 지금 틱 + delay까지 예약해 둔다 (재접속 따라잡기 뒤에도 간격이 벌어진 채 멈추지 않게)
     while (ls.scheduled < ls.tick + ls.delay) ls.pushLocal(cmd);
     if (!ls.step()) {
       this.waiting += PHYSICS.step;
-      if (this.waiting > 0.5 && this.waiting - PHYSICS.step <= 0.5) this.hud.tick('상대의 입력을 기다리고 있어요…', 1.5);
+      if (this.waiting > 0.5 && this.waiting - PHYSICS.step <= 0.5) this.hud.tick('상대 입력을 기다리고 있어요…', 1.5);
       return false;
     }
     this.waiting = 0;
@@ -533,7 +533,7 @@ export class Game {
     const level = ms === null ? '' : ms < 60 ? 'good' : ms < 120 ? 'ok' : 'bad';
     const ping = `<span class="net-ping ${level}">● ${ms === null ? '—' : `${ms}ms`}</span>`;
     const p = this.netPause;
-    const pause = p ? `<b class="net-paused">${p.team === this.online!.start.team ? '일시정지' : '상대 일시정지'} ${Math.max(0, Math.ceil((p.until - performance.now()) / 1000))}초</b>` : '';
+    const pause = p ? `<b class="net-paused">${p.team === this.online!.start.team ? '일시정지' : '상대가 일시정지했어요'} ${Math.max(0, Math.ceil((p.until - performance.now()) / 1000))}초</b>` : '';
     const html = ping + pause;
     if (this.netEl.innerHTML !== html) this.netEl.innerHTML = html;
   }
@@ -555,7 +555,7 @@ export class Game {
     const me = this.match.localTeam;
     // 내 팀 표시: 점수판의 내 팀 약칭을 강조하고 시작 안내
     document.getElementById(me === 0 ? 'abbr-h' : 'abbr-a')?.classList.add('sb-me');
-    setTimeout(() => this.hud.tick(`온라인 · 나는 ${me === 0 ? '홈' : '원정'} ${TEAMS[me].name}`, 4), 2400);
+    setTimeout(() => this.hud.tick(`온라인 · 내 팀 ${me === 0 ? '홈' : '원정'} ${TEAMS[me].name}`, 4), 2400);
   }
 
   private async startMatch(): Promise<void> {
@@ -804,7 +804,7 @@ export class Game {
           if (e.penalty) this.stadium.cheer(0.6);
           break;
         case 'advantage':
-          this.hud.tick('어드밴티지', 1.6);
+          this.hud.tick('어드밴티지 · 계속해요', 1.6);
           break;
         case 'card':
           this.hud.card(e.player, e.card, e.second);
@@ -819,7 +819,7 @@ export class Game {
         }
         case 'run':
           // 내 팀 침투 지시만 알린다 (상대 화면에는 안 보이게)
-          if (e.player.team === this.match.localTeam) this.hud.tick(`${e.player.profile.short} 침투`, 1);
+          if (e.player.team === this.match.localTeam) this.hud.tick(`${e.player.profile.short} 침투해요`, 1);
           break;
         case 'offside':
           this.sound.whistle([0.16, 0.16]);

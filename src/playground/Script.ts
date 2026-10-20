@@ -37,26 +37,26 @@ const id = (p: Player | null) => p ? `${p.profile.short} #${p.number}` : null;
 export function validateScript(value: unknown): PlaygroundScript {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('스크립트는 JSON 객체여야 해요');
   const s = value as Record<string, unknown>;
-  if (!PLAYGROUND_SCENARIOS.some((v) => v.id === s.scenario)) throw new Error('알 수 없는 scenario');
+  if (!PLAYGROUND_SCENARIOS.some((v) => v.id === s.scenario)) throw new Error('scenario 값을 확인해요');
   if (!Number.isSafeInteger(s.seed)) throw new Error('seed는 정수여야 해요');
   if (typeof s.duration !== 'number' || !Number.isFinite(s.duration) || s.duration <= 0 || s.duration > 3600) throw new Error('duration은 0~3600초 범위여야 해요');
   if (s.sampleHz !== undefined && (typeof s.sampleHz !== 'number' || !Number.isFinite(s.sampleHz) || s.sampleHz <= 0 || s.sampleHz > 120)) throw new Error('sampleHz는 0~120Hz 범위여야 해요');
-  if (s.opponent !== undefined && !opponentModes.includes(s.opponent as string)) throw new Error('알 수 없는 opponent');
-  if (s.control !== undefined && s.control !== 'user' && s.control !== 'opponent') throw new Error('알 수 없는 control');
-  if (s.skill !== undefined && (!Number.isInteger(s.skill) || (s.skill as number) < 1 || (s.skill as number) > 5)) throw new Error('skill은 1~5');
+  if (s.opponent !== undefined && !opponentModes.includes(s.opponent as string)) throw new Error('opponent 값을 확인해요');
+  if (s.control !== undefined && s.control !== 'user' && s.control !== 'opponent') throw new Error('control 값을 확인해요');
+  if (s.skill !== undefined && (!Number.isInteger(s.skill) || (s.skill as number) < 1 || (s.skill as number) > 5)) throw new Error('skill은 1~5여야 해요');
   if (!Array.isArray(s.inputs)) throw new Error('inputs 배열이 필요해요');
   let previous = -1;
   for (const row of s.inputs) {
-    if (!row || typeof row !== 'object' || typeof row.t !== 'number' || !Number.isFinite(row.t) || row.t < 0 || row.t > s.duration || row.t < previous) throw new Error('입력 시각은 오름차순이며 duration 이하여야 해요');
+    if (!row || typeof row !== 'object' || typeof row.t !== 'number' || !Number.isFinite(row.t) || row.t < 0 || row.t > s.duration || row.t < previous) throw new Error('입력 시각은 시간순으로 적고 duration 이내여야 해요');
     previous = row.t;
     if (row.keys === undefined && row.tap === undefined) throw new Error('입력에는 keys 또는 tap이 필요해요');
-    for (const field of ['keys', 'tap'] as const) if (row[field] !== undefined && (!Array.isArray(row[field]) || !row[field].every((k: unknown) => typeof k === 'string' && allowedKeys.has(k)))) throw new Error(`잘못된 ${field} 키`);
+    for (const field of ['keys', 'tap'] as const) if (row[field] !== undefined && (!Array.isArray(row[field]) || !row[field].every((k: unknown) => typeof k === 'string' && allowedKeys.has(k)))) throw new Error(`${field} 키가 올바르지 않아요`);
   }
   if (s.params !== undefined) {
     if (!s.params || typeof s.params !== 'object' || Array.isArray(s.params)) throw new Error('params는 객체여야 해요');
     for (const [key, v] of Object.entries(s.params)) {
       const p = PLAYGROUND_PARAMETERS.find((item) => key === (item.key === 'windup' ? 'MOTION_SELECT.windup' : `DRIBBLE.${item.key}`));
-      if (!p || typeof v !== 'number' || !Number.isFinite(v) || v < p.min || v > p.max) throw new Error(`잘못된 파라미터: ${key}`);
+      if (!p || typeof v !== 'number' || !Number.isFinite(v) || v < p.min || v > p.max) throw new Error(`파라미터 값을 확인해요: ${key}`);
     }
   }
   if (s.control === 'opponent' && !['duel', 'pressure', 'slide', 'commands', 'contact', 'clearance'].includes(s.scenario as string)) throw new Error('상대 조작은 필드 선수가 있는 시나리오에서만 가능해요');
