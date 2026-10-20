@@ -70,8 +70,9 @@ export class Lockstep {
     const floor = Math.min(Lockstep.MAX_DELAY, Math.max(6, Math.ceil((worst / 1000) * 120) + 4));
     const stalled = this.stalls - this.stallMark;
     this.stallMark = this.stalls;
-    if (stalled > 6) {
-      this.delay = Math.min(Lockstep.MAX_DELAY, Math.max(this.delay, floor) + 3);
+    if (stalled > 8) {
+      // 멈춤만으로는 핑 기준보다 12틱(100ms)까지만 늘린다 (느린 화면 탓 멈춤에 조작감을 다 내주지 않게)
+      this.delay = Math.min(Lockstep.MAX_DELAY, floor + 12, Math.max(this.delay, floor) + 3);
       this.sinceStall = 0;
       return;
     }
