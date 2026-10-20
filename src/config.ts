@@ -329,3 +329,6 @@ export const STADIUM = {
 
 /** 손 떨림을 탭으로 남겨 두기 위한 스쿼드 드래그 시작 거리(px). */
 export const SQUAD_UI = { dragThreshold: 6 };
+
+/** 재접속 재생 중에도 다음 화면을 그릴 시간을 남긴다. */
+export const ONLINE_CATCH_UP = { budgetMs: 8, minTicks: 3, threshold: 30 } as const;

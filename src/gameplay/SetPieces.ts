@@ -46,6 +46,9 @@ const tmp = new THREE.Vector3();
 export class SetPieces {
   current: SetPiece | null = null;
   private outTimer = 0;
+  /** 아웃 뒤 재개까지 남은 시간도 동기화 비교에 포함한다. */
+  get remainingOutTime(): number { return this.outTimer; }
+
   /** 상대 PK 때 사용자가 누르고 있는 다이빙 방향 (z 축) */
   private userDive = 0;
 

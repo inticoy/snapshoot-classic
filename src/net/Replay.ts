@@ -63,22 +63,65 @@ export function replay(match: Match, log: InputLog, from = 0, to = log.length): 
 }
 
 /**
- * 경기 상태 해시 (FNV-1a, 32비트): 선수·공 위치·속도(0.1mm 단위로 반올림), 점수, 단계, 시계.
+ * 경기 상태 해시 (FNV-1a, 32비트): 물리·난수·경기 진행·행동 타이머.
+ * 실수는 0.1mm/0.1ms 단위 정수로 바꾸고, 화면 난수·모델·보간 상태는 읽지 않는다.
  * 두 클라이언트가 1초마다 교환해 어긋남을 찾는다.
  */
 export function stateHash(m: Match): number {
   let h = 2166136261;
-  const mix = (v: number) => {
-    const q = Math.round(v * 1e4) | 0;
+  // 난수 상태는 32비트 전체가 의미 있으므로 실수 양자화와 구분한다.
+  const integer = (q: number) => {
     for (let i = 0; i < 4; i++) h = Math.imul(h ^ ((q >>> (i * 8)) & 255), 16777619);
   };
+  const mix = (v: number) => integer(Math.round(v * 1e4) | 0);
+  const flag = (v: boolean) => integer(v ? 1 : 0);
+  const player = (p: Match['ball']['owner']) => integer(p ? m.players.indexOf(p) : -1);
+  const vector = (v: { x: number; y: number; z: number }) => { mix(v.x); mix(v.y); mix(v.z); };
+  const rng = m.random.getState();
+  flag(rng !== undefined);
+  integer(rng ?? 0);
+  integer(m.players.length);
   for (const p of m.players) {
-    mix(p.pos.x); mix(p.pos.z); mix(p.vel.x); mix(p.vel.z); mix(p.facing.x); mix(p.facing.z); mix(p.stamina);
+    vector(p.pos); vector(p.vel); vector(p.facing); mix(p.stamina);
+    mix(p.kickCooldown); mix(p.tackleTimer); mix(p.tackleCooldown); mix(p.stunned);
+    mix(p.diveTimer); mix(p.wrongFoot); mix(p.actionLock); mix(p.facingLock);
+    vector(p.tackleDir); vector(p.diveVel); vector(p.baitDir);
+    flag(p.tackleResolved); flag(p.tackleKind === 'slide'); flag(p.diveKind === 'save');
+    integer(p.diveSide); integer(p.attackDir); integer(p.yellows); flag(p.sentOff);
+    flag(p.sprinting); flag(p.shielding); mix(p.contactScale);
   }
   const b = m.ball.position, v = m.ball.velocity;
   mix(b.x); mix(b.y); mix(b.z); mix(v.x); mix(v.y); mix(v.z);
-  mix(m.score[0]); mix(m.score[1]); mix(m.clock);
+  vector(m.ball.body.angularVelocity);
+  player(m.ball.lastTouch);
+  flag(m.ball.shot !== null);
+  if (m.ball.shot) {
+    integer(m.ball.shot.id); player(m.ball.shot.by);
+    flag(m.ball.shot.saveRolled); flag(m.ball.shot.tipRolled ?? false);
+  }
+  integer(m.score[0]); integer(m.score[1]); mix(m.clock);
+  mix(m.phaseTimer); mix(m.elapsed); integer(m.half); mix(m.halfClock); mix(m.stoppage);
+  player(m.kickoffTaker);
+  for (const side of m.sides) {
+    player(side.controlled); player(side.holding);
+    mix(side.holdTime); mix(side.holdJudge); mix(side.knockTimer); mix(side.receiveTimer);
+    mix(side.lastSprintTap); mix(side.shiftDownAt); integer(side.sprintTaps);
+    flag(side.powerTiming !== null);
+    if (side.powerTiming) mix(side.powerTiming.elapsed);
+    flag(side.queued !== null);
+    if (side.queued) mix(side.queued.ttl);
+    flag(side.skillBuffer !== null);
+    if (side.skillBuffer) mix(side.skillBuffer.ttl);
+  }
+  const sp = m.setPieces.current;
+  mix(m.setPieces.remainingOutTime);
+  flag(sp !== null);
+  if (sp) {
+    integer(['throwin', 'corner', 'goalkick', 'freekick', 'indirect', 'penalty'].indexOf(sp.kind));
+    integer(sp.team); vector(sp.spot); player(sp.taker);
+    mix(sp.timer); flag(sp.ready); flag(sp.shooting);
+  }
   mix(['kickoff', 'playing', 'out', 'setpiece', 'goal', 'halftime', 'fulltime', 'shootout'].indexOf(m.phase));
-  mix(m.players.indexOf(m.ball.owner!));
+  player(m.ball.owner);
   return h >>> 0;
 }

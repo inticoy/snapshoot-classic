@@ -9,6 +9,9 @@ export class Random {
   /** 같은 실험의 R 리셋에서만 시드를 되감는다. 일반 경기는 기존 난수 흐름을 유지한다. */
   reset(seed: number): void { this.state = seed >>> 0; }
 
+  /** 해시 비교에서 난수열의 다음 위치를 확인한다. 조회는 난수를 소비하지 않는다. */
+  getState(): number | undefined { return this.state; }
+
   next(): number {
     // 일반 플레이는 기존 분포를 유지하고, 시드가 주어진 시뮬레이션만 Mulberry32를 쓴다.
     if (this.state === undefined) return Math.random();

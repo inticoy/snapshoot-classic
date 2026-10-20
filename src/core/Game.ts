@@ -1,6 +1,6 @@
 import type { CharacterModel } from '../entities/PlayerModel';
 import * as THREE from 'three';
-import { GRAPHICS, PHYSICS, PITCH, MATCH } from '../config';
+import { GRAPHICS, PHYSICS, PITCH, MATCH, ONLINE_CATCH_UP } from '../config';
 import { Input } from './Input';
 import { TouchControls } from '../ui/TouchControls';
 import type { TouchMode } from './TouchInput';
@@ -29,6 +29,43 @@ const DURATIONS = MATCH.durations;
 const MENU_KEYS = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Enter', 'Escape', 'Backspace'];
 
 const handL = new THREE.Vector3(), handR = new THREE.Vector3();
+
+/** 같은 렌더 프레임의 고정 스텝들이 따라잡기 예산을 중복 사용하지 않게 한다. */
+export class OnlineCatchUp {
+  private source: object | null = null;
+  private target = 0;
+  private start = 0;
+  private frame: number | null = null;
+  private percent = 0;
+
+  run(frame: number, ls: Pick<Lockstep, 'tick' | 'backlog' | 'delay' | 'step'>,
+    discardEvents: () => void, now: () => number = () => performance.now()): number | null {
+    if (this.source !== ls) {
+      this.source = ls;
+      this.target = ls.tick;
+      this.frame = null;
+    }
+    if (this.frame === frame) return this.percent;
+    if (ls.tick >= this.target) {
+      const behind = ls.backlog - ls.delay * 2;
+      if (behind <= ONLINE_CATCH_UP.threshold) return null;
+      this.start = ls.tick;
+      this.target = ls.tick + behind;
+    }
+    this.frame = frame;
+    const deadline = now() + ONLINE_CATCH_UP.budgetMs;
+    let steps = 0;
+    // 느린 기기에서도 조금씩 진행하되, 이미 받은 기록의 이벤트는 마지막 틱까지 버린다.
+    discardEvents();
+    while (ls.tick < this.target && (steps < ONLINE_CATCH_UP.minTicks || now() < deadline)) {
+      if (!ls.step()) break;
+      discardEvents();
+      steps++;
+    }
+    this.percent = Math.min(100, Math.floor((ls.tick - this.start) * 100 / (this.target - this.start)));
+    return this.percent;
+  }
+}
 
 export class Game {
   private readonly renderer: THREE.WebGLRenderer;
@@ -68,6 +105,7 @@ export class Game {
 
   /** 온라인 1:1 (중계 서버 락스텝) */
   private lockstep: Lockstep | null = null;
+  private readonly catchUp = new OnlineCatchUp();
   private readonly lodFar = new Set<CharacterModel>();
   private online: { session: NetSession; start: StartInfo } | null = null;
 
@@ -442,6 +480,11 @@ export class Game {
     const ls = this.lockstep!;
     // 일시정지 중이거나 재접속 기록을 아직 다 못 받았으면 진행하지 않는다
     if (this.netPause || this.online!.session.resuming) return false;
+    const progress = this.catchUp.run(this.last, ls, () => { this.match.events.length = 0; });
+    if (progress !== null) {
+      this.hud.tick(`지난 경기 진행을 따라잡고 있어요… ${progress}%`, 0.5);
+      return false;
+    }
     // 내 입력은 늘 지금 틱 + delay까지 예약해 둔다 (재접속 따라잡기 뒤에도 간격이 벌어진 채 멈추지 않게)
     while (ls.scheduled < ls.tick + ls.delay) ls.pushLocal(cmd);
     if (!ls.step()) {
@@ -450,17 +493,6 @@ export class Game {
       return false;
     }
     this.waiting = 0;
-    // 재접속 등으로 계산할 틱이 쌓여 있으면 한 프레임에 많이 따라잡는다 (입력은 이미 기록에 있다)
-    // 평소에도 입력 지연만큼 몇 틱은 준비돼 있으므로, 그보다 훨씬 많이 밀렸을 때만 (재접속 등)
-    const behind = ls.backlog - ls.delay * 2;
-    if (behind > 30) {
-      // 지나간 장면의 골·휘슬·소리를 한꺼번에 재생하지 않게 따라잡는 동안의 이벤트는 버린다
-      for (let i = 0; i < Math.min(600, behind); i++) {
-        this.match.events.length = 0;
-        if (!ls.step()) break;
-      }
-      this.hud.tick('지난 경기 진행을 따라잡고 있어요…', 0.5);
-    }
     return true;
   }
 
