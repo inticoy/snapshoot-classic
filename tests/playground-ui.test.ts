@@ -299,18 +299,15 @@ it('시범은 직접 실행과 같은 실제 별 보정 속도·궤적으로 진
   }
 });
 
-it('별이 부족한 시범은 하위 기술로 바꾸지 않고 필요한 별을 안내한다', () => {
+it('별이 부족한 시범은 그 개인기의 최소 별로 보여 주고, 리셋하면 원래 별로 돌아온다', () => {
   const profile = match.controlled.profile;
   const def = SKILLS.find((s) => s.stars > profile.skill)!;
   expect(def).toBeDefined();
-  document.querySelector<HTMLInputElement>('#pg-repeat')!.checked = true;
-  expect(demo(def.id)).toBe(false);
-  expect(match.controlled.profile).toBe(profile);
-  expect(match.skills.current(match.controlled)).toBeNull();
-  expect(document.querySelector('#pg-demo-rating')!.textContent).toContain(`${def.stars}성 이상이 필요해요`);
-  const start = vi.spyOn(match.skills, 'start');
-  for (let i = 0; i < 200; i++) pg.step(PHYSICS.step, command());
-  expect(start).not.toHaveBeenCalled();
+  expect(demo(def.id)).toBe(true);
+  expect(match.controlled.profile.skill).toBe(def.stars);
+  expect(document.querySelector('#pg-demo-rating')!.textContent).toContain(`★${def.stars} 선수 속도`);
+  pg.reset();
+  expect(match.controlled.profile.skill).toBe(profile.skill);
 });
 
 it('개인기 수비 옵션은 실제 AI로 압박하고 시범·R 뒤 같은 상태를 재현하며 해제할 수 있다', () => {

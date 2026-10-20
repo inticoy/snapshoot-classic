@@ -146,13 +146,11 @@ export class SkillPanel {
   demo(def: SkillDef): boolean {
     this.resetPractice();
     const m = this.match, p = m.controlled;
-    // 별이 부족한 시범은 하위 기술로 바꾸지 않아 목록의 이름과 실제 동작을 일치시킨다.
+    // 선수 별로 낼 수 있으면 실제 속도 그대로, 별이 모자라면 그 개인기에 필요한 최소 별로 보여 준다 (5성으로 빨라지지 않게)
     if (p.profile.skill < def.stars) {
-      this.rating.textContent = `${p.profile.skill}성 선수예요. ${def.name} 시범은 ${def.stars}성 이상이 필요해요.`;
-      this.showFailure('stars');
-      return false;
-    }
-    this.rating.textContent = `★${p.profile.skill} 선수의 실제 속도로 보여 줘요.`;
+      this.rating.textContent = `★${p.profile.skill} 선수는 아직 못 해요. ★${def.stars} 선수 속도로 보여 줘요.`;
+      Object.defineProperty(p, 'profile', { value: { ...p.profile, skill: def.stars }, configurable: true });
+    } else this.rating.textContent = `★${p.profile.skill} 선수의 실제 속도로 보여 줘요.`;
     p.vel.set(0, 0, 0);
     p.facing.copy(FACING);
     p.actionLock = 0;
