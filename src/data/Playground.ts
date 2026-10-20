@@ -5,7 +5,7 @@ export const PLAYGROUND_SCENARIOS = [
   { id: 'contact', label: '수비 몸싸움', hint: '공 가진 상대 옆에서 Space 유지·D 밀치기·C+방향·C+E를 시험하세요.' },
   { id: 'clearance', label: '루즈볼 걷어내기', hint: '가까운 루즈볼에 D를 누르면 높고 멀리 걷어냅니다.' },
   { id: 'free', label: '자유 드리블', hint: '공격수 + 공. 방향키·E로 드리블과 급회전을 시험하세요.' },
-  { id: 'duel', label: '1대1 압박', hint: '앞의 수비수 한 명이 실제 경기 AI로 압박합니다.' },
+  { id: 'duel', label: '1대1 압박', hint: '앞의 수비수 한 명이 압박해요. 개인기로 따돌려 봐요.' },
   { id: 'pressure', label: '3명 압박', hint: '세 방향에서 시작하는 상대를 피해 드리블하세요.' },
   { id: 'receive', label: '패스 받기', hint: '15m 뒤 동료가 땅볼 패스합니다. 방향 입력을 유지하며 받아보세요.' },
   { id: 'slide', label: '슬라이딩 태클', hint: '상대가 오른쪽에서 왼쪽으로 드리블합니다. A 슬라이딩 · Space 스탠딩. V로 카메라 변경.' },

@@ -49,6 +49,7 @@ export class Playground {
   private scriptHeld: string[] = [];
 
   private readonly skills: SkillPanel;
+  private skillDefender = false;
 
   constructor(private readonly match: Match, private readonly onReset: () => void, view: PlaygroundView) {
     this.scenarios = new PlaygroundScenarios(match);
@@ -89,7 +90,12 @@ export class Playground {
       if (isEditing(e.target)) e.stopPropagation();
     });
     this.output = this.root.querySelector('#pg-status')!;
-    this.skills = new SkillPanel(match, this.root.querySelector('[data-panel="skills"]')!, view, () => this.reset('free'));
+    this.skills = new SkillPanel(match, this.root.querySelector('[data-panel="skills"]')!, view,
+      () => this.reset(this.skillDefender ? 'duel' : 'free', 'press'),
+      (enabled) => {
+        this.skillDefender = enabled;
+        this.reset(enabled ? 'duel' : 'free', 'press');
+      });
     this.root.querySelectorAll<HTMLButtonElement>('[data-tab]').forEach((tab) => {
       tab.onclick = () => this.showTab(tab.dataset.tab!);
     });

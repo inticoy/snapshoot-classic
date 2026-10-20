@@ -6,6 +6,8 @@ import { DRIBBLE, PHYSICS, PLAYGROUND } from '../src/config';
 import { MOTION_SELECT } from '../src/anim/MotionLibrary';
 import { parameterSnapshot } from '../src/playground/Parameters';
 import { Input } from '../src/core/Input';
+import { SKILLS } from '../src/gameplay/Skills';
+import { PlaygroundScenarios } from '../src/playground/Scenarios';
 import { command, simulation } from './helpers';
 
 let win: HappyWindow;
@@ -162,10 +164,10 @@ it('잘못된 시범 id는 상태를 바꾸지 않고 false를 반환한다', ()
   expect(pg.records).toHaveLength(1);
 });
 
-it('시범·스크립트 임시 능력치는 시나리오를 바꾸면 원본으로 돌아온다', () => {
+it('시범은 원래 능력치를 유지하고 스크립트 임시 능력치는 리셋으로 복구한다', () => {
   const p = match.controlled, profile = p.profile;
   expect(demo('roulette_r')).toBe(true);
-  expect(p.profile.skill).toBe(5);
+  expect(p.profile).toBe(profile);
   pg.reset('slide');
   expect(p.profile).toBe(profile);
   pg.run({ scenario: 'free', seed: 42, skill: 1, duration: 0.1, inputs: [] });
@@ -274,4 +276,74 @@ it('직접 입력 방향 시퀀스를 표시하며 공이 멀어도 실패 안�
   match.ball.reset(30, 30);
   pg.step(PHYSICS.step, cmd);
   expect(document.querySelector('.pg-toast')!.textContent).toContain('너무 멀');
+});
+
+
+it('시범은 직접 실행과 같은 실제 별 보정 속도·궤적으로 진행한다', () => {
+  const def = SKILLS.find((s) => s.starScale && s.stars < match.controlled.profile.skill && !s.sustained)!;
+  expect(def).toBeDefined();
+  const direct = simulation(318, { practice: true, kickMotion: true }).match;
+  new PlaygroundScenarios(direct).reset('free');
+  expect(direct.skills.start(direct.controlled, def)).toBe(true);
+  expect(demo(def.id)).toBe(true);
+  const expected = def.duration / (1 + def.starScale! * (match.controlled.profile.skill - def.stars));
+  expect(match.controlled.actionLock).toBeCloseTo(expected);
+  expect(match.controlled.actionLock).toBe(direct.controlled.actionLock);
+  for (let i = 0; i < Math.ceil(def.duration / PHYSICS.step) + 5; i++) {
+    match.update(PHYSICS.step, command());
+    direct.update(PHYSICS.step, command());
+    expect(match.skills.current(match.controlled)?.id).toBe(direct.skills.current(direct.controlled)?.id);
+    expect(match.controlled.pos.toArray()).toEqual(direct.controlled.pos.toArray());
+    expect(match.ball.position.toArray()).toEqual(direct.ball.position.toArray());
+    match.events.length = direct.events.length = 0;
+  }
+});
+
+it('별이 부족한 시범은 하위 기술로 바꾸지 않고 필요한 별을 안내한다', () => {
+  const profile = match.controlled.profile;
+  const def = SKILLS.find((s) => s.stars > profile.skill)!;
+  expect(def).toBeDefined();
+  document.querySelector<HTMLInputElement>('#pg-repeat')!.checked = true;
+  expect(demo(def.id)).toBe(false);
+  expect(match.controlled.profile).toBe(profile);
+  expect(match.skills.current(match.controlled)).toBeNull();
+  expect(document.querySelector('#pg-demo-rating')!.textContent).toContain(`${def.stars}성 이상이 필요해요`);
+  const start = vi.spyOn(match.skills, 'start');
+  for (let i = 0; i < 200; i++) pg.step(PHYSICS.step, command());
+  expect(start).not.toHaveBeenCalled();
+});
+
+it('개인기 수비 옵션은 실제 AI로 압박하고 시범·R 뒤 같은 상태를 재현하며 해제할 수 있다', () => {
+  const toggle = document.querySelector<HTMLInputElement>('#pg-skill-defender')!;
+  toggle.click();
+  expect(pg.scenarios.current).toBe('duel');
+  expect(match.practiceOpponent).toBe('press');
+  expect(match.players).toHaveLength(2);
+  const defender = match.players.find((p) => p.team === 1)!;
+  const initialDistance = defender.pos.distanceTo(match.controlled.pos);
+  const run = () => {
+    for (let i = 0; i < 60; i++) {
+      match.update(PHYSICS.step, command());
+      pg.step(PHYSICS.step, command());
+      match.events.length = 0;
+    }
+    return { players: match.players.map((p) => p.pos.toArray()), ball: match.ball.position.toArray() };
+  };
+  const first = run();
+  expect(defender.pos.distanceTo(match.controlled.pos)).toBeLessThan(initialDistance - 1);
+  window.dispatchEvent(new win.KeyboardEvent('keydown', { code: 'KeyR' }) as unknown as Event);
+  expect(toggle.checked).toBe(true);
+  expect(match.elapsed).toBe(0);
+  expect(match.players).toHaveLength(2);
+  expect(run()).toEqual(first);
+  expect(demo('roulette_r')).toBe(true);
+  expect(match.players).toHaveLength(2);
+  expect(match.practiceOpponent).toBe('press');
+  pg.reset();
+  expect(run()).toEqual(first);
+  toggle.click();
+  expect(pg.scenarios.current).toBe('free');
+  expect(match.players).toHaveLength(1);
+  expect(demo('roulette_r')).toBe(true);
+  expect(match.players).toHaveLength(1);
 });

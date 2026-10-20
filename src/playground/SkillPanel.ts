@@ -64,14 +64,17 @@ export class SkillPanel {
   private readonly touch = document.documentElement.classList.contains('touch-device');
   private readonly last: HTMLElement;
   private readonly sequence: HTMLElement;
+  private readonly rating: HTMLElement;
   // 별 제한·공 소유 여부에 막힌 입력도 설명할 수 있도록 UI만의 관찰기를 쓴다.
   private readonly observer = new SkillInput();
   private readonly observerHeld = new SkillInput(true);
 
-  constructor(private readonly match: Match, root: HTMLElement, private readonly gameView: PlaygroundView, private readonly resetFree: () => void) {
+  constructor(private readonly match: Match, root: HTMLElement, private readonly gameView: PlaygroundView, private readonly resetPractice: () => void, setDefender: (enabled: boolean) => void) {
     const list = groups();
     root.innerHTML = `
       <p class="pg-help">▶를 누르면 시범을 볼 수 있어요. 직접 하려면 공을 가진 채 ${this.touch ? '개인기 스틱을 안내 방향으로 움직여요' : '커맨드를 입력해요'} (↑는 선수가 보는 방향이에요).</p>
+      <label class="pg-inline"><input type="checkbox" id="pg-skill-defender"> 수비수와 연습해요</label>
+      <p class="pg-help" id="pg-demo-rating" role="status">선수의 실제 별에 맞는 속도로 시범을 보여 줘요.</p>
       <div class="pg-row" role="group" aria-label="재생 속도">${SPEEDS.map((s) => `<button data-speed="${s}" aria-pressed="${s === 1}">${s === 1 ? '보통' : `${s}×`}</button>`).join('')}
         <label class="pg-inline"><input type="checkbox" id="pg-repeat"> 반복</label></div>
       <div class="pg-row" role="group" aria-label="카메라">${VIEWS.map((v) => `<button data-view="${v.id}" aria-pressed="${v.id === 'side'}">${v.label}</button>`).join('')}<button data-view="off" aria-pressed="false">경기 카메라</button></div>
@@ -81,6 +84,8 @@ export class SkillPanel {
         <li><div class="pg-skill-name"><span class="pg-stars">${'★'.repeat(g.stars)}</span> ${g.name}${g.nick ? ` <em>${g.nick}</em>` : ''}${g.rig ? ' <i class="pg-new">새 동작</i>' : ''}</div>
           ${g.variants.map((v) => `<div class="pg-skill-row"><code>${commandText(v.def, this.touch)}</code>${v.def.sustained ? '<small>직접 입력</small>' : `<button data-demo="${v.def.id}" aria-label="${v.def.name} 시범">▶ ${g.variants.length > 1 ? v.label : ''}</button>`}</div>${SKILLS.filter((d) => d.stars > v.def.stars && JSON.stringify(d.trigger) === JSON.stringify(v.def.trigger)).map((d) => `<small class="pg-help">★${d.stars} 선수는 ${d.name} 동작을 해요</small>`).join('')}`).join('')}
         </li>`).join('')}</ul>`;
+    this.rating = root.querySelector('#pg-demo-rating')!;
+    root.querySelector<HTMLInputElement>('#pg-skill-defender')!.onchange = (e) => setDefender((e.target as HTMLInputElement).checked);
     this.last = root.querySelector('#pg-last-skill')!;
     this.sequence = root.querySelector('#pg-skill-sequence')!;
     root.querySelectorAll<HTMLButtonElement>('[data-demo]').forEach((b) => {
@@ -128,6 +133,7 @@ export class SkillPanel {
     this.observer.reset();
     this.observerHeld.reset();
     this.sequence.textContent = '—';
+    this.rating.textContent = '선수의 실제 별에 맞는 속도로 시범을 보여 줘요.';
   }
 
   private apply(snap = false): void {
@@ -136,11 +142,17 @@ export class SkillPanel {
     this.gameView.setCloseUp(this.active && v ? { angle: v.angle, facing: FACING } : null, snap);
   }
 
-  /** 자유 드리블로 되돌린 뒤 발 앞에 공을 두고 개인기를 바로 낸다 */
+  /** 선택한 압박 상황으로 되돌린 뒤 실제 선수 능력치로 개인기를 낸다. */
   demo(def: SkillDef): boolean {
-    this.resetFree();
+    this.resetPractice();
     const m = this.match, p = m.controlled;
-    Object.defineProperty(p, 'profile', { value: { ...p.profile, skill: 5 }, configurable: true });
+    // 별이 부족한 시범은 하위 기술로 바꾸지 않아 목록의 이름과 실제 동작을 일치시킨다.
+    if (p.profile.skill < def.stars) {
+      this.rating.textContent = `${p.profile.skill}성 선수예요. ${def.name} 시범은 ${def.stars}성 이상이 필요해요.`;
+      this.showFailure('stars');
+      return false;
+    }
+    this.rating.textContent = `★${p.profile.skill} 선수의 실제 속도로 보여 줘요.`;
     p.vel.set(0, 0, 0);
     p.facing.copy(FACING);
     p.actionLock = 0;
