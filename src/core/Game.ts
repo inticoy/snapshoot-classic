@@ -626,6 +626,7 @@ export class Game {
     }
     if (!this.playground) this.match.officials.syncVisual(live ? dt : 0);
     this.match.ball.syncVisual();
+    this.interpolate(live);
     // 손에 든 공(키퍼 캐치·스로인)은 화면에서 두 손 사이에 그린다 (판정 위치는 그대로)
     const holder = this.match.ball.owner?.isKeeper && this.match.ball.position.y > 0.4 ? this.match.ball.owner
       : this.match.setPieces.current?.kind === 'throwin' ? this.match.setPieces.current.taker : null;
@@ -651,6 +652,24 @@ export class Game {
     this.lighting.update(this.rig.camera);
     this.updateLod();
     this.renderer.render(this.scene, this.rig.camera);
+  }
+
+  /**
+   * 렌더 보간: 물리는 120Hz 고정 스텝이라 화면 주사율(60·144Hz 등)과 박자가 어긋나 떨려 보인다.
+   * 남은 누적 시간 비율만큼 직전 스텝과 지금 스텝 사이 위치로 그린다 (한 스텝 늦게 보이는 대신 매끄럽다). 순간이동은 그대로
+   */
+  private interpolate(live: boolean): void {
+    if (!live || this.playground) return;
+    const a = THREE.MathUtils.clamp(this.accumulator / PHYSICS.step, 0, 1) - 1;
+    for (const p of this.match.players) {
+      const r = p.model.root.position;
+      // 다리 IK 개인기는 발 목표가 판정 좌표라 몸만 늦추면 발이 미끄러진다
+      if (!p.legPose && p.prevPos.distanceToSquared(p.pos) < 1) r.set(p.pos.x + (p.pos.x - p.prevPos.x) * a, 0, p.pos.z + (p.pos.z - p.prevPos.z) * a);
+    }
+    const b = this.match.ball, bp = b.position, o = b.object.position;
+    if (!b.owner?.legPose && b.prevPos.distanceToSquared(o) < 1 && Math.abs(o.x - bp.x) < 1e-6 && Math.abs(o.z - bp.z) < 1e-6) {
+      o.set(bp.x + (bp.x - b.prevPos.x) * a, bp.y + (bp.y - b.prevPos.y) * a, bp.z + (bp.z - b.prevPos.z) * a);
+    }
   }
 
   /** 화면에서 키가 작게(약 120px 미만) 보이는 사람은 저폴리 메시로 그린다 (경계에서 깜빡이지 않게 여유를 둔다) */

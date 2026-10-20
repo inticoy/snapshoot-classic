@@ -22,6 +22,8 @@ export const createPlayerModel: PlayerModelFactory = (colors, number, keeper) =>
 export class Player {
   readonly model: CharacterModel;
   readonly pos = new THREE.Vector3();
+  /** 직전 스텝 위치 (렌더 보간용) */
+  readonly prevPos = new THREE.Vector3();
   readonly vel = new THREE.Vector3();
   /** 바라보는 방향 (단위 벡터, XZ 평면) */
   readonly facing = new THREE.Vector3(1, 0, 0);

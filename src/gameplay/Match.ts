@@ -465,6 +465,10 @@ export class Match {
   /** cmd: 팀 0 명령(한 사람) 또는 [팀0, 팀1] 명령 (두 사람, 멀티플레이) */
   update(dt: number, input: UserCommand | readonly [UserCommand | null, UserCommand | null]): void {
     const cmds = Array.isArray(input) ? input as readonly [UserCommand | null, UserCommand | null] : [input as UserCommand, null] as const;
+    // 화면 보간용: 이번 스텝 전 위치 (게임 판정에는 쓰지 않는다)
+    for (const p of this.players) p.prevPos.copy(p.pos);
+    const bp = this.ball.position;
+    this.ball.prevPos.set(bp.x, bp.y, bp.z);
     this.elapsed += dt;
     this.phaseTimer -= dt;
 

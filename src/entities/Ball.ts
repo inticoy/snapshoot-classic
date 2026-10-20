@@ -78,6 +78,9 @@ export class Ball {
     }
   }
 
+  /** 직전 스텝 위치 (렌더 보간용) */
+  readonly prevPos = new THREE.Vector3();
+
   get position(): CANNON.Vec3 {
     return this.body.position;
   }
