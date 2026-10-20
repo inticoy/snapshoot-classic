@@ -163,6 +163,17 @@ export class SkinnedPlayerModel implements CharacterModel {
     shift: 0, bounce: 0, bounceV: 0, prevL: ANKLE_Y, prevR: ANKLE_Y,
   };
 
+  private readonly nearMeshes: THREE.SkinnedMesh[] = [];
+  private readonly farMeshes: THREE.SkinnedMesh[] = [];
+  private far = false;
+
+  setFar(far: boolean): void {
+    if (far === this.far || !this.farMeshes.length) return;
+    this.far = far;
+    for (const m of this.nearMeshes) m.visible = !far;
+    for (const m of this.farMeshes) m.visible = far;
+  }
+
   constructor(colors: ModelColors, private readonly keeper: boolean) {
     if (!asset) throw new Error('character asset not loaded');
     const model = SkeletonUtils.clone(asset.scene);
@@ -174,6 +185,9 @@ export class SkinnedPlayerModel implements CharacterModel {
     model.traverse((o) => {
       const m = o as THREE.SkinnedMesh;
       if (m.isSkinnedMesh) {
+        // 먼 거리용 저폴리(이름 끝 _lod)는 처음엔 숨긴다
+        if (m.name.endsWith('_lod')) { this.farMeshes.push(m); m.visible = false; }
+        else this.nearMeshes.push(m);
         const part = partOf(m);
         hasBoots ||= part === 5;
         // 맨살(얼굴·팔다리)은 캐릭터 텍스처 그대로, 옷·머리는 팀 색

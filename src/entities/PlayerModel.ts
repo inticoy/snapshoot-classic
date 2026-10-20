@@ -51,6 +51,8 @@ export interface CharacterModel {
   handPosition?(out: THREE.Vector3, side?: 'L' | 'R'): THREE.Vector3 | null;
   /** 개인기 다리 IK. null이면 부드럽게 원래 동작으로 돌아간다 */
   setLegPose?(pose: LegPose | null): void;
+  /** 화면에 작게 보일 때 저폴리 메시로 (모델에 _lod 메시가 있을 때만) */
+  setFar?(far: boolean): void;
 }
 
 export type Gesture = 'none' | 'raise' | 'point';

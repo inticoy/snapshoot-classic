@@ -1,3 +1,4 @@
+import type { CharacterModel } from '../entities/PlayerModel';
 import * as THREE from 'three';
 import { GRAPHICS, PHYSICS, PITCH, MATCH } from '../config';
 import { Input } from './Input';
@@ -67,6 +68,7 @@ export class Game {
 
   /** 온라인 1:1 (중계 서버 락스텝) */
   private lockstep: Lockstep | null = null;
+  private readonly lodFar = new Set<CharacterModel>();
   private online: { session: NetSession; start: StartInfo } | null = null;
 
   constructor(canvas: HTMLCanvasElement, options: { playground?: typeof Playground; online?: { session: NetSession; start: StartInfo } } = {}) {
@@ -647,7 +649,22 @@ export class Game {
       this.hud.update(dt, this.match, this.rig.camera);
     }
     this.lighting.update(this.rig.camera);
+    this.updateLod();
     this.renderer.render(this.scene, this.rig.camera);
+  }
+
+  /** 화면에서 키가 작게(약 120px 미만) 보이는 사람은 저폴리 메시로 그린다 (경계에서 깜빡이지 않게 여유를 둔다) */
+  private updateLod(): void {
+    const cam = this.rig.camera;
+    const px = this.renderer.domElement.height / 2 / Math.tan(THREE.MathUtils.degToRad(cam.fov / 2));
+    const models = [...this.match.players.map((p) => p.model), ...this.match.officials.all.map((o) => o.model)];
+    for (const m of models) {
+      if (!m.setFar) continue;
+      const h = (1.8 * px) / Math.max(0.1, cam.position.distanceTo(m.root.position));
+      const far = h < (this.lodFar.has(m) ? 140 : 120);
+      if (far) this.lodFar.add(m); else this.lodFar.delete(m);
+      m.setFar(far);
+    }
   }
 
   private buildCommand(): void {
