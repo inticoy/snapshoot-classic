@@ -128,6 +128,12 @@ const qB = new THREE.Quaternion();
 const qC = new THREE.Quaternion();
 const vA = new THREE.Vector3(), vB = new THREE.Vector3(), vC = new THREE.Vector3(), vT = new THREE.Vector3(), vK = new THREE.Vector3(), vP = new THREE.Vector3();
 const qI = new THREE.Quaternion();
+const vS = new THREE.Vector3(), vF = new THREE.Vector3(), vU = new THREE.Vector3(), vH = new THREE.Vector3();
+/**
+ * 발목 가동 범위 (rad, 바인드 자세의 정강이-발 각도 기준). 사람 발목은 발바닥 쪽으로 약 50°, 발등 쪽으로는 맨몸 20°·체중을 실으면
+ * 30° 안팎까지 굽는다 (무릎을 굽혀 발바닥을 땅에 붙인 자세). 정강이를 축으로 한 발끝 비틀림은 약 35°까지.
+ */
+const ANKLE_DORSI = 0.52, ANKLE_PLANTAR = 0.87, ANKLE_TWIST = 0.6;
 /** 서 있을 때 발목 높이 (GLB) */
 const ANKLE_Y = 0.07;
 
@@ -162,6 +168,9 @@ export class SkinnedPlayerModel implements CharacterModel {
     /** 체중 이동(디딘 발 쪽으로 엉덩이 옆 이동)·착지 반동(스프링)·이전 발 높이 */
     shift: 0, bounce: 0, bounceV: 0, prevL: ANKLE_Y, prevR: ANKLE_Y,
   };
+
+  /** 바인드 자세에서 발끝(발목→발가락 관절)이 정강이 방향으로 기운 정도 asin(발·정강이), 발목 가동 범위의 기준 */
+  private readonly ankleNeutral = { L: 0.35, R: 0.35 };
 
   private readonly nearMeshes: THREE.SkinnedMesh[] = [];
   private readonly farMeshes: THREE.SkinnedMesh[] = [];
@@ -227,6 +236,11 @@ export class SkinnedPlayerModel implements CharacterModel {
       const foot = this.bones.get(`DEF-foot${side}`), toe = this.bones.get(`DEF-toe${side}`);
       if (!foot || !toe) continue;
       const ankle = foot.getWorldPosition(new THREE.Vector3());
+      const knee = this.bones.get(`DEF-shin${side}`)?.getWorldPosition(new THREE.Vector3());
+      if (knee) {
+        const toeJoint = toe.getWorldPosition(new THREE.Vector3()).sub(ankle).normalize();
+        this.ankleNeutral[side] = Math.asin(THREE.MathUtils.clamp(toeJoint.dot(ankle.clone().sub(knee).normalize()), -1, 1));
+      }
       const tip = toe.localToWorld(new THREE.Vector3(0, 1, 0).multiplyScalar(toeLength(toe)));
       const along = tip.clone().sub(ankle);
       const length = along.length();
@@ -499,12 +513,17 @@ export class SkinnedPlayerModel implements CharacterModel {
     const w = Math.max(n.L.w, n.R.w);
     if (w < 0.002 && Math.abs(n.roll) + Math.abs(n.pitch) + n.drop < 0.002) return;
     this.pivot.rotation.z += n.roll;
-    this.pivot.rotation.x += n.pitch;
+    // 숙이기: 몸 전체(발 기준)는 일부만 기울이고 나머지는 허리를 접는다. 사람은 엉덩이를 발 위에 둔 채 상체를 숙이므로
+    // 전부 발 기준으로 기울이면 엉덩이가 앞으로 쏠려 공을 몸 앞에서 다루는 것처럼 보인다.
+    this.pivot.rotation.x += n.pitch * 0.4;
+    this.pivot.position.z -= Math.sin(n.pitch * 0.4) * 0.35;
     this.pivot.position.y += n.bounce - n.drop;
     this.pivot.position.x += n.shift;
     this.root.updateMatrixWorld(true);
     // 상체: 든 다리 반대로 비틀고(오른발을 들면 오른 어깨가 뒤로), 반대 팔을 벌려 균형, 고개는 공을 내려다본다
     const twist = -(liftR - liftL) * 0.32;
+    this.rotateBone('DEF-spine001', X_AXIS, n.pitch * 0.35);
+    this.rotateBone('DEF-spine003', X_AXIS, n.pitch * 0.25);
     this.rotateBone('DEF-spine001', Y_AXIS, twist * 0.4);
     this.rotateBone('DEF-spine003', Y_AXIS, twist * 0.6);
     this.rotateBone('DEF-upper_armL', Z_AXIS, (0.25 + 0.75 * liftR) * w);
@@ -522,8 +541,15 @@ export class SkinnedPlayerModel implements CharacterModel {
     vT.copy(f.pos).sub(vA);
     const d = THREE.MathUtils.clamp(vT.length(), Math.abs(la - lb) + 1e-3, la + lb - 1e-3);
     vT.normalize();
-    // 무릎 방향: 모델 앞(+Z)에 바깥쪽(왼다리 +X)을 조금 섞는다
+    // 무릎 방향: 모델 앞(+Z)에 바깥쪽(왼다리 +X)을 조금 섞고, 발끝을 돌린 만큼 엉덩이를 돌려 무릎도 발끝 쪽을 보게 한다
+    // (발 안쪽 터치처럼 발끝을 크게 돌릴 때 발목만 비틀리지 않게)
     vP.set(side === 'L' ? 0.25 : -0.25, 0, 1).applyQuaternion(this.root.getWorldQuaternion(qC));
+    vH.copy(f.toe).setY(0);
+    if (vH.lengthSq() > 0.09) {
+      vH.normalize();
+      const along = vH.dot(vP);
+      if (along > -0.2) vP.addScaledVector(vH, 1.2 * THREE.MathUtils.smoothstep(along, -0.2, 0.3));
+    }
     vP.addScaledVector(vT, -vP.dot(vT)).normalize();
     const cosA = THREE.MathUtils.clamp((la * la + d * d - lb * lb) / (2 * la * d), -1, 1);
     vK.copy(vA).addScaledVector(vT, la * cosA).addScaledVector(vP, la * Math.sqrt(1 - cosA * cosA));
@@ -532,7 +558,36 @@ export class SkinnedPlayerModel implements CharacterModel {
     const goal = vA.clone().addScaledVector(vT, d);
     this.aimBone(shin, vC.sub(vB), goal.sub(vB), f.w);
     foot.getWorldPosition(vC); toe.getWorldPosition(vB);
-    this.aimBone(foot, vB.sub(vC), f.toe, f.w);
+    this.aimBone(foot, vB.sub(vC), this.clampAnkle(side, f.toe, shin), f.w);
+  }
+
+  /**
+   * 발끝 목표를 사람 발목 가동 범위 안으로. 정강이(무릎→발목) 기준으로
+   *  - 앞뒤 굽힘: 바인드 각도에서 발등 쪽 30°, 발바닥 쪽 50°
+   *  - 비틀림: 무릎이 향한 쪽에서 35°
+   * 발이 뒤로 높이 들릴 때(사포·힐 플릭) 발끝이 정강이 반대로 꺾이던 것을 막는다.
+   */
+  private clampAnkle(side: 'L' | 'R', toe: THREE.Vector3, shin: THREE.Bone): THREE.Vector3 {
+    shin.getWorldPosition(vS);
+    this.bones.get(`DEF-foot${side}`)!.getWorldPosition(vC);
+    vS.subVectors(vC, vS).normalize(); // 정강이 방향 (아래로)
+    vF.copy(vP).addScaledVector(vS, -vP.dot(vS)); // 무릎 앞 = 중립 발끝 방향
+    if (vF.lengthSq() < 1e-8) return toe;
+    vF.normalize();
+    const t = vU.copy(toe).normalize();
+    const along = THREE.MathUtils.clamp(t.dot(vS), -1, 1);
+    const neutral = this.ankleNeutral[side];
+    const bend = THREE.MathUtils.clamp(Math.asin(along), neutral - ANKLE_DORSI, Math.min(neutral + ANKLE_PLANTAR, 1.45));
+    // 정강이에 수직인 성분 = 발끝이 향한 수평 방향. 무릎 앞에서 ANKLE_TWIST 넘게 돌지 않게
+    t.addScaledVector(vS, -along);
+    if (t.lengthSq() < 1e-8) t.copy(vF);
+    else {
+      t.normalize();
+      const twist = Math.atan2(vK.crossVectors(vF, t).dot(vS), vF.dot(t));
+      const c = THREE.MathUtils.clamp(twist, -ANKLE_TWIST, ANKLE_TWIST);
+      if (c !== twist) t.copy(vF).applyAxisAngle(vS, c);
+    }
+    return t.multiplyScalar(Math.cos(bend)).addScaledVector(vS, Math.sin(bend));
   }
 
   /** 뼈를 월드에서 from 방향이 to 방향을 향하도록 돌린다 (w만큼) */
