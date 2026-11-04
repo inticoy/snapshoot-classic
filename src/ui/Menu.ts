@@ -1,6 +1,6 @@
 import { TEAMS, type PlayerProfile } from '../data/Teams';
 import { STAT_LABELS, faceStats } from '../data/Stats';
-import { FORMATION_433 } from '../data/Formation';
+import { FORMATIONS, FORMATION_IDS, type FormationId } from '../data/Formation';
 import { PITCH, SQUAD_UI } from '../config';
 import type { MatchStats } from '../gameplay/Match';
 
@@ -329,6 +329,8 @@ export function playerDetailPanel(team: 0 | 1, index: number, p = TEAMS[team].pl
 /** 기본 팀 데이터는 그대로 두어 온라인 명단이 로컬 편집의 영향을 받지 않게 한다. */
 export class SquadView {
   readonly lineups = TEAMS.map((team) => [...team.players]);
+  /** 팀별 포메이션 (다음 경기부터) */
+  readonly formations: FormationId[] = ['4-3-3', '4-3-3'];
   private readonly benches = TEAMS.map((team) => [...team.bench]);
   private team: 0 | 1 = 0;
   private selected: { bench: boolean; index: number } | null = null;
@@ -338,9 +340,11 @@ export class SquadView {
     const team = this.team;
     const card = (p: PlayerProfile, index: number, bench: boolean) => {
       const selected = this.selected?.bench === bench && this.selected.index === index;
-      const slot = !bench ? FORMATION_433[index] : null;
+      const formation = FORMATIONS[this.formations[team]];
+      const slot = !bench ? formation[index] : null;
       // 킥오프 슬롯이 모여 있는 자기 진영을 세로로 펼쳐 모든 카드 사이의 간격을 확보한다.
-      const lineWidth = slot ? Math.max(1, ...FORMATION_433.filter((s) => s.role === slot.role).map((s) => Math.abs(s.z))) : 1;
+      // 가로는 포메이션 전체 폭 기준 (투톱이 양 끝에 붙지 않게)
+      const lineWidth = Math.max(1, ...formation.map((s) => Math.abs(s.z)));
       const position = slot ? `left:${50 + slot.z / lineWidth * 38}%;top:${8 + (-slot.fx / PITCH.halfL) * 82}%` : '';
       const role = p.pos === 'GK' ? 'GK' : /^(LB|RB|CB)$/.test(p.pos) ? 'DEF' : /^(LW|RW|ST|CF)$/.test(p.pos) ? 'FWD' : 'MID';
       const initials = p.short.split(/[ .]+/).filter(Boolean).map((part) => part[0]).slice(0, 2).join('');
@@ -352,7 +356,7 @@ export class SquadView {
     const p = this.selected ? (this.selected.bench ? this.benches : this.lineups)[team][this.selected.index] : null;
     return `<section class="squad-view">
       <div class="squad-tabs" role="group" aria-label="팀 선택">${TEAMS.map((t, i) => `<button type="button" data-team="${i}" aria-pressed="${team === i}">${t.name}</button>`).join('')}</div>
-      <div class="squad-heading"><h3>4-3-3 <span>STARTING XI</span></h3><div class="squad-actions"><button type="button" data-clear>선택 해제</button><button type="button" data-reset>기본 명단</button></div></div>
+      <div class="squad-heading"><h3>${this.formations[team]} <span>STARTING XI</span></h3><div class="squad-actions" role="group" aria-label="포메이션">${FORMATION_IDS.map((f) => `<button type="button" data-formation="${f}" aria-pressed="${this.formations[team] === f}">${f}</button>`).join('')}</div><div class="squad-actions"><button type="button" data-clear>선택 해제</button><button type="button" data-reset>기본 명단</button></div></div>
       <div class="squad-board"><div class="squad-stage">
         <div class="squad-pitch" aria-label="선발 포메이션"><div class="pitch-lines" aria-hidden="true"><i></i></div>${this.lineups[team].map((p, i) => card(p, i, false)).join('')}</div>
       </div><aside class="squad-reserves" aria-label="교체 선수"><h4>BENCH <span>05</span></h4><div class="squad-bench">${this.benches[team].map((p, i) => card(p, i, true)).join('')}</div></aside></div>
@@ -478,6 +482,14 @@ export class SquadView {
       this.notice = '';
       refresh('[data-clear]');
     };
+    root.querySelectorAll<HTMLButtonElement>('[data-formation]').forEach((button) => {
+      button.onclick = () => {
+        this.formations[this.team] = button.dataset.formation as FormationId;
+        this.selected = null;
+        this.notice = `${this.formations[this.team]} 포메이션으로 바꿨어요. 다음 경기부터 적용해요.`;
+        refresh(`[data-formation="${this.formations[this.team]}"]`);
+      };
+    });
     root.querySelector<HTMLButtonElement>('[data-reset]')!.onclick = () => {
       this.lineups[this.team] = [...TEAMS[this.team].players];
       this.benches[this.team] = [...TEAMS[this.team].bench];

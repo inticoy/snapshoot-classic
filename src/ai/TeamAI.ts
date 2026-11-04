@@ -214,8 +214,9 @@ export class TeamAI {
       // 풀백만 공격 시 측면을 따라 올라가고 센터백은 역습에 대비한다.
       fx = Math.min(fx + (teamHasBall && fullback ? 12 : 0), ballF - (fullback ? 8 : 14));
     } else if (p.role === 'MID') {
-      // 세 미드필더가 같은 지점으로 모이지 않게 중앙은 후방, 양쪽은 전방 지원.
-      fx = teamHasBall ? ballF + (slot.label === 'CM' ? -10 : 2) : Math.min(slot.fx + 12 + ballF * 0.35, ballF - 8);
+      // 미드필더가 같은 지점으로 모이지 않게 중앙(수비형)은 후방, 나머지는 전방 지원.
+      const holding = slot.label === 'CM' || slot.label.endsWith('DM');
+      fx = teamHasBall ? ballF + (holding ? -10 : 2) : Math.min(slot.fx + 12 + ballF * 0.35, ballF - 8);
     } else if (p.role === 'FWD') {
       fx = teamHasBall ? ballF + (winger ? 16 : 22) : Math.max(0, ballF * 0.5 + 10);
     }
@@ -224,7 +225,8 @@ export class TeamAI {
     fx = THREE.MathUtils.clamp(fx, -PITCH.halfL + 4, PITCH.halfL - 5);
     let z = slot.z * a * (teamHasBall ? 1 : 0.8) + bp.z * 0.18;
     if (p.role === 'FWD' && !winger && teamHasBall) {
-      z = bp.z * 0.15 + Math.sin(this.match.elapsed / AI.runSwayPeriod + p.number) * 3;
+      // 투톱은 자기 쪽(slot.z)을 유지하며 좌우로 흔든다 (원톱은 slot.z = 0)
+      z = slot.z * a * 0.8 + bp.z * 0.15 + Math.sin(this.match.elapsed / AI.runSwayPeriod + p.number) * 3;
     }
     z = THREE.MathUtils.clamp(z, -PITCH.halfW + 3, PITCH.halfW - 3);
     return out.set(fx * a, 0, z);

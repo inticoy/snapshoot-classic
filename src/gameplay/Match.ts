@@ -13,7 +13,7 @@ import { n } from '../data/Stats';
 import { activePhysics } from '../physics/presets';
 import type { ButtonState } from '../core/Input';
 import { TEAMS, type PlayerProfile } from '../data/Teams';
-import { FORMATION_433 } from '../data/Formation';
+import { FORMATIONS, FORMATION_433, type FormationId } from '../data/Formation';
 import { SetPieces, type RestartKind } from './SetPieces';
 import { Keepers } from './Keepers';
 import { selectMotion } from '../anim/MotionLibrary';
@@ -2140,14 +2140,14 @@ export class Match {
     for (const o of this.officials.all) o.model.root.visible = o.item.visible = false;
   }
 
-  restart(lineups?: readonly (readonly PlayerProfile[])[]): void {
-    // 경기 시작 전에만 명단을 받아 외형·등번호·신체 정보도 새 선수와 함께 맞춘다.
-    if (lineups) {
+  restart(lineups?: readonly (readonly PlayerProfile[])[], formations?: readonly FormationId[]): void {
+    // 경기 시작 전에만 명단·포메이션을 받아 외형·등번호·신체 정보·자리도 새 선수와 함께 맞춘다.
+    if (lineups || formations) {
       for (const team of [0, 1] as const) {
-        FORMATION_433.forEach((slot, i) => {
+        FORMATIONS[formations?.[team] ?? '4-3-3'].forEach((slot, i) => {
           const index = team * FORMATION_433.length + i;
-          const profile = lineups[team][i];
-          if (this.roster[index].profile === profile) return;
+          const profile = lineups?.[team][i] ?? this.roster[index].profile;
+          if (this.roster[index].profile === profile && this.roster[index].slot === slot) return;
           this.roster[index] = new Player(team, slot.role, profile.number, profile.short, profile, slot, this.options.createPlayerModel);
         });
       }
@@ -2178,7 +2178,7 @@ export class Match {
       p.model.root.visible = true;
     }
     // 명단이 바뀌었으면 AI도 새 선수로
-    if (lineups) this.ai.reset();
+    if (lineups || formations) this.ai.reset();
     this.setSides(1);
     this.startKickoff(0);
   }

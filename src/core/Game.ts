@@ -579,7 +579,7 @@ export class Game {
     this.match.duration = this.online ? this.online.start.prefs[0].duration : DURATIONS[this.durationIndex];
     const oldPlayers = [...this.match.players];
     // 온라인은 전달된 명단 없이 시작해 양쪽 모두 기본 선수를 유지한다.
-    this.match.restart(this.online ? undefined : this.squad.lineups);
+    this.match.restart(this.online ? undefined : this.squad.lineups, this.online ? undefined : this.squad.formations);
     for (const p of oldPlayers) if (!this.match.players.includes(p)) this.scene.remove(p.model.root);
     for (const p of this.match.players) this.scene.add(p.model.root);
     this.hud.tick(`${TEAMS[0].name} vs ${TEAMS[1].name}`, 2.2);
