@@ -76,7 +76,8 @@ export class SkillPanel {
       <label class="pg-inline"><input type="checkbox" id="pg-skill-defender"> 수비수와 연습해요</label>
       <p class="pg-help" id="pg-demo-rating" role="status">선수의 개인기 별에 맞는 속도로 보여 줘요.</p>
       <div class="pg-row" role="group" aria-label="재생 속도">${SPEEDS.map((s) => `<button data-speed="${s}" aria-pressed="${s === 1}">${s === 1 ? '보통' : `${s}×`}</button>`).join('')}
-        <label class="pg-inline"><input type="checkbox" id="pg-repeat"> 반복</label></div>
+        <label class="pg-inline"><input type="checkbox" id="pg-repeat"> 반복</label>
+        <label class="pg-inline"><input type="checkbox" id="pg-skill-run"> 달리면서</label></div>
       <div class="pg-row" role="group" aria-label="카메라">${VIEWS.map((v) => `<button data-view="${v.id}" aria-pressed="${v.id === 'side'}">${v.label}</button>`).join('')}<button data-view="off" aria-pressed="false">경기 카메라</button></div>
       <p class="pg-last">방금 쓴 개인기 <b id="pg-last-skill">—</b></p>
       <p class="pg-help">입력 중 <output id="pg-skill-sequence" aria-live="polite">—</output></p>
@@ -112,9 +113,9 @@ export class SkillPanel {
     this.toast.setAttribute('role', 'status');
     document.body.append(this.toast);
     this.apply();
-    (window as unknown as { __skillDemo: (id: string) => boolean }).__skillDemo = (id) => {
+    (window as unknown as { __skillDemo: (id: string, speed?: number) => boolean }).__skillDemo = (id, speed) => {
       const def = SKILLS.find((s) => s.id === id);
-      return def ? this.demo(def) : false;
+      return def ? this.demo(def, speed) : false;
     };
   }
 
@@ -143,7 +144,8 @@ export class SkillPanel {
   }
 
   /** 선택한 압박 상황으로 되돌린 뒤 실제 선수 능력치로 개인기를 낸다. */
-  demo(def: SkillDef): boolean {
+  /** speed: 들어오는 속도 (m/s). 생략하면 '달리면서'를 켰을 때 드리블 속도(6m/s), 아니면 제자리 */
+  demo(def: SkillDef, speed?: number): boolean {
     this.resetPractice();
     const m = this.match, p = m.controlled;
     // 선수 별로 낼 수 있으면 실제 속도 그대로, 별이 모자라면 그 개인기에 필요한 최소 별로 보여 준다 (5성으로 빨라지지 않게)
@@ -151,10 +153,13 @@ export class SkillPanel {
       this.rating.textContent = `★${p.profile.skill} 선수는 별이 부족해요. ★${def.stars} 선수 속도로 보여 줘요.`;
       Object.defineProperty(p, 'profile', { value: { ...p.profile, skill: def.stars }, configurable: true });
     } else this.rating.textContent = `★${p.profile.skill} 선수의 실제 속도로 보여 줘요.`;
-    p.vel.set(0, 0, 0);
+    const run = speed ?? (this.toast.ownerDocument.querySelector<HTMLInputElement>('#pg-skill-run')?.checked ? 6 : 0);
     p.facing.copy(FACING);
+    p.vel.copy(FACING).multiplyScalar(run);
     p.actionLock = 0;
-    m.ball.reset(p.pos.x + 0.4, p.pos.z);
+    // 달리며 들어오면 출발 자리를 뒤로 물려 개인기가 연습장 가운데서 끝나게
+    if (run > 0) p.pos.addScaledVector(FACING, -run * 0.5);
+    m.ball.reset(p.pos.x + FACING.x * 0.4, p.pos.z + FACING.z * 0.4);
     m.ball.owner = p;
     const ok = m.skills.start(p, def);
     // 시범은 경기 스텝 밖에서 시작해 이벤트가 다음 스텝 전에 비워질 수 있으므로 바로 표시한다

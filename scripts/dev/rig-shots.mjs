@@ -1,6 +1,6 @@
 // 다리 IK 개인기 연속 컷: 연습장 ▶ 시범을 가까운 카메라·느린 화면으로 찍어 한 장에 모은다
 //   node scripts/dev/rig-shots.mjs [view=side|front|diag|back] [skillId...]
-//   RIG_FROM=0.3 RIG_TO=0.6 로 구간만 촘촘히 찍는다 (초)
+//   RIG_FROM=0.3 RIG_TO=0.6 로 구간만 촘촘히 찍는다 (초), RIG_SPEED=6 이면 그 속도로 달려 들어오며 쓴다
 import { mkdirSync, readFileSync } from 'node:fs';
 import { chromium } from 'playwright';
 import { chromePath } from '../chrome-path.mjs';
@@ -16,7 +16,7 @@ await page.locator(`[data-view="${view}"]`).evaluate((b) => b.click());
 await page.locator('[data-speed="0.25"]').evaluate((b) => b.click());
 mkdirSync('.artifacts/rig', { recursive: true });
 for (const id of skills) {
-  await page.evaluate((id) => window.__skillDemo(id), id);
+  await page.evaluate(([id, speed]) => window.__skillDemo(id, speed), [id, Number(process.env.RIG_SPEED ?? 0)]);
   const dur = await page.evaluate((id) => window.__game.match.skills.current(window.__game.match.controlled)?.duration ?? 0, id);
   const shots = [];
   const t0 = await page.evaluate(() => window.__game.match.elapsed);
@@ -27,7 +27,7 @@ for (const id of skills) {
   }
   const sheet = await browser.newPage({ viewport: { width: 2000, height: 1040 } });
   await sheet.setContent(`<body style="margin:0;display:grid;grid-template-columns:repeat(4,500px);background:#000">${shots.map((s, i) => `<div style="position:relative"><img src="data:image/png;base64,${s}"><span style="position:absolute;left:6px;top:4px;color:#ff0;font:16px sans-serif">${id} ${(from(dur) + (to(dur) - from(dur)) * i / 7).toFixed(2)}s</span></div>`).join('')}</body>`);
-  await sheet.screenshot({ path: `.artifacts/rig/${id}-${view}.png` });
+  await sheet.screenshot({ path: `.artifacts/rig/${id}-${view}${process.env.RIG_SPEED ? '-run' : ''}.png` });
   await sheet.close();
 }
 await browser.close();

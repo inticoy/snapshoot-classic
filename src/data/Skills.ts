@@ -1,6 +1,6 @@
 import { SKILL_CONTACTS } from './SkillContacts';
 import { mirror, type Dir, type SkillDef } from '../gameplay/Skills';
-import { dragBackRig, heelFlickRig, rainbowRig, rigKeys, stepOverRig } from './SkillRigs';
+import { RAINBOW_FLICK, dragBackRig, heelFlickRig, rainbowRig, rigKeys, stepOverRig } from './SkillRigs';
 
 /** 다리 IK 개인기: rig에서 body·ball 키를 만든다 */
 function rigged(def: SkillDef, rig: NonNullable<SkillDef['rig']>): SkillDef {
@@ -222,7 +222,8 @@ export function makeSkillDefs(): SkillDef[] {
   const RAINBOW: SkillDef = rigged({
     id: 'rainbow', name: '레인보우', stars: 4,
     trigger: { kind: 'shift', seq: [{ dir: 'B', tap: true }, { dir: 'F', tap: true }, { dir: 'F', tap: true }] },
-    duration: 0.9, carry: 0.2,
+    // 달리다 쓰면 몸은 달리던 속도의 절반 남짓으로 줄였다가, 차올린 공은 달리던 속도 그대로 앞으로 날아간다 (따라가 받기)
+    duration: 0.9, carry: 0.55, flight: { from: RAINBOW_FLICK.t, carry: 0.8 },
     body: [{ t: 0, x: 0, z: 0 }, { t: 0.38, x: 0, z: 0.05 }, { t: 0.92, x: 0, z: 0.75 }],
     ball: [{ t: 0, x: 0.05, z: 0.4 }, { t: 0.24, x: 0.03, z: 0.12 }, { t: 0.38, x: 0, z: -0.1, y: 0.2 }, { t: 0.62, x: 0, z: 0.5, y: 2.0 }, { t: 0.92, x: 0, z: 1.7, y: 0.7 }],
     contacts: [{ t: 0.1, foot: 'R' }, { t: 0.24, foot: 'R' }, { t: 0.37, foot: 'R' }, { t: 0.42, foot: 'L' }],

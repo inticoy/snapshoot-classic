@@ -50,8 +50,11 @@ export interface SkillDef {
   stars: number;
   trigger: Trigger;
   duration: number;
-  /** 들어올 때 앞으로 가던 속도를 이만큼 유지하며 동작한다 (body·ball z에 더해짐) */
+  /** 들어올 때 앞으로 가던 속도를 이만큼 유지하며 동작한다 (body·ball z에 더해짐).
+   *  한 번에 바뀌지 않고 CARRY_TAU초에 걸쳐 들어온 속도에서 이 비율로 줄어든다 (달리다 쓰면 급정거하지 않게) */
   carry: number;
+  /** 공이 발을 떠나 떠 있는 구간(사포 등): from부터 공은 그 순간 앞으로 가던 속도의 carry배를 그대로 유지한다 (몸이 감속해도 공은 안 늦춰짐) */
+  flight?: { from: number; carry: number };
   /** 옆 끌기는 보조키·방향을 누르는 동안 한 주기씩 이어 간다. */
   sustained?: boolean;
   body: Key[];
@@ -282,9 +285,44 @@ interface Active {
   /** 다리 IK 개인기의 이번 틱 자세 */
   rig: RigPose | null;
   legs: LegPose | null;
+  /** 디딘 발은 땅에 붙여 둔다: 발마다 마지막으로 적용한 앞쪽 이동량 (디딘 동안 고정, 들면 몸을 따라잡음) */
+  feet: { L: number; R: number };
+  /** 달리며 들어와 몸이 앞으로 가는 동안 디딘 발이 뒤처지면 내딛는 걸음 (t < 0 = 걷는 중 아님) */
+  steps: { L: FootStep; R: FootStep };
+}
+interface FootStep { t: number; from: number; to: number }
+
+/** 들어온 속도에서 carry 비율까지 줄어드는 시간 상수 (초) */
+const CARRY_TAU = 0.15;
+/** t까지 앞으로 간 거리 (들어온 속도 v0, 지수 감속 → v0·carry) */
+function carryOffset(a: Active, t: number): number {
+  const c = a.def.carry;
+  return a.v0 * (c * t + (1 - c) * CARRY_TAU * (1 - Math.exp(-t / CARRY_TAU)));
+}
+function carrySpeed(a: Active, t: number): number {
+  const c = a.def.carry;
+  return a.v0 * (c + (1 - c) * Math.exp(-t / CARRY_TAU));
+}
+/** 공의 앞쪽 이동: 떠 있는 구간부터는 떠난 순간 속도를 유지 */
+function ballOffset(a: Active, t: number): number {
+  const f = a.def.flight;
+  if (!f || t < f.from) return carryOffset(a, t);
+  return carryOffset(a, f.from) + a.v0 * f.carry * (t - f.from);
+}
+function ballSpeed(a: Active, t: number): number {
+  const f = a.def.flight;
+  return f && t >= f.from ? a.v0 * f.carry : carrySpeed(a, t);
 }
 
 const def = (id: string) => SKILLS.find((s) => s.id === id);
+/** 발목이 이 높이 이하면 디딘 발 (서 있을 때 0.07m) */
+const FOOT_PLANTED = 0.075;
+/** 디딘 발이 몸보다 이만큼 넘게 뒤처지면 끌려온다 (m) */
+const FOOT_LAG = 0.4;
+/** 디딘 발이 이만큼 뒤처지면 한 걸음 내딛는다: 걸음 시간(초)·발 드는 높이(m) */
+const STEP_TRIGGER = 0.2, STEP_TIME = 0.17, STEP_HEIGHT = 0.1;
+/** 접촉 순간 앞뒤 이만큼(초) 동안 발을 공 이동량에 맞춘다 */
+const CONTACT_BLEND = 0.12;
 const pose = { x: 0, z: 0, y: 0, yaw: 0 };
 const w = new THREE.Vector3();
 
@@ -328,7 +366,7 @@ export class SkillRunner {
     const v0 = Math.max(0, p.vel.x * fwd.x + p.vel.z * fwd.z);
     const a: Active = {
       def, p, t: 0, origin: p.pos.clone().setY(0), fwd, right: new THREE.Vector3(-fwd.z, 0, fwd.x), v0, contact: 0, baited: false, holding: false,
-      rate: 1 + (def.starScale ?? 0) * Math.max(0, p.profile.skill - def.stars), cut: null, rig: null,
+      rate: 1 + (def.starScale ?? 0) * Math.max(0, p.profile.skill - def.stars), cut: null, rig: null, feet: { L: 0, R: 0 }, steps: { L: { t: -1, from: 0, to: 0 }, R: { t: -1, from: 0, to: 0 } },
       legs: def.rig ? {
         L: { pos: new THREE.Vector3(), toe: new THREE.Vector3(), w: 0 }, R: { pos: new THREE.Vector3(), toe: new THREE.Vector3(), w: 0 },
         roll: 0, pitch: 0, drop: 0,
@@ -393,7 +431,11 @@ export class SkillRunner {
       }
       if (def.sustained && a.holding && a.t >= def.duration) {
         const end = def.body.at(-1)!;
-        a.origin.addScaledVector(a.right, end.x).addScaledVector(a.fwd, end.z);
+        // 다음 주기는 이번 주기 끝 자리·속도에서 이어 간다
+        const moved = carryOffset(a, def.duration);
+        a.origin.addScaledVector(a.right, end.x).addScaledVector(a.fwd, end.z + moved);
+        a.v0 = carrySpeed(a, def.duration);
+        a.feet.L -= moved; a.feet.R -= moved;
         a.t -= def.duration;
         a.contact = 0;
         this.playMotion(a);
@@ -403,9 +445,9 @@ export class SkillRunner {
       if (def.rig) {
         a.rig = def.rig(t);
         Object.assign(pose, { x: a.rig.x, z: a.rig.z, yaw: a.rig.yaw });
-        this.poseLegs(a, t);
+        this.poseLegs(a, t, dt);
       } else sample(def.body, t, pose);
-      this.toWorld(a, pose.x, pose.z + a.v0 * def.carry * t, w);
+      this.toWorld(a, pose.x, pose.z + carryOffset(a, t), w);
       p.vel.set((w.x - p.pos.x) / dt, 0, (w.z - p.pos.z) / dt);
       const yaw = pose.yaw;
       p.facing.copy(a.fwd).multiplyScalar(Math.cos(yaw)).addScaledVector(a.right, Math.sin(yaw));
@@ -434,7 +476,7 @@ export class SkillRunner {
     }
     if (a.rig) Object.assign(pose, a.rig.ball);
     else sample(def.ball, a.t, pose);
-    this.toWorld(a, pose.x, pose.z + a.v0 * def.carry * a.t, w);
+    this.toWorld(a, pose.x, pose.z + ballOffset(a, a.t), w);
     this.m.ball.setSkillRolling(true);
     const body = this.m.ball.body, bp = body.position;
     body.velocity.set((w.x - bp.x) / dt, (pose.y - bp.y) / dt, (w.z - bp.z) / dt);
@@ -444,12 +486,37 @@ export class SkillRunner {
   }
 
   /** 다리 IK 목표를 월드로 바꿔 선수에 건다 (화면 전용) */
-  private poseLegs(a: Active, t: number): void {
+  private poseLegs(a: Active, t: number, dt: number): void {
     const r = a.rig!, legs = a.legs!;
-    const carry = a.v0 * a.def.carry * t;
+    const carry = carryOffset(a, t);
     for (const side of ['L', 'R'] as const) {
       const f = r[side], out = legs[side];
-      this.toWorld(a, f.x, f.z + carry, out.pos).setY(f.y);
+      // 디딘 발은 땅에 그대로 두고(미끄러지지 않게), 든 발은 빠르게 몸을 따라잡는다.
+      // 달리며 들어와 몸이 앞으로 가면 디딘 발이 뒤처진다 → 한 걸음 내딛어 몸 앞으로 (한 번에 한 발만).
+      const st = a.steps[side], other = a.steps[side === 'L' ? 'R' : 'L'];
+      let y = f.y;
+      if (f.y > FOOT_PLANTED) {
+        st.t = -1;
+        // 남은 차이만 줄인다 (따라가기만 하면 몸이 빠를수록 늘 뒤처져 공에 닿는 순간 발이 늦다)
+        a.feet[side] = carry - (carry - a.feet[side]) * Math.exp(-dt * a.rate / 0.04);
+      } else if (st.t >= 0) {
+        st.t += dt;
+        const u = Math.min(1, st.t / STEP_TIME);
+        a.feet[side] = st.from + (st.to - st.from) * u * u * (3 - 2 * u);
+        y += STEP_HEIGHT * Math.sin(Math.PI * u);
+        if (u >= 1) st.t = -1;
+      } else if (carry - a.feet[side] > STEP_TRIGGER && other.t < 0) {
+        Object.assign(st, { t: 0, from: a.feet[side], to: carry + carrySpeed(a, t) * STEP_TIME * 0.8 + 0.08 });
+      }
+      // 다리가 닿지 않을 만큼 뒤처지면 그만큼만 끌려온다.
+      a.feet[side] = Math.max(a.feet[side], carry - FOOT_LAG);
+      // 이 발이 공에 닿는 순간 앞뒤로는 공과 같은 이동량 (공은 몸과 같이 간다) → 접촉 위치가 정확하다
+      for (const c of a.def.contacts) {
+        if (c.foot !== side) continue;
+        const k = 1 - Math.min(1, Math.abs(t - c.t) / CONTACT_BLEND);
+        if (k > 0) a.feet[side] += (ballOffset(a, t) - a.feet[side]) * k * k * (3 - 2 * k);
+      }
+      this.toWorld(a, f.x, f.z + a.feet[side], out.pos).setY(y);
       const c = Math.cos(f.pitch);
       out.toe.copy(a.fwd).multiplyScalar(Math.cos(f.yaw) * c).addScaledVector(a.right, Math.sin(f.yaw) * c).setY(Math.sin(f.pitch));
       out.w = f.w;
@@ -469,11 +536,11 @@ export class SkillRunner {
     if (!normal) return;
     // 끝 방향: 정해진 방향, 또는 그때 누른 방향
     let dir: THREE.Vector3;
-    let speed = def.exit.speed + a.v0 * def.carry, vy = 0;
+    let speed = def.exit.speed + carrySpeed(a, def.duration), vy = 0;
     if (def.rig) {
       // 다리 IK 개인기는 공이 마지막 순간 움직이던 그대로 나간다 (속도가 튀지 않게, 떠 있는 공은 포물선 그대로)
       const e = def.rig(def.duration).ball, s = def.rig(def.duration - 0.02).ball;
-      const lx = (e.x - s.x) / 0.02 * a.rate, lz = ((e.z - s.z) / 0.02 + a.v0 * def.carry) * a.rate;
+      const lx = (e.x - s.x) / 0.02 * a.rate, lz = ((e.z - s.z) / 0.02 + ballSpeed(a, def.duration)) * a.rate;
       dir = a.fwd.clone().multiplyScalar(lz).addScaledVector(a.right, lx);
       speed = Math.max(def.exit.speed * 0.5, dir.length());
       dir.normalize();
@@ -483,7 +550,7 @@ export class SkillRunner {
     this.m.ball.body.velocity.set(dir.x * speed, vy, dir.z * speed);
     this.m.skillLoft = vy > 1 ? p : null;
     this.m.ball.body.angularVelocity.set(dir.z * speed / BALL.radius, 0, -dir.x * speed / BALL.radius);
-    p.vel.copy(dir).multiplyScalar(def.exit.body + a.v0 * def.carry);
+    p.vel.copy(dir).multiplyScalar(def.exit.body + carrySpeed(a, def.duration));
     p.facing.copy(dir);
     if (def.exit.speed > 1.5) this.m.events.push({ type: 'touch', speed, player: p });
   }
