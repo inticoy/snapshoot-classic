@@ -804,6 +804,9 @@ export class Game {
           break;
         case 'restart':
           break;
+        case 'noGoal':
+          this.hud.tick('간접 프리킥 · 바로 들어간 골은 무효예요', 2.6);
+          break;
         case 'foul':
           this.sound.whistle([0.22]);
           this.hud.tick(`${e.penalty ? '페널티킥!' : '파울'} · ${e.by.profile.short}`, 2.2);

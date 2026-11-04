@@ -54,6 +54,9 @@ export class SetPieces {
 
   constructor(private readonly m: Match) {}
 
+  /** 간접 프리킥을 찬 선수: 다른 선수가 건드리기 전까지 (그대로 들어가면 골이 아니다). Match.checkGoal이 지운다 */
+  indirectTaker: Player | null = null;
+
   /** playing 중 매 스텝 호출. 아웃이면 true */
   checkOut(): boolean {
     const bp = this.m.ball.position;
@@ -94,6 +97,7 @@ export class SetPieces {
     m.phase = 'out';
     m.rules.clearPlay();
     m.cancelWindups();
+    this.indirectTaker = null;
     this.outTimer = OUT_DELAY;
     m.charge = null;
     m.passTarget = null;
@@ -202,7 +206,8 @@ export class SetPieces {
       }
       if (m.charge) {
         const btn = cmd[m.charge.kind];
-        const shot = m.charge.kind === 'shoot' && (sp.kind === 'freekick' || sp.kind === 'penalty');
+        // 간접 프리킥도 슛은 할 수 있다 (바로 들어가면 무효 — Match.checkGoal)
+        const shot = m.charge.kind === 'shoot' && (sp.kind === 'freekick' || sp.kind === 'indirect' || sp.kind === 'penalty');
         m.charge.value = Math.min(1, m.charge.value + dt / (shot ? 1.0 : PASS.chargeTime));
         if (cmd.finesse.held) m.charge.finesse = true;
         if (btn.released || !btn.held) {
@@ -450,6 +455,7 @@ export class SetPieces {
     }
     // 키커는 다른 선수가 건드리기 전에 다시 만질 수 없다 (더블 터치 금지)
     t.kickCooldown = 0.8;
+    this.indirectTaker = sp.kind === 'indirect' ? t : null;
     this.current = null;
     m.switchOffKeepers();
   }

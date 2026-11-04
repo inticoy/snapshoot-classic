@@ -54,6 +54,7 @@ export type MatchEvent =
   | { type: 'skill'; id: string; player: Player }
   | { type: 'skillFail'; id: string; player: Player; reason: 'stars' | 'distance' | 'height' | 'busy' }
   | { type: 'out'; kind: RestartKind; team: 0 | 1 }
+  | { type: 'noGoal'; reason: 'indirect' }
   | { type: 'restart'; kind: RestartKind; team: 0 | 1 };
 
 interface UserKick {
@@ -2037,8 +2038,17 @@ export class Match {
 
   private checkGoal(): void {
     const bp = this.ball.position;
+    // 간접 프리킥: 키커 말고 누군가 건드리면(굴절·키퍼 포함) 그다음부터는 골이 된다
+    const indirect = this.setPieces.indirectTaker;
+    if (indirect && this.ball.lastTouch !== indirect) this.setPieces.indirectTaker = null;
     if (Math.abs(bp.x) < PITCH.halfL + BALL.radius) return;
     if (Math.abs(bp.z) > GOAL.width / 2 || bp.y > GOAL.height) return;
+    if (this.setPieces.indirectTaker) {
+      // 간접 프리킥을 아무도 건드리지 않고 바로 넣으면 골이 아니다 → 골라인 아웃으로 (상대 골문이면 골킥, 자기 골문이면 코너킥)
+      this.setPieces.indirectTaker = null;
+      this.events.push({ type: 'noGoal', reason: 'indirect' });
+      return;
+    }
     // 공이 들어간 골대 쪽으로 공격하는 팀의 득점 (후반에는 진영이 바뀐다)
     const team: 0 | 1 = Math.sign(bp.x) === this.teams[0][0].attackDir ? 0 : 1;
     this.rules.addStoppage(0.5);

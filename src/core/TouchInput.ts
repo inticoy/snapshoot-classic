@@ -24,7 +24,7 @@ interface Contact { x: number; y: number; slot?: TouchSlot; action?: Action; fli
 export function visibleSlots(mode: TouchMode): TouchSlot[] {
   if (mode === 'attack') return ['shoot', 'pass', 'sprint', 'pause'];
   if (mode === 'defence') return ['shoot', 'pass', 'through', 'sprint', 'pause'];
-  if (mode === 'freekick') return ['shoot', 'pass', 'lob', 'pause'];
+  if (mode === 'freekick' || mode === 'indirect') return ['shoot', 'pass', 'lob', 'pause'];
   // PK: 조이스틱 위/아래로 구석을 고르고 슛 / 상대 PK: 조이스틱으로 다이빙 방향만
   if (mode === 'penalty') return ['shoot', 'pause'];
   if (mode === 'keeper') return ['pause'];
@@ -36,7 +36,7 @@ export function swipeHint(mode: TouchMode, slot: TouchSlot): string {
   if (mode === 'attack' && slot === 'pass') return '↑스루 ↓로빙';
   if (mode === 'attack' && slot === 'shoot') return '↑칩슛 ↔감아';
   if (mode === 'defence' && slot === 'shoot') return '밀면 슬라이딩';
-  if (mode === 'freekick' && slot === 'shoot') return '↔감아차기';
+  if ((mode === 'freekick' || mode === 'indirect') && slot === 'shoot') return '↔감아차기';
   if (mode === 'penalty' && slot === 'shoot') return '꾹 눌러 조절';
   return '';
 }
@@ -121,7 +121,7 @@ export class TouchInput {
       this.joystick = null;
       this.input.setMove(0, 0);
     } else {
-      if (start.slot === 'shoot' && (this.mode === 'attack' || this.mode === 'freekick')) {
+      if (start.slot === 'shoot' && (this.mode === 'attack' || this.mode === 'freekick' || this.mode === 'indirect')) {
         const dx = x - start.x, dy = y - start.y;
         if (-dy >= TOUCH.swipeDistance && -dy > Math.abs(dx)) this.input.pulse('modifier');
         else if (Math.abs(dx) >= TOUCH.swipeDistance && Math.abs(dx) >= Math.abs(dy)) this.input.pulse('finesse');
