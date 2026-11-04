@@ -1,6 +1,6 @@
 import { SKILL_CONTACTS } from './SkillContacts';
 import { mirror, type Dir, type SkillDef } from '../gameplay/Skills';
-import { RAINBOW_FLICK, dragBackRig, heelFlickRig, rainbowRig, rigKeys, stepOverRig } from './SkillRigs';
+import { RAINBOW_FLICK, dragBackRig, elasticoRig, heelFlickRig, rainbowRig, rigKeys, stepOverRig } from './SkillRigs';
 
 /** 다리 IK 개인기: rig에서 body·ball 키를 만든다 */
 function rigged(def: SkillDef, rig: NonNullable<SkillDef['rig']>): SkillDef {
@@ -184,17 +184,16 @@ export function makeSkillDefs(): SkillDef[] {
   };
   /** 엘라스티코 (Shift + →↘↓↙←, ★5): 오른발 바깥으로 밀었다가 같은 발 안쪽으로 왼쪽으로 낚아챈다.
    *  같은 커맨드의 ★3 '오른쪽 페인트 후 왼쪽'보다 별이 높은 선수에게 나간다 */
-  const ELASTICO: SkillDef = {
+  const ELASTICO: SkillDef = rigged({
     id: 'elastico', name: '엘라스티코', stars: 5,
     trigger: { kind: 'shift', seq: ['R', 'BR', 'B', 'BL', 'L'].map((dir) => ({ dir: dir as Dir })) },
     duration: 0.58, carry: 0.5, starScale: 0.05,
-    body: [{ t: 0, x: 0, z: 0, yaw: 0 }, { t: 0.24, x: 0.08, z: 0.04, yaw: 0.3 }, { t: 0.58, x: -0.35, z: 0.25, yaw: -0.6 }],
-    ball: [{ t: 0, x: 0.1, z: 0.45 }, { t: 0.24, x: 0.22, z: 0.5 }, { t: 0.38, x: 0.04, z: 0.55 }, { t: 0.58, x: -0.6, z: 0.75 }],
-    contacts: [{ t: 0.24, foot: 'R' }, { t: 0.38, foot: 'R' }],
-    motion: { id: 'grf_ballcontrol_idle_045_accel', flat: true, kind: 'control', angle: -Math.PI / 4 },
+    body: [], ball: [],
+    contacts: [{ t: 0.14, foot: 'R' }, { t: 0.26, foot: 'R' }, { t: 0.32, foot: 'R' }, { t: 0.44, foot: 'R' }],
+    motion: { id: 'grf_ballcontrol_idle_000', flat: true, kind: 'control', angle: 0 },
     exit: { dir: -Math.PI / 3, speed: 3, body: 2.6 },
-    bait: { t: 0.1, dir: Math.PI / 2, strength: 1.1 }, shield: 0.65,
-  };
+    bait: { t: 0.16, dir: Math.PI / 2, strength: 1.1 }, shield: 0.65,
+  }, elasticoRig());
   /** 엘라스티코 촙 (Shift + ↓→ 탭, ★5): 왼발로 공을 디딤발 뒤로 감아 오른쪽으로 꺾는다 */
   const ELASTICO_CHOP: SkillDef = {
     id: 'elastico_chop_r', name: '오른쪽 엘라스티코 촙', stars: 5,
