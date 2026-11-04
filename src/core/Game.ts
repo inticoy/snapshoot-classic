@@ -15,7 +15,7 @@ import { IDLE_COMMAND, Match, type TeamAssist, type UserCommand } from '../gamep
 import { CAMERA_LABEL, CameraRig } from '../camera/CameraRig';
 import { Hud } from '../ui/Hud';
 import { Menu, assistPanel, controlsPanel, matchupPanel, SquadView, statsPanel, type MenuScreen } from '../ui/Menu';
-import { ASSIST_LABEL, MOVE_ASSIST_LABEL, GRAPHICS_LABEL, cycleAssist, cycleMoveAssist, cycleGraphics, graphicsQuality, settings, setDuration, togglePhysicsPreset, toggleShootout } from './Settings';
+import { ASSIST_LABEL, DIFFICULTY_LABEL, MOVE_ASSIST_LABEL, GRAPHICS_LABEL, cycleAssist, cycleDifficulty, cycleMoveAssist, cycleGraphics, graphicsQuality, settings, setDuration, togglePhysicsPreset, toggleShootout } from './Settings';
 import { PRESET_LABEL, activePhysics, setActivePhysics } from '../physics/presets';
 import { Sound } from '../audio/Sound';
 import { categoryVolume, decideTouchSound } from '../audio/Mix';
@@ -143,7 +143,7 @@ export class Game {
         assists: online.start.prefs.map((p) => ({ pass: p.pass, shot: p.shot, move: p.move })) as [TeamAssist, TeamAssist],
         shootout: online.start.prefs[0].shootout,
       }
-      : { practice: !!options.playground });
+      : { practice: !!options.playground, difficulty: settings.difficulty });
     if (online) {
       this.lockstep = new Lockstep(this.match, online.start.team, online.session, online.start.delay);
       online.session.onData = (team, data) => this.lockstep!.receive(data, team);
@@ -240,6 +240,14 @@ export class Game {
 
   private settingsItems(): MenuScreen['items'] {
     return [
+      {
+        id: 'difficulty',
+        label: '난이도',
+        value: () => DIFFICULTY_LABEL[settings.difficulty],
+        onLeft: () => this.setDifficulty(-1),
+        onRight: () => this.setDifficulty(1),
+        panel: () => `<div class="card"><h3>난이도</h3><p>상대 AI가 얼마나 빨리 판단하고, 얼마나 자주 태클·개인기를 쓰고, 패스·슛이 얼마나 정확한지 정해요.<br/><br/><b>아마추어</b> · 판단이 두 배 느리고 태클을 거의 안 해요<br/><b>세미프로 · 프로</b> · 조금씩 느슨해요<br/><b>월드 클래스</b> · 기본 AI 그대로<br/><b>레전드 · 얼티밋</b> · 더 빨리 판단하고 더 자주 태클하며 패스·슛이 정확해요<br/><br/>내 팀 동료 AI와 온라인 대전에는 적용하지 않아요. 경기 중에 바꿔도 바로 적용돼요.</p></div>`,
+      },
       {
         id: 'passAssist',
         label: '패스 보조',
@@ -586,6 +594,12 @@ export class Game {
     this.state = 'playing';
     this.hud.show(true);
     void this.sound.unlock();
+  }
+
+  /** 혼자 하는 경기는 바로 적용 (온라인은 양쪽이 사람이라 난이도가 없다) */
+  private setDifficulty(dir: 1 | -1): void {
+    cycleDifficulty(dir);
+    if (!this.lockstep) this.match.setDifficulty(settings.difficulty);
   }
 
   private togglePhysics(): void {

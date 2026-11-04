@@ -65,7 +65,7 @@ export class TeamAI {
       let t = this.timers.get(p)! - dt;
       if (t <= 0) {
         // 반응 속도가 좋을수록 상황 판단이 빠르다
-        t += AI.reaction * (1.35 - 0.6 * n(p.profile.stats.reactions));
+        t += AI.reaction * (1.35 - 0.6 * n(p.profile.stats.reactions)) * m.aiLevel(p.team).reaction;
         this.decide(p);
       }
       this.timers.set(p, t);
@@ -308,7 +308,7 @@ export class TeamAI {
     const close = m.teams[1 - p.team].filter((o) => !o.isKeeper && o.pos.distanceTo(p.pos) < SKILL_AI.range);
     if (close.length === 1 && !this.skillCooldown.get(p)) {
       tmp.copy(close[0].pos).sub(p.pos).normalize();
-      if (tmp.dot(p.facing) >= SKILL_AI.front && m.random.next() < SKILL_AI.chance) {
+      if (tmp.dot(p.facing) >= SKILL_AI.front && m.random.next() < SKILL_AI.chance * m.aiLevel(p.team).skill) {
         // 레인보우는 공이 오래 떠 있어 1:1 정면에서 AI가 다시 잡기 어렵다 (20경기 시험에서 슛이 줄었다) → AI는 쓰지 않는다
         const choices = SKILLS.filter((s) => s.stars <= p.profile.skill && s.stars >= 2 && !s.sustained && s.trigger.kind === 'shift' && s.id !== 'rainbow');
         const def = choices[Math.floor(m.random.next() * choices.length)];
@@ -422,7 +422,7 @@ export class TeamAI {
     if (p.tackleCooldown > 0 || p.busy) return;
     const d = carrier.pos.distanceTo(p.pos);
     if (d > 1.5) return;
-    const chance = 1 - Math.exp(-AI.tackleChancePerSec * AI.reaction);
+    const chance = 1 - Math.exp(-AI.tackleChancePerSec * this.match.aiLevel(p.team).tackle * AI.reaction);
     if (this.match.random.next() < chance) {
       const bp = this.match.ball.position;
       tmp.set(bp.x - p.pos.x, 0, bp.z - p.pos.z).normalize();

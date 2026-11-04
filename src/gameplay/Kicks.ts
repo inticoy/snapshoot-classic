@@ -102,7 +102,7 @@ export class Kicks {
     const foot = this.footFactor(p);
     const spread =
       (0.12 + 0.75 * charge * charge + toGoal * 0.012) * (1.7 - 1.2 * acc) * this.pressureFactor(p) * foot.factor * (style === 'driven' ? COMMAND.drivenShotError : style === 'flair' ? COMMAND.flairError : style === 'power' ? (timed ? COMMAND.timedError : COMMAND.powerError) : 1);
-    targetZ += this.m.random.gauss() * spread;
+    targetZ += this.m.random.gauss() * spread * this.m.aiLevel(p.team).error;
 
     // 3) 속도 (슛 파워)
     const power = 0.86 + 0.24 * n(s.shotPower);
@@ -222,7 +222,7 @@ export class Kicks {
     const acc = long ? n(s.longPassing) * 0.8 + n(s.vision) * 0.2 : n(s.shortPassing) * 0.85 + n(s.vision) * 0.15;
     const foot = this.footFactor(p);
     const err = (0.012 + 0.05 * (1 - acc)) * (1 + D / 35) * this.pressureFactor(p) * foot.factor;
-    const angle = this.m.random.gauss() * err * (flair ? COMMAND.flairError : driven ? PASS.drivenError : 1);
+    const angle = this.m.random.gauss() * err * (flair ? COMMAND.flairError : driven ? PASS.drivenError : 1) * this.m.aiLevel(p.team).error;
     const dir2 = new THREE.Vector3(tx - bp.x, 0, tz - bp.z).normalize().applyAxisAngle(new THREE.Vector3(0, 1, 0), angle);
     const speedErr = 1 + this.m.random.gauss() * (0.03 + 0.08 * (1 - acc)) * foot.factor;
 

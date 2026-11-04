@@ -8,7 +8,7 @@ import { Player, type PlayerModelFactory } from '../entities/Player';
 import type { PhysicsWorld } from '../physics/PhysicsWorld';
 import { TeamAI } from '../ai/TeamAI';
 import { Kicks, type KickResult, type PassKind } from './Kicks';
-import { MOVE_ASSIST_TIME, settings, type AssistLevel, type MoveAssist } from '../core/Settings';
+import { DIFFICULTY, MOVE_ASSIST_TIME, settings, type AssistLevel, type Difficulty, type MoveAssist } from '../core/Settings';
 import { n } from '../data/Stats';
 import { activePhysics } from '../physics/presets';
 import type { ButtonState } from '../core/Input';
@@ -131,6 +131,8 @@ export interface MatchOptions {
   userControl?: boolean;
   /** 무승부면 승부차기 (기본: 설정값) */
   shootout?: boolean;
+  /** 상대 AI 난이도 (사람이 조작하지 않는 팀에만). 없으면 월드 클래스 = 기본 AI */
+  difficulty?: Difficulty;
   /**
    * 킥 동작: 버튼을 뗀 뒤 동작에 맞춰 몸 방향을 정하고 발이 닿는 순간에 공이 나간다 (기본 켜짐).
    * 끄면 예전처럼 즉시 찬다 (기존 물리·조작 테스트용)
@@ -347,6 +349,16 @@ export class Match {
 
   oppGoalX(team: 0 | 1): number {
     return -this.ownGoalX(team);
+  }
+
+  setDifficulty(d: Difficulty): void {
+    this.options.difficulty = d;
+  }
+
+  /** 이 팀 AI의 난이도 배수. 사람이 조작하는 팀(그 팀 동료 AI 포함)·연습은 기본값 */
+  aiLevel(team: 0 | 1): (typeof DIFFICULTY)[Difficulty] {
+    if (this.sides[team].active || this.practice) return DIFFICULTY.worldclass;
+    return DIFFICULTY[this.options.difficulty ?? 'worldclass'];
   }
 
   isUserControlled(p: Player): boolean {
