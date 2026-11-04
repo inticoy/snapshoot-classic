@@ -1,9 +1,11 @@
 // 다리 IK 개인기 연속 컷: 연습장 ▶ 시범을 가까운 카메라·느린 화면으로 찍어 한 장에 모은다
 //   node scripts/dev/rig-shots.mjs [view=side|front|diag|back] [skillId...]
+//   RIG_FROM=0.3 RIG_TO=0.6 로 구간만 촘촘히 찍는다 (초)
 import { mkdirSync, readFileSync } from 'node:fs';
 import { chromium } from 'playwright';
 import { chromePath } from '../chrome-path.mjs';
 const [view = 'side', ...ids] = process.argv.slice(2);
+const from = () => Number(process.env.RIG_FROM ?? 0), to = (dur) => Number(process.env.RIG_TO ?? dur);
 const skills = ids.length ? ids : ['step_over_r', 'heel_flick', 'roulette_r', 'rainbow'];
 const browser = await chromium.launch({ executablePath: await chromePath() });
 const page = await browser.newPage({ viewport: { width: 900, height: 600 } });
@@ -19,12 +21,12 @@ for (const id of skills) {
   const shots = [];
   const t0 = await page.evaluate(() => window.__game.match.elapsed);
   for (let k = 0; k < 8; k++) {
-    const target = t0 + (dur * k) / 7;
+    const target = t0 + from(dur) + ((to(dur) - from(dur)) * k) / 7;
     await page.waitForFunction((t) => window.__game.match.elapsed >= t, target, { timeout: 20000 });
     shots.push((await page.screenshot({ clip: { x: 200, y: 60, width: 500, height: 520 } })).toString('base64'));
   }
   const sheet = await browser.newPage({ viewport: { width: 2000, height: 1040 } });
-  await sheet.setContent(`<body style="margin:0;display:grid;grid-template-columns:repeat(4,500px);background:#000">${shots.map((s, i) => `<div style="position:relative"><img src="data:image/png;base64,${s}"><span style="position:absolute;left:6px;top:4px;color:#ff0;font:16px sans-serif">${id} ${(dur * i / 7).toFixed(2)}s</span></div>`).join('')}</body>`);
+  await sheet.setContent(`<body style="margin:0;display:grid;grid-template-columns:repeat(4,500px);background:#000">${shots.map((s, i) => `<div style="position:relative"><img src="data:image/png;base64,${s}"><span style="position:absolute;left:6px;top:4px;color:#ff0;font:16px sans-serif">${id} ${(from(dur) + (to(dur) - from(dur)) * i / 7).toFixed(2)}s</span></div>`).join('')}</body>`);
   await sheet.screenshot({ path: `.artifacts/rig/${id}-${view}.png` });
   await sheet.close();
 }

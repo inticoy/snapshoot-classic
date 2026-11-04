@@ -218,15 +218,14 @@ export function makeSkillDefs(): SkillDef[] {
     motion: { id: 'grf_ballcontrol_walk_000_decel_decel', flat: true, kind: 'control', angle: 0 },
     exit: { dir: 0, speed: 0, body: 0 }, shield: 0.6,
   };
-  /** 레인보우 (Shift + ↓↑↑ 탭, ★4): 공을 발뒤꿈치로 차올려 머리 위로 넘긴다 */
-  /** 사포 */
+  /** 레인보우·사포 (Shift + ↓↑↑ 탭, ★4): 공을 왼쪽 종아리 뒤로 올려 아킬레스로 차올려 머리 위로 넘긴다 (SkillRigs.rainbowRig) */
   const RAINBOW: SkillDef = rigged({
     id: 'rainbow', name: '레인보우', stars: 4,
     trigger: { kind: 'shift', seq: [{ dir: 'B', tap: true }, { dir: 'F', tap: true }, { dir: 'F', tap: true }] },
     duration: 0.9, carry: 0.2,
     body: [{ t: 0, x: 0, z: 0 }, { t: 0.38, x: 0, z: 0.05 }, { t: 0.92, x: 0, z: 0.75 }],
     ball: [{ t: 0, x: 0.05, z: 0.4 }, { t: 0.24, x: 0.03, z: 0.12 }, { t: 0.38, x: 0, z: -0.1, y: 0.2 }, { t: 0.62, x: 0, z: 0.5, y: 2.0 }, { t: 0.92, x: 0, z: 1.7, y: 0.7 }],
-    contacts: [{ t: 0.1, foot: 'R' }, { t: 0.24, foot: 'R' }, { t: 0.42, foot: 'L' }],
+    contacts: [{ t: 0.1, foot: 'R' }, { t: 0.24, foot: 'R' }, { t: 0.37, foot: 'R' }, { t: 0.42, foot: 'L' }],
     motion: { id: 'grf_ballcontrol_idle_000', flat: true, kind: 'control', angle: 0 },
     exit: { dir: 0, speed: 3, body: 3 },
     bait: { t: 0.35, dir: 0, strength: 0.6 }, shield: 0.6,

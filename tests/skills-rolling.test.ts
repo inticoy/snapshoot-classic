@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 import { BALL } from '../src/config';
-import { dragBackRig, heelFlickRig, rainbowRig, rouletteRig, stepOverRig } from '../src/data/SkillRigs';
+import { RAINBOW_FLICK, dragBackRig, heelFlickRig, rainbowRig, rouletteRig, stepOverRig } from '../src/data/SkillRigs';
 import { SKILLS, type RigPose } from '../src/gameplay/Skills';
 import { REAL, SKILL_ROLL_DECEL } from '../src/physics/presets';
 import { simulation } from './helpers';
@@ -29,8 +29,24 @@ describe('개인기 터치 사이 공 구름', () => {
     expect(toe.distanceTo(position(pose))).toBeCloseTo(BALL.radius, 8);
   });
 
-  it.each([['힐 플릭', heelFlickRig, 0.2], ['레인보우', rainbowRig, 0.42]] as const)('뒤꿈치 접촉면도 공 중심과 반지름만큼 떨어진다 (%s)', (_name, makeRig, t) => {
-    const pose = makeRig()(t), foot = t === 0.2 ? pose.R : pose.L;
+  it('레인보우는 아킬레스(발목 바로 위 5cm)로 공을 받쳐 차올린다', () => {
+    const pose = rainbowRig()(RAINBOW_FLICK.t), foot = pose.L;
+    expect(new THREE.Vector3(foot.x, foot.y + 0.05, foot.z).distanceTo(position(pose))).toBeCloseTo(BALL.radius, 8);
+  });
+
+  it('레인보우 공은 등 뒤에서 솟아 머리 위로 넘어간다 (몸 앞쪽으로 가기 전에 2m 위)', () => {
+    const { p0, v } = RAINBOW_FLICK;
+    // 상체를 숙여 머리가 발 앞 약 0.45m에 있다: 공이 그 앞뒤 위치에 올 때 2m 넘게 떠 있어야 머리를 넘는다
+    const s = (0.45 - p0[2]) / v[2];
+    expect(p0[1] + v[1] * s - 0.5 * REAL.gravity * s * s).toBeGreaterThan(2);
+    // 차올린 공은 앞으로 2m 안팎에 떨어진다 (3m 넘게 날아가면 돌파가 아니라 걷어내기)
+    const land = (v[1] + Math.sqrt(v[1] * v[1] + 2 * REAL.gravity * (p0[1] - BALL.radius))) / REAL.gravity;
+    expect(p0[2] + v[2] * land).toBeGreaterThan(1.5);
+    expect(p0[2] + v[2] * land).toBeLessThan(3);
+  });
+
+  it.each([['힐 플릭', heelFlickRig, 0.2]] as const)('뒤꿈치 접촉면도 공 중심과 반지름만큼 떨어진다 (%s)', (_name, makeRig, t) => {
+    const pose = makeRig()(t), foot = pose.R;
     const heel = new THREE.Vector3(foot.x, foot.y, foot.z).add(new THREE.Vector3(
       -Math.sin(foot.yaw) * Math.cos(foot.pitch), -Math.sin(foot.pitch), -Math.cos(foot.yaw) * Math.cos(foot.pitch),
     ).multiplyScalar(0.05));
@@ -46,11 +62,12 @@ describe('개인기 터치 사이 공 구름', () => {
 
   it('레인보우는 키 사이에서도 중력 포물선을 유지한다', () => {
     const rig = rainbowRig();
-    for (const t of [0.421, 0.435, 0.713, 0.899, 0.9]) {
-      const s = t - 0.42, ball = rig(t).ball;
-      expect(ball.x).toBeCloseTo(-0.04 + 0.06 * s, 10);
-      expect(ball.y).toBeCloseTo(0.32 + 6.7 * s - 0.5 * REAL.gravity * s * s, 10);
-      expect(ball.z).toBeCloseTo(-0.34 + 2.3 * s, 10);
+    const { t: T, p0, v } = RAINBOW_FLICK;
+    for (const t of [T + 0.001, T + 0.015, 0.713, 0.899, 0.9]) {
+      const s = t - T, ball = rig(t).ball;
+      expect(ball.x).toBeCloseTo(p0[0] + v[0] * s, 10);
+      expect(ball.y).toBeCloseTo(p0[1] + v[1] * s - 0.5 * REAL.gravity * s * s, 10);
+      expect(ball.z).toBeCloseTo(p0[2] + v[2] * s, 10);
     }
   });
 

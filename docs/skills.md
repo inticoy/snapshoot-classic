@@ -61,7 +61,14 @@ Z 패스 3종은 방향 오차가 15% 늘어난다. 보조·세미·수동 보�
 공이 닿는 순간은 `sole`(발바닥)·`heel`(뒤꿈치)·`inside`(발 안쪽)·`instep`(발등) 도우미로 '그 공 자리에 발 부위가 오도록' 발목을 계산하므로 공과 발이 같은 숫자에서 나온다.
 경기 상태(공·몸)는 이 함수만 쓰고 IK는 화면 전용이라 온라인 결정성에 영향이 없다.
 
-점검: `pnpm exec vite-node scripts/dev/rig-check.ts [id]` (IK 오차·접촉 거리), `node scripts/dev/rig-shots.mjs side|front|diag|back [id]` (연속 컷 → `.artifacts/rig/`).
+점검: `pnpm exec vite-node scripts/dev/rig-check.ts [id]` (IK 오차·접촉 거리), `pnpm exec vite-node scripts/dev/rig-clear.ts [id]` (공이 몸통·머리·허벅지를 뚫는지, 발목 각도), `node scripts/dev/rig-shots.mjs side|front|diag|back [id]` (연속 컷 → `.artifacts/rig/`, `RIG_FROM`·`RIG_TO`로 구간 확대).
+
+발목은 화면 IK가 사람 가동 범위로 제한한다 (`SkinnedPlayerModel.clampAnkle`): 바인드 자세 기준 발등 쪽 30°, 발바닥 쪽 50°, 정강이 축 비틀림 35°. 무릎은 발끝을 돌린 쪽으로 같이 돈다(엉덩이 회전). 몸 숙이기(`pitch`)는 40%만 발 기준으로 기울이고 나머지는 허리를 접어 엉덩이가 앞으로 쏠리지 않게 한다.
+
+### 동작 만드는 법 (참고 영상)
+실제 사람 슬로 영상을 `yt-dlp`로 받아 `ffmpeg`로 0.1초 간격 컷 시트를 만들고, 접촉 순간·공 경로·몸 기울기·발 방향을 키로 옮긴다. 게임 화면이 아니라 실제 사람 영상을 참고한다.
+
+- **사포**: 오른발 바닥으로 공을 몸 아래로 끌고 → 왼발은 공 왼쪽 앞에 디딤 → 오른발 발등을 공 밑에 넣어 왼쪽 종아리 뒤로 올림 → 상체를 30°쯤 숙인 채 오른발로 살짝 뛰며 왼발 아킬레스로 차올림(발끝은 정강이를 따라 뒤로) → 공은 등 뒤에서 솟아 약 2.9m 꼭대기, 2.3m 앞에 떨어진다. 끝난 뒤 공이 내려올 때까지 드리블 처리가 공을 잡지 않는다(`Match.skillLoft`).
 
 ## 연습장 (`?playground`)
 

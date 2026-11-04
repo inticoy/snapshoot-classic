@@ -481,6 +481,7 @@ export class SkillRunner {
     } else dir = a.fwd.clone().multiplyScalar(Math.cos(def.exit.dir)).addScaledVector(a.right, Math.sin(def.exit.dir));
     if (def.exit.input && move && move.lengthSq() > 0.25) dir = move.clone().setY(0).normalize();
     this.m.ball.body.velocity.set(dir.x * speed, vy, dir.z * speed);
+    this.m.skillLoft = vy > 1 ? p : null;
     this.m.ball.body.angularVelocity.set(dir.z * speed / BALL.radius, 0, -dir.x * speed / BALL.radius);
     p.vel.copy(dir).multiplyScalar(def.exit.body + a.v0 * def.carry);
     p.facing.copy(dir);

@@ -277,6 +277,8 @@ export class Match {
   duration: number = MATCH.durationSeconds;
   private pendingPass: 0 | 1 | null = null;
   private dinkFlight = false;
+  /** 개인기로 띄운 공(사포 등)을 가진 선수: 공이 내려올 때까지 드리블 처리가 공을 잡지 않고 포물선 그대로 둔다 */
+  skillLoft: Player | null = null;
   passTarget: Player | null = null;
   lastScorer: Player | null = null;
   private kickoffTeam: 0 | 1 = 0;
@@ -1650,6 +1652,13 @@ export class Match {
       return;
     }
     if (this.skills.driveBall(dt, this.isUserControlled(o) ? this.sides[o.team].lastMove : null)) return;
+    // 개인기로 띄운 공: 드리블이 위로 가는 속도를 지우거나 공중에서 발바닥으로 세우지 않게, 무릎 아래로 내려올 때까지 그대로 날린다.
+    // 그동안 소유는 유지하고(따라가 받기), 내려온 뒤 너무 멀면 평소처럼 헤비 터치로 놓친다.
+    if (this.skillLoft === o) {
+      const b = this.ball.body;
+      if (b.position.y > BALL.radius + 0.25 || b.velocity.y > 0.5) return;
+      this.skillLoft = null;
+    } else this.skillLoft = null;
     // 킥 동작 중에는 발 앞에 붙여 둔다 (차는 순간 위치가 흔들리지 않게)
     if (touches && !this.windups.has(o)) {
       this.touchDribble(o, dt);
