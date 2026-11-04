@@ -3,6 +3,7 @@ import { COMMAND, PITCH, TEAM_COLORS } from '../config';
 import { TEAMS } from '../data/Teams';
 import type { Player } from '../entities/Player';
 import type { Match } from '../gameplay/Match';
+import { boundLabel } from '../core/Input';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -301,7 +302,7 @@ export class Hud {
     const title = SETPIECE_TITLE[mode] ?? (mode === 'attack' ? '공격' : '수비');
     this.hints.innerHTML =
       `<div class="hint-mode">${title}</div>` +
-      list.map(([k, label]) => `<div class="hint">${label} ${k.split('+').map((x) => `<kbd>${x}</kbd>`).join('+')}</div>`).join('');
+      list.map(([k, label]) => `<div class="hint">${label} ${k.split('+').map((x) => `<kbd>${x.split('·').map(boundLabel).join('·')}</kbd>`).join('+')}</div>`).join('');
   }
 
   private drawRadar(match: Match): void {

@@ -1,5 +1,6 @@
 import { MATCH } from '../config';
 import { setActivePhysics, type PresetName } from '../physics/presets';
+import { REBINDABLE, RESERVED_KEYS, setKeyBindings, type Action } from './Input';
 
 /**
  * 조작 보조 설정 (FC 시리즈의 패스/슛 어시스트 옵션).
@@ -59,12 +60,14 @@ interface SettingsData {
   /** 무승부면 승부차기 */
   shootout: boolean;
   difficulty: Difficulty;
+  /** 바꾼 키만 (동작 → 키 코드) */
+  keyBindings: Partial<Record<Action, string>>;
 }
 
 const KEY = 'snapshoot-classic:settings';
 
 function load(): SettingsData {
-  const fallback: SettingsData = { duration: MATCH.durationSeconds, passAssist: 'assisted', shotAssist: 'assisted', moveAssist: 'high', physicsPreset: 'arcade', graphicsQuality: 'auto', shootout: false, difficulty: 'worldclass' };
+  const fallback: SettingsData = { duration: MATCH.durationSeconds, passAssist: 'assisted', shotAssist: 'assisted', moveAssist: 'high', physicsPreset: 'arcade', graphicsQuality: 'auto', shootout: false, difficulty: 'worldclass', keyBindings: {} };
   try {
     const raw = localStorage.getItem(KEY);
     if (!raw) return fallback;
@@ -78,6 +81,7 @@ function load(): SettingsData {
       graphicsQuality: GRAPHICS_ORDER.includes(parsed.graphicsQuality!) ? parsed.graphicsQuality! : 'auto',
       shootout: parsed.shootout === true,
       difficulty: DIFFICULTY_ORDER.includes(parsed.difficulty!) ? parsed.difficulty! : fallback.difficulty,
+      keyBindings: Object.fromEntries(Object.entries(parsed.keyBindings ?? {}).filter(([a, k]) => REBINDABLE.includes(a as Action) && typeof k === 'string' && !RESERVED_KEYS.has(k))),
     };
   } catch {
     return fallback;
@@ -86,6 +90,21 @@ function load(): SettingsData {
 
 export const settings: SettingsData = load();
 setActivePhysics(settings.physicsPreset);
+setKeyBindings(settings.keyBindings);
+
+/** 동작에 키를 준다. 그 키를 쓰던 다른 동작과는 서로 바꾼다. null이면 모두 기본 키로 */
+export function bindKey(action: Action | null, code?: string): void {
+  if (!action) settings.keyBindings = {};
+  else if (code && !RESERVED_KEYS.has(code)) {
+    const current = (a: Action) => settings.keyBindings[a] ?? DEFAULT_PRIMARY[a];
+    const old = current(action);
+    for (const other of REBINDABLE) if (other !== action && current(other) === code) settings.keyBindings[other] = old;
+    settings.keyBindings[action] = code;
+  }
+  setKeyBindings(settings.keyBindings);
+  save();
+}
+const DEFAULT_PRIMARY: Partial<Record<Action, string>> = { shoot: 'KeyD', pass: 'KeyS', through: 'KeyW', lob: 'KeyA', sprint: 'KeyE', modifier: 'KeyQ', finesse: 'KeyZ', contain: 'KeyC', skill: 'ShiftLeft', tackle: 'Space', power: 'KeyF', camera: 'KeyV' };
 
 export function togglePhysicsPreset(): PresetName {
   settings.physicsPreset = settings.physicsPreset === 'arcade' ? 'real' : 'arcade';

@@ -1,7 +1,7 @@
 import type { CharacterModel } from '../entities/PlayerModel';
 import * as THREE from 'three';
 import { GRAPHICS, PHYSICS, PITCH, MATCH, ONLINE_CATCH_UP } from '../config';
-import { Input } from './Input';
+import { ACTION_KEYS, ACTION_LABEL, Input, REBINDABLE, RESERVED_KEYS, keyLabel, type Action } from './Input';
 import { GamepadInput } from './Gamepad';
 import { CrowdMood } from '../audio/CrowdMood';
 import { TouchControls } from '../ui/TouchControls';
@@ -16,7 +16,7 @@ import { IDLE_COMMAND, Match, type TeamAssist, type UserCommand } from '../gamep
 import { CAMERA_LABEL, CameraRig } from '../camera/CameraRig';
 import { Hud } from '../ui/Hud';
 import { Menu, assistPanel, controlsPanel, matchupPanel, SquadView, statsPanel, type MenuScreen } from '../ui/Menu';
-import { ASSIST_LABEL, DIFFICULTY_LABEL, MOVE_ASSIST_LABEL, GRAPHICS_LABEL, cycleAssist, cycleDifficulty, cycleMoveAssist, cycleGraphics, graphicsQuality, settings, setDuration, togglePhysicsPreset, toggleShootout } from './Settings';
+import { bindKey, ASSIST_LABEL, DIFFICULTY_LABEL, MOVE_ASSIST_LABEL, GRAPHICS_LABEL, cycleAssist, cycleDifficulty, cycleMoveAssist, cycleGraphics, graphicsQuality, settings, setDuration, togglePhysicsPreset, toggleShootout } from './Settings';
 import { PRESET_LABEL, activePhysics, setActivePhysics } from '../physics/presets';
 import { Sound } from '../audio/Sound';
 import { categoryVolume, decideTouchSound } from '../audio/Mix';
@@ -76,6 +76,8 @@ export class Game {
   private readonly pad = new GamepadInput(this.input);
   private readonly crowd = new CrowdMood();
   private ambience = 0.12;
+  /** 키 설정: 다음에 누르는 키를 이 동작에 준다 */
+  private capturing: Action | null = null;
   private readonly physics = new PhysicsWorld();
   private readonly stadium: Stadium;
   private readonly match: Match;
@@ -206,6 +208,19 @@ export class Game {
     window.addEventListener('keydown', (e) => {
       if (e.code === 'KeyM' && this.state === 'playing') this.hud.tick(this.toggleSound() ? '소리를 껐어요' : '소리를 켰어요');
     });
+    // 키 설정 중이면 다음 키를 가로채 그 동작에 준다 (경기 입력·메뉴 조작보다 먼저)
+    window.addEventListener('keydown', (e) => {
+      if (!this.capturing || e.repeat) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      const action = this.capturing;
+      this.capturing = null;
+      if (e.code !== 'Escape') {
+        if (RESERVED_KEYS.has(e.code)) this.hud.tick(`${keyLabel(e.code)}는 이동·메뉴 키라 쓸 수 없어요`, 2);
+        else bindKey(action, e.code);
+      }
+      this.menu.render();
+    }, { capture: true });
     window.addEventListener('gamepadconnected', () => this.hud.tick('게임패드를 연결했어요. 오른쪽 스틱으로 개인기를 써요', 2));
     window.addEventListener('gamepaddisconnected', () => this.hud.tick('게임패드 연결이 끊겼어요', 2));
 
@@ -293,6 +308,13 @@ export class Game {
         panel: () => `<div class="card"><h3>승부차기</h3><p>후반 추가 시간까지 비기면 승부차기로 승자를 정해요. 다섯 번씩 차고도 동점이면 승부가 날 때까지 한 번씩 더 차요.<br/><br/><b>찰 때</b> · 방향키 ↑↓로 구석을 고르고 D를 길게 눌렀다 놓아요.<br/><b>막을 때</b> · 상대가 차는 순간 누르고 있는 ↑↓ 쪽으로 골키퍼가 몸을 던져요. 아무 키도 누르지 않으면 가운데에서 버텨요.</p></div>`,
       },
       {
+        id: 'keys',
+        label: '키 설정',
+        value: () => (Object.keys(settings.keyBindings).length ? '바꿈' : '기본'),
+        onSelect: () => this.openKeys(() => this.openSettings(this.settingsBack)),
+        panel: () => `<div class="card"><h3>키 설정</h3><p>키보드 배치를 바꿔요. 항목을 고르고 새 키를 누르면 바로 바뀌어요. 다른 동작이 쓰던 키를 고르면 두 동작의 키를 서로 바꿔요.<br/><br/>방향키·Esc·Enter·P·M은 이동과 메뉴에 쓰여서 바꿀 수 없어요.</p></div>`,
+      },
+      {
         id: 'squad', label: '스쿼드',
         panel: () => `<div class="card"><h3>스쿼드</h3><p>포메이션과 선수 능력치를 보고 선발을 바꿔요.</p><p>스쿼드 화면에서 선수 카드를 눌러 봐요.</p></div>`,
         onSelect: () => this.openSquad(),
@@ -325,8 +347,32 @@ export class Game {
     ];
   }
 
+  private settingsBack: () => void = () => this.openMainMenu();
+
+  /** 키 설정 화면: 동작마다 지금 키, 고르면 다음에 누르는 키로 바꾼다 */
+  private openKeys(back: () => void): void {
+    this.capturing = null;
+    const items: MenuScreen['items'] = REBINDABLE.map((a) => ({
+      id: `key-${a}`,
+      label: ACTION_LABEL[a] ?? a,
+      value: () => (this.capturing === a ? '새 키를 누르세요 (Esc 취소)' : keyLabel(ACTION_KEYS[a][0])),
+      onSelect: () => { this.capturing = a; this.menu.render(); },
+      onLeft: () => { this.capturing = a; this.menu.render(); },
+      onRight: () => { this.capturing = a; this.menu.render(); },
+    }));
+    this.menu.open({
+      eyebrow: '설정', title: '키 설정',
+      panel: () => controlsPanel(),
+      onBack: () => { this.capturing = null; back(); },
+      items: [...items,
+        { id: 'keys-reset', label: '기본 배치로', onSelect: () => { bindKey(null); this.menu.render(); } },
+        { id: 'back', label: '돌아가기', onSelect: () => { this.capturing = null; back(); } }],
+    });
+  }
+
   /** 설정 하위 화면 (FC 온라인처럼 메인 목록을 짧게 유지) */
   private openSettings(back: () => void): void {
+    this.settingsBack = back;
     const items = this.settingsItems().filter((i) => !['squad', 'controls'].includes(i.id));
     this.menu.open({
       eyebrow: '게임 설정',

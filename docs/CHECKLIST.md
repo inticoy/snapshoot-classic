@@ -132,7 +132,7 @@
 
 ### 시스템
 - [x] 게임패드 지원 (표준 매핑, FC 콘솔 배치 → 키보드 동작, 오른쪽 스틱 개인기, 메뉴 조작) — `src/core/Gamepad.ts`
-- [ ] 키 설정 변경
+- [x] 키 설정 변경: 설정 › 키 설정에서 12개 동작, 겹치면 서로 맞바꿈, 기본 배치로 되돌리기, HUD·조작법 안내도 바뀐 키로 (방향키·Esc·Enter·P·M 고정)
 - [x] 모바일 터치 조작 구현 (위 1단계 구현 및 검증 기록 참고)
 - [x] 배포: 공개 저장소 inticoy/snapshoot-classic, main 푸시 시 GitHub Pages 자동 배포
 - [x] 온라인 1:1 대전: 결정적 시뮬레이션 + 입력 지연 락스텝, Cloudflare Worker 중계, 재접속·해시 검사 (`docs/multiplayer.md`)

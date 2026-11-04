@@ -2,6 +2,7 @@ import { TEAMS, type PlayerProfile } from '../data/Teams';
 import { STAT_LABELS, faceStats } from '../data/Stats';
 import { FORMATIONS, FORMATION_IDS, type FormationId } from '../data/Formation';
 import { PITCH, SQUAD_UI } from '../config';
+import { boundLabel } from '../core/Input';
 import type { MatchStats } from '../gameplay/Match';
 
 export interface MenuItem {
@@ -172,12 +173,15 @@ export function matchupPanel(score: [number, number] | null, meta: string[]): st
 
 export function controlsPanel(): string {
   const row = (keys: string[], label: string) =>
+    `<li><span class="keys">${keys.map((k) => `<kbd>${boundLabel(k)}</kbd>`).join('')}</span>${label}</li>`;
+  // 게임패드 표는 패드 버튼 이름 그대로 (키보드 키 설정과 무관)
+  const padRow = (keys: string[], label: string) =>
     `<li><span class="keys">${keys.map((k) => `<kbd>${k}</kbd>`).join('')}</span>${label}</li>`;
   return `
     <div class="card">
       <h3>조작법</h3>
       <p class="touch-instructions">왼쪽 빈 공간을 누른 채 끌면 이동해요. 오른쪽 개인기 스틱을 누른 채 8방향으로 움직이면 개인기를 써요. 짧게 움직였다 놓으면 탭, 누른 채 유지하면 길게 누르기로 입력돼요. 오른쪽 슛·패스 버튼을 길게 눌러 세기를 조절한 뒤 놓아요. 패스 버튼을 누른 채 위로 밀면 스루 패스, 아래로 밀면 로빙 패스를 해요. 슛 버튼을 위로 밀며 놓으면 칩슛, 좌우로 밀며 놓으면 감아차기를 해요. 수비할 때는 압박·태클·선수 변경 버튼으로 바뀌어요. 압박 버튼을 밀면 슬라이딩 태클을 해요. 페널티킥을 찰 때는 조이스틱을 위아래로 움직여 구석을 골라요. 막을 때는 상대가 차는 순간 조이스틱 방향으로 골키퍼가 몸을 던져요.</p>
-      <h4>FC 온라인 키보드 배치</h4>
+      <h4>키보드 배치 (설정 › 키 설정에서 바꿀 수 있어요)</h4>
       <div class="keymap">
         <div>
           <h4>공격</h4>
@@ -223,25 +227,25 @@ export function controlsPanel(): string {
         <div>
           <h4>공격</h4>
           <ul>
-            ${row(['L 스틱'], '이동')}
-            ${row(['RT'], '질주')}
-            ${row(['B'], '슛 · RB+B 감아차기 · LB+B 칩슛')}
-            ${row(['A'], '짧은 패스')}
-            ${row(['Y'], '스루 패스')}
-            ${row(['X'], '로빙 패스')}
-            ${row(['R 스틱'], '개인기 (RB를 쥐면 Z 개인기)')}
+            ${padRow(['L 스틱'], '이동')}
+            ${padRow(['RT'], '질주')}
+            ${padRow(['B'], '슛 · RB+B 감아차기 · LB+B 칩슛')}
+            ${padRow(['A'], '짧은 패스')}
+            ${padRow(['Y'], '스루 패스')}
+            ${padRow(['X'], '로빙 패스')}
+            ${padRow(['R 스틱'], '개인기 (RB를 쥐면 Z 개인기)')}
           </ul>
         </div>
         <div>
           <h4>수비</h4>
           <ul>
-            ${row(['B'], '압박')}
-            ${row(['LB'], '동료 압박')}
-            ${row(['LT'], '견제')}
-            ${row(['R3'], '스탠딩 태클')}
-            ${row(['X'], '슬라이딩 태클')}
-            ${row(['A'], '선수 변경')}
-            ${row(['Menu'], '일시정지')}
+            ${padRow(['B'], '압박')}
+            ${padRow(['LB'], '동료 압박')}
+            ${padRow(['LT'], '견제')}
+            ${padRow(['R3'], '스탠딩 태클')}
+            ${padRow(['X'], '슬라이딩 태클')}
+            ${padRow(['A'], '선수 변경')}
+            ${padRow(['Menu'], '일시정지')}
           </ul>
         </div>
       </div>

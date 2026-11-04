@@ -49,7 +49,43 @@ const MOVE_KEYS = {
   right: ['ArrowRight'],
 };
 
-const GAME_KEYS = new Set([...Object.values(ACTION_KEYS).flat(), ...Object.values(MOVE_KEYS).flat()]);
+/** 바꿀 수 있는 동작과 메뉴 표시 이름 (일시정지·확인·뒤로는 고정) */
+export const REBINDABLE: readonly Action[] = ['shoot', 'pass', 'through', 'lob', 'sprint', 'modifier', 'finesse', 'contain', 'skill', 'tackle', 'power', 'camera'];
+export const ACTION_LABEL: Partial<Record<Action, string>> = {
+  shoot: '슛 · 수비 압박', pass: '짧은 패스 · 선수 변경', through: '스루 패스 · 키퍼 돌진', lob: '로빙 · 슬라이딩 태클',
+  sprint: '질주', modifier: '칩슛·로빙 스루 · 동료 압박', finesse: '감아차기 · Z 개인기', contain: '견제 · 볼 키핑',
+  skill: '개인기', tackle: '스탠딩 태클', power: '파워슛', camera: '카메라',
+};
+const DEFAULT_KEYS: Readonly<Record<Action, readonly string[]>> = Object.fromEntries(Object.entries(ACTION_KEYS).map(([a, k]) => [a, [...k]])) as Record<Action, string[]>;
+/** 이 키는 다른 동작에 줄 수 없다 (이동·메뉴) */
+export const RESERVED_KEYS = new Set([...Object.values(MOVE_KEYS).flat(), 'Escape', 'Enter', 'Backspace', 'KeyP', 'KeyM', 'Tab']);
+
+let GAME_KEYS = new Set<string>();
+const refreshGameKeys = () => { GAME_KEYS = new Set([...Object.values(ACTION_KEYS).flat(), ...Object.values(MOVE_KEYS).flat()]); };
+refreshGameKeys();
+
+/** 키 설정 적용: 바꾼 동작만 그 키 하나로, 나머지는 기본 키 */
+export function setKeyBindings(map: Partial<Record<Action, string>>): void {
+  for (const a of REBINDABLE) ACTION_KEYS[a] = map[a] && !RESERVED_KEYS.has(map[a]!) ? [map[a]!] : [...DEFAULT_KEYS[a]];
+  refreshGameKeys();
+}
+
+/** 키 코드 → 화면 표시 ('KeyD' → 'D', 'ShiftLeft' → 'Shift') */
+export function keyLabel(code: string): string {
+  if (code.startsWith('Key')) return code.slice(3);
+  if (code.startsWith('Digit')) return code.slice(5);
+  if (code.startsWith('Shift')) return 'Shift';
+  if (code.startsWith('Control')) return 'Ctrl';
+  if (code.startsWith('Alt')) return 'Alt';
+  if (code.startsWith('Numpad')) return `Num${code.slice(6)}`;
+  return ({ Space: 'Space', Semicolon: ';', Quote: "'", Comma: ',', Period: '.', Slash: '/', BracketLeft: '[', BracketRight: ']', Backslash: '\\', Minus: '-', Equal: '=', Backquote: '`' } as Record<string, string>)[code] ?? code;
+}
+
+/** 기본 배치 글자(안내 문구의 'D', 'Space' 등)를 지금 설정한 키 글자로 */
+export function boundLabel(defaultLabel: string): string {
+  const action = REBINDABLE.find((a) => keyLabel(DEFAULT_KEYS[a][0]) === defaultLabel);
+  return action ? keyLabel(ACTION_KEYS[action][0]) : defaultLabel;
+}
 
 /** 편집 중인 키는 브라우저에 맡겨 커서 이동·문자 입력을 보존한다. */
 export function isEditing(target: EventTarget | null): boolean {
@@ -167,7 +203,7 @@ export class Input {
 
   /** 연타는 실제 키보드와 JSON 키 재생에만 적용한다. */
   keyboardKick(): boolean {
-    return ['KeyD', 'KeyS', 'KeyW', 'KeyA'].some((k) => this.down.has(k) || this.scripted.has(k) || this.pressedQueue.has(k) || this.releasedQueue.has(k));
+    return (['shoot', 'pass', 'through', 'lob'] as const).flatMap((a) => ACTION_KEYS[a]).some((k) => this.down.has(k) || this.scripted.has(k) || this.pressedQueue.has(k) || this.releasedQueue.has(k));
   }
 
   isDown(action: Action): boolean {
