@@ -41,7 +41,7 @@
 - [x] 긴 질주에 맞춘 스태미나·양 팀 AI 속도 조정, 먼 선수 애니메이션 30Hz·근처 그림자 캐스터 제한
 - [x] 신규 25개 포함 110/110개 테스트, 3시드×5분 11대11 AI 경기 종료·양 팀 슛/패스 확인
 - [x] 중계/전체 경기장/네 코너 캡처·22명 스킨드 캐릭터 FPS 측정 Playwright 스크립트 작성·구문 검사 (`pnpm test:phase2`)
-- [ ] 브라우저 실검증: 중계·코너 스크린샷 검토 및 데스크톱 60fps 실측
+- [x] 브라우저 실검증 (2026-11-05, `pnpm test:phase2`): 중계·코너 스크린샷 정상. 헤드리스 Chrome 1440×900 평균 56.6fps, p95 33.6ms로 스크립트 기준(p95 ≤ 25ms) 미달 — 실제 GPU 브라우저에서 다시 재 볼 것
 - [x] 의미 단위 커밋 완료
 
 구현·자동 검증은 완료했으며, 화면·성능 실측과 커밋 상태는 [2단계 검증 기록](roadmap/phase-2-validation.md)에 기록한다. 전체 완료 판정은 미검증 항목 확인 후 가능하다.
@@ -137,8 +137,9 @@
 - [x] 배포: 공개 저장소 inticoy/snapshoot-classic, main 푸시 시 GitHub Pages 자동 배포
 - [x] 온라인 1:1 대전: 결정적 시뮬레이션 + 입력 지연 락스텝, Cloudflare Worker 중계, 재접속·해시 검사 (`docs/multiplayer.md`)
 - [x] 단위 테스트 (Kicks 궤적, 아웃/세트피스 판정)
-- [ ] 1단계 최종 확인: 모바일 Playwright 실행·실기기 화면 확인
-- [ ] 0단계 최종 확인: 개발 서버 브라우저에서 메뉴 → 경기 시작 → 골
+- [x] 1단계 모바일 Playwright (`pnpm test:mobile`, 844×390 터치): 이동 2.1m·슛 1회·오류 0
+- [ ] 1단계 실기기 화면 확인 (iOS Safari·홈 화면 앱·Android Chrome)
+- [x] 0단계 최종 확인 (`pnpm test:browser`): 메뉴 → 경기 시작 → 골, 오류 0 · 메뉴 3화면 크기 밀림·넘침 0 (`pnpm test:menu`)
 
 ## 참고 자료
 - 공기역학: Goff & Carré (궤적 분석 C_D·C_L), Choppin 등 (속도별 항력·양력 곡선), Cross (Sports ball aerodynamics)
