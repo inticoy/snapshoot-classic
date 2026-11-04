@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { GRAPHICS, PHYSICS, PITCH, MATCH, ONLINE_CATCH_UP } from '../config';
 import { Input } from './Input';
 import { GamepadInput } from './Gamepad';
+import { CrowdMood } from '../audio/CrowdMood';
 import { TouchControls } from '../ui/TouchControls';
 import type { TouchMode } from './TouchInput';
 import { PhysicsWorld } from '../physics/PhysicsWorld';
@@ -73,6 +74,8 @@ export class Game {
   private readonly scene = new THREE.Scene();
   private readonly input = new Input();
   private readonly pad = new GamepadInput(this.input);
+  private readonly crowd = new CrowdMood();
+  private ambience = 0.12;
   private readonly physics = new PhysicsWorld();
   private readonly stadium: Stadium;
   private readonly match: Match;
@@ -670,6 +673,15 @@ export class Game {
       }
     }
     if (!menuWasVisible) this.input.drainPresses();
+    // 관중: 공격이 골문에 다가가면 함성이 커지고, 아깝게 빗나가면 탄성
+    if (this.state === 'playing') {
+      if (this.crowd.update(dt, this.match)) {
+        this.sound.play('cheer', categoryVolume('crowd', 0.45), 0.72);
+        this.stadium.cheer(0.3);
+      }
+      const level = 0.1 + 0.2 * this.crowd.level;
+      if (Math.abs(level - this.ambience) > 0.004) this.sound.setAmbienceLevel(this.ambience = level);
+    }
 
     const live = this.state === 'playing';
     for (const p of this.match.players) {
@@ -802,8 +814,6 @@ export class Game {
         case 'goal': {
           this.sound.play('goal', categoryVolume('crowd', 1));
           this.sound.play('cheer', categoryVolume('crowd', 0.9));
-          this.sound.setAmbienceLevel(0.25);
-          setTimeout(() => this.sound.setAmbienceLevel(0.12), 4000);
           this.stadium.cheer(1);
           this.rig.addShake(0.4);
           const sub = e.scorer
