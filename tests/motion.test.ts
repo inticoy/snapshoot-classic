@@ -93,7 +93,7 @@ describe('킥 동작 타이밍', () => {
       shots += match.stats.shots[0] + match.stats.shots[1];
     }
     expect(shots).toBeGreaterThan(0);
-  });
+  }, 90_000); // 4분 경기 두 번: 전체 테스트를 동시에 돌리면 30초를 넘길 수 있다
 });
 
 // GLB 부모의 로컬 +Z가 월드 위다. 저장 데이터뿐 아니라 재생 트랙까지 검사해 축 누락 재발을 막는다.

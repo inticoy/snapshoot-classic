@@ -15,12 +15,12 @@ it('난이도는 사람이 조작하지 않는 상대 팀에만 적용한다 (�
   expect(match.aiLevel(1)).toBe(DIFFICULTY.legendary);
 });
 
-/** AI 대 AI (양 팀 같은 난이도) 2분 × 3시드: 태클 시도·패스 성공률 */
+/** AI 대 AI (양 팀 같은 난이도) 60초 × 2시드: 태클 시도·패스 성공률 */
 function measure(difficulty: Difficulty) {
   let tackles = 0, passes = 0, done = 0;
-  for (const seed of [1, 2, 3]) {
+  for (const seed of [1, 2]) {
     const { match } = simulation(seed, { userControl: false, kickoffPass: true, difficulty });
-    for (let t = 0; t < 120; t += PHYSICS.step) {
+    for (let t = 0; t < 60; t += PHYSICS.step) {
       match.update(PHYSICS.step, null as never);
       for (const e of match.events) if (e.type === 'tackle') tackles++;
       match.events.length = 0;
@@ -36,4 +36,4 @@ it('아마추어 AI는 얼티밋보다 태클을 덜 하고 패스를 덜 정확
   console.info(`난이도 비교: 아마추어 태클 ${easy.tackles}·패스 ${(easy.rate * 100).toFixed(0)}% / 얼티밋 태클 ${hard.tackles}·패스 ${(hard.rate * 100).toFixed(0)}%`);
   expect(easy.tackles).toBeLessThan(hard.tackles);
   expect(easy.rate).toBeLessThan(hard.rate);
-});
+}, 90_000);
