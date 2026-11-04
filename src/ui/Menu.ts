@@ -218,6 +218,33 @@ export function controlsPanel(): string {
         </div>
       </div>
       <p style="margin-top:16px">공이 오는 동안 슛·패스 키를 미리 누르면 원터치로 처리해요. 슛 파워 게이지가 흰 선(80%)을 넘으면 공이 뜰 수 있어요.</p>
+      <h4 style="margin-top:18px">게임패드 (Xbox 표기)</h4>
+      <div class="keymap">
+        <div>
+          <h4>공격</h4>
+          <ul>
+            ${row(['L 스틱'], '이동')}
+            ${row(['RT'], '질주')}
+            ${row(['B'], '슛 · RB+B 감아차기 · LB+B 칩슛')}
+            ${row(['A'], '짧은 패스')}
+            ${row(['Y'], '스루 패스')}
+            ${row(['X'], '로빙 패스')}
+            ${row(['R 스틱'], '개인기 (RB를 쥐면 Z 개인기)')}
+          </ul>
+        </div>
+        <div>
+          <h4>수비</h4>
+          <ul>
+            ${row(['B'], '압박')}
+            ${row(['LB'], '동료 압박')}
+            ${row(['LT'], '견제')}
+            ${row(['R3'], '스탠딩 태클')}
+            ${row(['X'], '슬라이딩 태클')}
+            ${row(['A'], '선수 변경')}
+            ${row(['Menu'], '일시정지')}
+          </ul>
+        </div>
+      </div>
     </div>`;
 }
 

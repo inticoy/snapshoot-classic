@@ -2,6 +2,7 @@ import type { CharacterModel } from '../entities/PlayerModel';
 import * as THREE from 'three';
 import { GRAPHICS, PHYSICS, PITCH, MATCH, ONLINE_CATCH_UP } from '../config';
 import { Input } from './Input';
+import { GamepadInput } from './Gamepad';
 import { TouchControls } from '../ui/TouchControls';
 import type { TouchMode } from './TouchInput';
 import { PhysicsWorld } from '../physics/PhysicsWorld';
@@ -71,6 +72,7 @@ export class Game {
   private readonly renderer: THREE.WebGLRenderer;
   private readonly scene = new THREE.Scene();
   private readonly input = new Input();
+  private readonly pad = new GamepadInput(this.input);
   private readonly physics = new PhysicsWorld();
   private readonly stadium: Stadium;
   private readonly match: Match;
@@ -201,6 +203,8 @@ export class Game {
     window.addEventListener('keydown', (e) => {
       if (e.code === 'KeyM' && this.state === 'playing') this.hud.tick(this.toggleSound() ? '소리를 껐어요' : '소리를 켰어요');
     });
+    window.addEventListener('gamepadconnected', () => this.hud.tick('게임패드를 연결했어요. 오른쪽 스틱으로 개인기를 써요', 2));
+    window.addEventListener('gamepaddisconnected', () => this.hud.tick('게임패드 연결이 끊겼어요', 2));
 
     this.touch = new TouchControls(this.input, () => this.cancelCharge(), () => this.applyGraphics(true), () => {
       if (this.state === 'playing') this.openPauseMenu();
@@ -597,6 +601,7 @@ export class Game {
 
   private frame(dt: number): void {
     this.ensureViewSize();
+    this.pad.poll(dt);
     const restart = this.match.setPieces.current;
     const so = this.match.shootout;
     // 이 화면 사람의 팀 기준 (온라인 원정이면 팀 1)

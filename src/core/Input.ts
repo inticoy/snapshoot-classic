@@ -184,6 +184,11 @@ export class Input {
     return (ACTION_KEYS[action].some((k) => this.releasedQueue.has(k)) || this.virtualReleased.has(action)) && !this.isDown(action);
   }
 
+  /** 게임패드 등 키보드 밖 입력을 메뉴 조작 키로 넣는다 */
+  injectPress(code: string): void {
+    this.pressOrder.push(code);
+  }
+
   /** 이번 프레임까지 눌린 키들을 순서대로 꺼낸다 */
   drainPresses(): string[] {
     return this.pressOrder.splice(0);
