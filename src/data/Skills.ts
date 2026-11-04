@@ -1,6 +1,6 @@
 import { SKILL_CONTACTS } from './SkillContacts';
 import { mirror, type Dir, type SkillDef } from '../gameplay/Skills';
-import { RAINBOW_FLICK, dragBackRig, elasticoRig, heelFlickRig, rainbowRig, rigKeys, stepOverRig } from './SkillRigs';
+import { RAINBOW_FLICK, dragBackRig, elasticoRig, heelFlickRig, quickBallRollRig, rainbowRig, reverseStepOverRig, rigKeys, stepOverRig } from './SkillRigs';
 
 /** 다리 IK 개인기: rig에서 body·ball 키를 만든다 */
 function rigged(def: SkillDef, rig: NonNullable<SkillDef['rig']>): SkillDef {
@@ -80,14 +80,15 @@ export function makeSkillDefs(): SkillDef[] {
     exit: { dir: -0.12, speed: 2.6, body: 2.4, input: true },
     bait: { t: 0.22, dir: Math.PI / 2, strength: 0.8 }, shield: 0.8,
   }, stepOverRig());
-  const REVERSE_STEP: SkillDef = {
+  /** 리버스 스텝오버 (Shift + →↗↑, ★2): 오른발을 공 앞으로 바깥→안쪽으로 넘겨 왼쪽으로 속이고, 같은 발로 오른쪽 앞으로 (SkillRigs.reverseStepOverRig) */
+  const REVERSE_STEP: SkillDef = rigged({
     ...STEP_OVER, id: 'reverse_step_over_r', name: '오른쪽 리버스 스텝오버',
     trigger: { kind: 'shift', seq: [{ dir: 'R' }, { dir: 'FR' }, { dir: 'F' }] },
-    rig: undefined, contacts: [{ t: 0.42, foot: 'R' }], exit: { dir: 0, speed: 2.4, body: 2.2 },
-    body: [{ t: 0, x: 0, z: 0 }, { t: 0.3, x: 0.12, z: 0.12, yaw: 0.3 }, { t: 0.6, x: 0.06, z: 0.3 }],
-    ball: [{ t: 0, x: 0.1, z: 0.4 }, { t: 0.3, x: 0.12, z: 0.42 }, { t: 0.6, x: 0.06, z: 0.78 }],
-    motion: { id: 'grf_ballcontrol_idle_045_accel', kind: 'control', angle: -Math.PI / 4 },
-  };
+    contacts: [{ t: 0.42, foot: 'R' }], exit: { dir: 0.35, speed: 2.4, body: 2.2 },
+    motion: { id: 'grf_ballcontrol_idle_000', flat: true, kind: 'control', angle: 0 },
+    // 왼쪽으로 속인다 (일반 스텝오버와 반대)
+    bait: { t: 0.22, dir: -Math.PI / 2, strength: 0.8 },
+  }, reverseStepOverRig());
   const SIDE_STEP: SkillDef = {
     id: 'side_step_r', name: '오른쪽 사이드 스텝', stars: 2,
     trigger: { kind: 'shift', seq: [{ dir: 'R', hold: true }] },
@@ -207,16 +208,15 @@ export function makeSkillDefs(): SkillDef[] {
     bait: { t: 0.12, dir: -Math.PI / 2, strength: 0.9 }, shield: 0.7,
   };
   /** 퀵 볼 롤 (Shift + ↓ 꾹, ★5): 양발 바닥으로 공을 번갈아 굴리며 뒤로 물러난다 */
-  const QUICK_ROLL: SkillDef = {
+  const QUICK_ROLL: SkillDef = rigged({
     id: 'quick_ball_roll', name: '퀵 볼 롤', stars: 5,
     trigger: { kind: 'shift', seq: [{ dir: 'B', hold: true }] },
     duration: 0.7, carry: 0,
-    body: [{ t: 0, x: 0, z: 0 }, { t: 0.35, x: 0.02, z: -0.2 }, { t: 0.7, x: 0, z: -0.42 }],
-    ball: [{ t: 0, x: 0.1, z: 0.4 }, { t: 0.24, x: 0.08, z: 0.3 }, { t: 0.46, x: -0.08, z: 0.12 }, { t: 0.7, x: 0.05, z: -0.05 }],
-    contacts: [{ t: 0.24, foot: 'R' }, { t: 0.46, foot: 'L' }],
-    motion: { id: 'grf_ballcontrol_walk_000_decel_decel', flat: true, kind: 'control', angle: 0 },
+    body: [], ball: [],
+    contacts: [{ t: 0.08, foot: 'R' }, { t: 0.24, foot: 'R' }, { t: 0.36, foot: 'L' }, { t: 0.46, foot: 'L' }],
+    motion: { id: 'grf_ballcontrol_idle_000', flat: true, kind: 'control', angle: 0 },
     exit: { dir: 0, speed: 0, body: 0 }, shield: 0.6,
-  };
+  }, quickBallRollRig());
   /** 레인보우·사포 (Shift + ↓↑↑ 탭, ★4): 공을 왼쪽 종아리 뒤로 올려 아킬레스로 차올려 머리 위로 넘긴다 (SkillRigs.rainbowRig) */
   const RAINBOW: SkillDef = rigged({
     id: 'rainbow', name: '레인보우', stars: 4,

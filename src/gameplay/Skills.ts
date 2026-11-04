@@ -551,7 +551,11 @@ export class SkillRunner {
     this.m.skillLoft = vy > 1 ? p : null;
     this.m.ball.body.angularVelocity.set(dir.z * speed / BALL.radius, 0, -dir.x * speed / BALL.radius);
     p.vel.copy(dir).multiplyScalar(def.exit.body + carrySpeed(a, def.duration));
-    p.facing.copy(dir);
+    // 공이 거의 멈춰 있으면(발밑에 둔 채 끝나는 개인기) 나가는 방향이 없다 → 동작이 끝난 몸 방향 그대로
+    if (def.rig && speed < 1) {
+      const yaw = def.rig(def.duration).yaw;
+      p.facing.copy(a.fwd).multiplyScalar(Math.cos(yaw)).addScaledVector(a.right, Math.sin(yaw));
+    } else p.facing.copy(dir);
     if (def.exit.speed > 1.5) this.m.events.push({ type: 'touch', speed, player: p });
   }
 
