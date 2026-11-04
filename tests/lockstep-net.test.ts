@@ -148,3 +148,12 @@ it('경기 중 입력 지연 조정: 지터로 자주 멈추면 늘려 멈춤이
   expect(adaptive.delay).toBeLessThanOrEqual(Lockstep.MAX_DELAY);
   expect(adaptive.late).toBeLessThan(fixed.late / 3);
 });
+
+it('경기 진행이 부르는 게이지 취소는 화면 팀과 상관없이 두 팀 모두에 같게 적용된다', () => {
+  for (const localTeam of [0, 1] as const) {
+    const m = headlessMatch({ seed: 3, options: { userTeams: [true, true], localTeam } }, () => new SimulationModel());
+    for (const side of m.sides) side.charge = { kind: 'pass', value: 0.3, finesse: false, chip: false, flair: false, power: false, keyboard: true, started: 0 };
+    m.cancelWindups();
+    expect(m.sides.map((s) => s.charge)).toEqual([null, null]);
+  }
+});

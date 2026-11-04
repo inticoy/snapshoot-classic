@@ -638,7 +638,8 @@ export class Match {
   cancelWindups(): void {
     this.approaches.clear();
     this.windups.clear();
-    this.cancelUserCharge();
+    // 경기 진행이 부르는 취소는 두 팀 모두 (화면 팀 하나만 지우면 온라인 두 화면이 갈라진다)
+    for (const side of this.sides) this.cancelUserCharge(side);
   }
 
   /**
@@ -954,9 +955,9 @@ export class Match {
     return owner === p || (!owner && (Math.hypot(bp.x - p.pos.x, bp.z - p.pos.z) < 4.5 || incoming));
   }
 
-  /** 이 화면 사람의 게이지·예약을 취소 (UI 조작). 온라인에서는 입력 기록 밖 변경이라 Game이 부르지 않는다 */
-  cancelUserCharge(): void {
-    const side = this.local;
+  /** 게이지·예약 취소. 인자 없이 = 이 화면 사람 (UI 조작, 온라인에서는 입력 기록 밖 변경이라 Game이 부르지 않는다).
+   *  경기 계산 안에서는 반드시 처리 중인 팀을 넘긴다 */
+  cancelUserCharge(side: UserSide = this.local): void {
     side.charge = null;
     side.queued = null;
     if (side.pendingUserKick) {
@@ -1060,7 +1061,7 @@ export class Match {
         }
       }
     }
-    if (this.charge && !hasBall && oppHasBall) this.cancelUserCharge();
+    if (this.charge && !hasBall && oppHasBall) this.cancelUserCharge(this.side);
 
     // S (수비 시) = 선수 변경
     if (cmd.pass.pressed && !attacking && !teamHasBall) this.switchToNearest();
