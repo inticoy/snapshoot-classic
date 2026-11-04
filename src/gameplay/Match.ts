@@ -593,7 +593,7 @@ export class Match {
   readonly runs = new Map<Player, { target: THREE.Vector3; ttl: number }>();
 
   /** 침투 지시를 내린다. 끝까지 파고들지 않고 runLength만큼, 오프사이드 라인 바로 앞에서 멈춘다 */
-  orderRun(p: Player): void {
+  orderRun(p: Player, announce = true): void {
     const a = p.attackDir;
     const fx = p.pos.x * a;
     const line = this.rules.offsideLine(p.team);
@@ -603,7 +603,8 @@ export class Match {
     // 측면에 있으면 조금 안쪽으로 파고든다
     const tz = p.pos.z * 0.75;
     this.runs.set(p, { target: new THREE.Vector3(tx * a, 0, tz), ttl: COMMAND.runTime });
-    this.events.push({ type: 'run', player: p });
+    // 사람이 지시한 침투만 알린다 (AI가 스스로 뛰는 건 화면에 띄우지 않는다)
+    if (announce) this.events.push({ type: 'run', player: p });
   }
 
   /** Q: 공 앞쪽에서 가장 뛰기 좋은 동료 (공격수·미드필더, 가까울수록) */

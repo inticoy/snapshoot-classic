@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { AI, SKILL_AI, DRIBBLE, GOAL, PITCH } from '../config';
+import { AI, AI_RUN, SKILL_AI, DRIBBLE, GOAL, PITCH } from '../config';
 import type { Player } from '../entities/Player';
 import type { Match } from '../gameplay/Match';
 import { SKILLS } from '../gameplay/Skills';
@@ -28,6 +28,8 @@ const tmp2 = new THREE.Vector3();
 export class TeamAI {
   private readonly intents = new Map<Player, Intent>();
   private readonly skillCooldown = new Map<Player, number>();
+  /** 스스로 침투한 뒤 다시 뛰기까지 남은 시간 */
+  private readonly runCooldown = new Map<Player, number>();
   private readonly timers = new Map<Player, number>();
 
   constructor(private readonly match: Match, private readonly smoothDribble = true) {
@@ -40,6 +42,7 @@ export class TeamAI {
   /** 시나리오 재시작 때 이전 목표·회피 방향·반응 시간을 이어받지 않는다. */
   reset(): void {
     this.skillCooldown.clear();
+    this.runCooldown.clear();
     // 스쿼드에서 선수를 바꿨으면 새 선수로 다시 채운다 (빠진 선수의 목표는 버린다)
     for (const p of [...this.intents.keys()]) if (!this.match.players.includes(p)) { this.intents.delete(p); this.timers.delete(p); }
     for (const p of this.match.players) if (!this.intents.has(p)) this.intents.set(p, { target: p.pos.clone(), sprint: false, look: null, dribbleDir: null });
@@ -55,6 +58,7 @@ export class TeamAI {
     const m = this.match;
     for (const p of m.players) {
       this.skillCooldown.set(p, Math.max(0, (this.skillCooldown.get(p) ?? 0) - dt));
+      this.runCooldown.set(p, Math.max(0, (this.runCooldown.get(p) ?? 0) - dt));
       if (p.isKeeper || m.isUserControlled(p)) continue;
       if (m.practice && p.team === 1 && m.practiceOpponent) {
         this.practiceDefender(p, dt);
@@ -187,6 +191,9 @@ export class TeamAI {
         return;
       }
     }
+
+    // 오프더볼 침투: 동료가 앞을 보고 여유 있게 공을 잡으면 공격수가 수비 뒷공간 쪽으로 뛴다 (스루 패스 길)
+    if (teamHasBall && this.maybeRun(p, ball.owner!)) return;
 
     // 포메이션 위치 (공 위치에 따라 팀 전체가 움직인다)
     this.formationTarget(p, teamHasBall, intent.target);
@@ -418,6 +425,25 @@ export class TeamAI {
       intent.target.set(bp.x, 0, bp.z);
     }
     intent.sprint = d > 3;
+  }
+
+  /** 침투 시작 여부. 공격수(가끔 공격형 미드)만, 사람이 조작하는 선수는 제외. 시작하면 true */
+  private maybeRun(p: Player, carrier: Player): boolean {
+    const m = this.match;
+    if (m.isUserControlled(p) || m.runs.has(p) || (this.runCooldown.get(p) ?? 0) > 0) return false;
+    if (p.role !== 'FWD' && !(p.role === 'MID' && !(p.slot.label === 'CM' || p.slot.label.endsWith('DM')))) return false;
+    const a = p.attackDir;
+    // 공 앞쪽에 있고, 공을 가진 동료가 상대 골문 45m 안에서 앞을 보고 압박 없이 있을 때
+    if ((p.pos.x - carrier.pos.x) * a < -2) return false;
+    if (Math.abs(m.oppGoalX(p.team) - carrier.pos.x) > AI_RUN.carrierRange) return false;
+    if (carrier.facing.x * a < 0.3 || m.nearestOpponentDist(carrier) < AI_RUN.carrierSpace) return false;
+    // 이미 오프사이드 라인 근처(뛸 공간이 없음)면 뛰지 않는다
+    if (m.rules.offsideLine(p.team) - p.pos.x * a < 3) return false;
+    const chance = (p.role === 'FWD' ? AI_RUN.chance : AI_RUN.chance * 0.4) * (0.6 + 0.8 * n(p.profile.stats.reactions));
+    if (m.random.next() >= chance) return false;
+    m.orderRun(p, false);
+    this.runCooldown.set(p, AI_RUN.cooldown);
+    return true;
   }
 
   private maybeTackle(p: Player, carrier: Player): void {

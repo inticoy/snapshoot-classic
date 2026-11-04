@@ -293,6 +293,9 @@ export const SKILL_INPUT = {
   gap: 0.45, // 이보다 오래 끊기면 새 커맨드
   dead: 0.5,
 };
+/** AI 오프더볼 침투: 공을 가진 동료가 상대 골문 carrierRange(m) 안에서 앞을 보고 carrierSpace(m) 넘게 여유가 있으면,
+ *  공격수가 판단마다 chance 확률로 수비 뒷공간 쪽으로 뛴다 (공격형 미드는 40%). 한 번 뛰면 cooldown초 쉰다 */
+export const AI_RUN = { carrierRange: 45, carrierSpace: 3, chance: 0.05, cooldown: 4 };
 export const SKILL_AI = { range: 2, front: 0.65, chance: 0.035, cooldown: 5 };
 
 /** 연타는 키보드의 첫 누름부터 센다. 터치 스와이프의 즉시 뗌 동작은 유지한다. */
