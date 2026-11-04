@@ -1,6 +1,6 @@
 import { SKILL_CONTACTS } from './SkillContacts';
 import { mirror, type Dir, type SkillDef } from '../gameplay/Skills';
-import { RAINBOW_FLICK, dragBackRig, elasticoRig, heelFlickRig, quickBallRollRig, rainbowRig, reverseStepOverRig, rigKeys, stepOverRig } from './SkillRigs';
+import { RAINBOW_FLICK, dragBackRig, elasticoChopRig, elasticoRig, heelFlickRig, quickBallRollRig, rainbowRig, reverseStepOverRig, rigKeys, stepOverRig } from './SkillRigs';
 
 /** 다리 IK 개인기: rig에서 body·ball 키를 만든다 */
 function rigged(def: SkillDef, rig: NonNullable<SkillDef['rig']>): SkillDef {
@@ -196,17 +196,17 @@ export function makeSkillDefs(): SkillDef[] {
     bait: { t: 0.16, dir: Math.PI / 2, strength: 1.1 }, shield: 0.65,
   }, elasticoRig());
   /** 엘라스티코 촙 (Shift + ↓→ 탭, ★5): 왼발로 공을 디딤발 뒤로 감아 오른쪽으로 꺾는다 */
-  const ELASTICO_CHOP: SkillDef = {
+  const ELASTICO_CHOP: SkillDef = rigged({
     id: 'elastico_chop_r', name: '오른쪽 엘라스티코 촙', stars: 5,
     trigger: { kind: 'shift', seq: [{ dir: 'B', tap: true }, { dir: 'R', tap: true }] },
     duration: 0.54, carry: 0.3,
-    body: [{ t: 0, x: 0, z: 0, yaw: 0 }, { t: 0.24, x: -0.03, z: 0.05, yaw: -0.2 }, { t: 0.54, x: 0.25, z: 0.12, yaw: Math.PI / 3 }],
-    ball: [{ t: 0, x: 0.1, z: 0.45 }, { t: 0.24, x: -0.05, z: 0.35 }, { t: 0.54, x: 0.6, z: 0.4 }],
-    contacts: [{ t: 0.24, foot: 'L' }],
-    motion: { id: 'grf_ballcontrol_walk_090_strongfoot', flat: true, kind: 'control', angle: Math.PI / 2 },
-    exit: { dir: Math.PI * 0.4, speed: 2.8, body: 2.5 },
+    body: [], ball: [],
+    contacts: [{ t: 0.26, foot: 'L' }],
+    motion: { id: 'grf_ballcontrol_idle_000', flat: true, kind: 'control', angle: 0 },
+    // 디딤발 뒤로 감아 치므로 공은 오른쪽 옆으로 나간다
+    exit: { dir: Math.PI / 2, speed: 2.8, body: 2.5 },
     bait: { t: 0.12, dir: -Math.PI / 2, strength: 0.9 }, shield: 0.7,
-  };
+  }, elasticoChopRig());
   /** 퀵 볼 롤 (Shift + ↓ 꾹, ★5): 양발 바닥으로 공을 번갈아 굴리며 뒤로 물러난다 */
   const QUICK_ROLL: SkillDef = rigged({
     id: 'quick_ball_roll', name: '퀵 볼 롤', stars: 5,
