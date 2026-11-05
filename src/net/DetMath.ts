@@ -44,15 +44,12 @@ function kcos(x: number): number {
   return w + (((1 - w) - hz) + z * r);
 }
 const INV_PIO2 = 6.36619772367581382433e-01, PIO2_1 = 1.57079632673412561417e+00, PIO2_1T = 6.07710050650619224932e-11;
-/** x = n·π/2 + y (Cody-Waite, 게임에서 쓰는 크기의 각도면 충분히 정확) */
-function reduce(x: number): [number, number] {
-  const n = Math.round(x * INV_PIO2);
-  return [n, (x - n * PIO2_1) - n * PIO2_1T];
-}
+// x = n·π/2 + y (Cody-Waite, 게임에서 쓰는 크기의 각도면 충분히 정확).
+// 매 호출 배열을 만들지 않게 계산을 각 함수 안에 풀어 쓴다 (화면 애니메이션이 프레임마다 수천 번 부른다)
 export function dsin(x: number): number {
   if (!isFinite(x)) return NaN;
   if (Math.abs(x) < 0.7853981633974483) return ksin(x);
-  const [n, y] = reduce(x);
+  const n = Math.round(x * INV_PIO2), y = (x - n * PIO2_1) - n * PIO2_1T;
   switch (n & 3) {
     case 0: return ksin(y);
     case 1: return kcos(y);
@@ -63,7 +60,7 @@ export function dsin(x: number): number {
 export function dcos(x: number): number {
   if (!isFinite(x)) return NaN;
   if (Math.abs(x) < 0.7853981633974483) return kcos(x);
-  const [n, y] = reduce(x);
+  const n = Math.round(x * INV_PIO2), y = (x - n * PIO2_1) - n * PIO2_1T;
   switch (n & 3) {
     case 0: return kcos(y);
     case 1: return -ksin(y);
@@ -171,11 +168,25 @@ export function dhypot(...v: number[]): number {
 }
 
 let installed = false;
+const SWAPPED = ['sin', 'cos', 'tan', 'atan', 'atan2', 'asin', 'acos', 'exp', 'expm1', 'log', 'log1p', 'log2', 'log10', 'pow', 'hypot', 'cbrt', 'sinh', 'cosh', 'tanh'] as const;
+const M = Math as unknown as Record<string, unknown>;
+const native: Record<string, unknown> = Object.fromEntries(SWAPPED.map((k) => [k, M[k]]));
+let det: Record<string, unknown> | null = null;
+
+/**
+ * 화면 전용 계산(뼈 애니메이션·IK·카메라·렌더링)을 엔진 기본 Math로 돌린다. 결정적 구현보다 훨씬 빠르다.
+ * 경기 계산(Match.update)은 절대 이 안에서 부르지 않는다 — 화면 값은 경기 상태로 되돌아가지 않으므로 온라인 동기화에 영향이 없다.
+ */
+export function withNativeMath<T>(fn: () => T): T {
+  if (!det) return fn();
+  for (const k of SWAPPED) M[k] = native[k];
+  try { return fn(); } finally { for (const k of SWAPPED) M[k] = det[k]; }
+}
+
 /** Math의 엔진 의존 함수를 결정적 구현으로 바꿔 끼운다 (한 번만) */
 export function installDeterministicMath(): void {
   if (installed) return;
   installed = true;
-  const M = Math as unknown as Record<string, unknown>;
   M.sin = dsin;
   M.cos = dcos;
   M.tan = (x: number) => dsin(x) / dcos(x);
@@ -195,5 +206,6 @@ export function installDeterministicMath(): void {
   M.sinh = (x: number) => (dexp(x) - dexp(-x)) / 2;
   M.cosh = (x: number) => (dexp(x) + dexp(-x)) / 2;
   M.tanh = (x: number) => { const e = dexp(2 * x); return e === Infinity ? 1 : (e - 1) / (e + 1); };
+  det = Object.fromEntries(SWAPPED.map((k) => [k, M[k]]));
 }
 const LN2_HI_FULL = 0.6931471805599453, LN10 = 2.302585092994046;

@@ -4,6 +4,7 @@ import { GRAPHICS, PHYSICS, PITCH, MATCH, ONLINE_CATCH_UP } from '../config';
 import { ACTION_KEYS, ACTION_LABEL, Input, REBINDABLE, RESERVED_KEYS, keyLabel, type Action } from './Input';
 import { GamepadInput } from './Gamepad';
 import { CrowdMood } from '../audio/CrowdMood';
+import { withNativeMath } from '../net/DetMath';
 import { TouchControls } from '../ui/TouchControls';
 import type { TouchMode } from './TouchInput';
 import { PhysicsWorld } from '../physics/PhysicsWorld';
@@ -729,39 +730,42 @@ export class Game {
       if (Math.abs(level - this.ambience) > 0.004) this.sound.setAmbienceLevel(this.ambience = level);
     }
 
-    const live = this.state === 'playing';
-    for (const p of this.match.players) {
-      const distance = Math.hypot(p.pos.x - this.match.ball.position.x, p.pos.z - this.match.ball.position.z);
-      p.syncVisual(live && !this.playground ? dt : 0, live ? distance : 0);
-    }
-    if (!this.playground) this.match.officials.syncVisual(live ? dt : 0);
-    this.match.ball.syncVisual();
-    this.interpolate(live);
-    // 손에 든 공(키퍼 캐치·스로인)은 화면에서 두 손 사이에 그린다 (판정 위치는 그대로)
-    const holder = this.match.ball.owner?.isKeeper && this.match.ball.position.y > 0.4 ? this.match.ball.owner
-      : this.match.setPieces.current?.kind === 'throwin' ? this.match.setPieces.current.taker : null;
-    const model = holder?.model;
-    if (model?.handPosition && model.handPosition(handL, 'L') && model.handPosition(handR, 'R')) {
-      this.match.ball.object.position.copy(handL).add(handR).multiplyScalar(0.5);
-    }
-    this.stadium.update(dt);
-    this.updateMarker(dt);
+    // 화면 전용 구간(애니메이션·IK·카메라·HUD·렌더링)은 엔진 기본 Math로 (결정적 Math보다 빠르다. 경기 계산은 위에서 끝났다)
+    withNativeMath(() => {
+      const live = this.state === 'playing';
+      for (const p of this.match.players) {
+        const distance = Math.hypot(p.pos.x - this.match.ball.position.x, p.pos.z - this.match.ball.position.z);
+        p.syncVisual(live && !this.playground ? dt : 0, live ? distance : 0);
+      }
+      if (!this.playground) this.match.officials.syncVisual(live ? dt : 0);
+      this.match.ball.syncVisual();
+      this.interpolate(live);
+      // 손에 든 공(키퍼 캐치·스로인)은 화면에서 두 손 사이에 그린다 (판정 위치는 그대로)
+      const holder = this.match.ball.owner?.isKeeper && this.match.ball.position.y > 0.4 ? this.match.ball.owner
+        : this.match.setPieces.current?.kind === 'throwin' ? this.match.setPieces.current.taker : null;
+      const model = holder?.model;
+      if (model?.handPosition && model.handPosition(handL, 'L') && model.handPosition(handR, 'R')) {
+        this.match.ball.object.position.copy(handL).add(handR).multiplyScalar(0.5);
+      }
+      this.stadium.update(dt);
+      this.updateMarker(dt);
 
-    if (this.state === 'menu') {
-      // 메인 메뉴: 경기장을 천천히 둘러본다
-      const t = performance.now() / 1000;
-      this.rig.camera.position.set(Math.sin(t * 0.06) * PITCH.halfL, 32 + Math.sin(t * 0.1) * 3, Math.cos(t * 0.06) * (PITCH.halfW + 25));
-      this.rig.camera.lookAt(0, 0, 0);
-    } else if (live) {
-      const celebrate =
-        this.match.phase === 'goal' && this.match.phaseTimer < 2.6 ? (this.match.lastScorer?.pos ?? null) : null;
-      this.rig.attack = this.match.local.controlled.attackDir > 0 ? 1 : -1;
-      this.rig.update(dt, this.match.ball.position, this.match.local.controlled.pos, celebrate);
-      this.hud.update(dt, this.match, this.rig.camera);
-    }
-    this.lighting.update(this.rig.camera);
-    this.updateLod();
-    this.renderer.render(this.scene, this.rig.camera);
+      if (this.state === 'menu') {
+        // 메인 메뉴: 경기장을 천천히 둘러본다
+        const t = performance.now() / 1000;
+        this.rig.camera.position.set(Math.sin(t * 0.06) * PITCH.halfL, 32 + Math.sin(t * 0.1) * 3, Math.cos(t * 0.06) * (PITCH.halfW + 25));
+        this.rig.camera.lookAt(0, 0, 0);
+      } else if (live) {
+        const celebrate =
+          this.match.phase === 'goal' && this.match.phaseTimer < 2.6 ? (this.match.lastScorer?.pos ?? null) : null;
+        this.rig.attack = this.match.local.controlled.attackDir > 0 ? 1 : -1;
+        this.rig.update(dt, this.match.ball.position, this.match.local.controlled.pos, celebrate);
+        this.hud.update(dt, this.match, this.rig.camera);
+      }
+      this.lighting.update(this.rig.camera);
+      this.updateLod();
+      this.renderer.render(this.scene, this.rig.camera);
+    });
   }
 
   /**
